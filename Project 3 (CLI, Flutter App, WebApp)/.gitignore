@@ -1,0 +1,44 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyo
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+Thumbs.db
+Desktop.ini
+.DS_Store
+
+# Distribution
+dist/
+build/
+*.egg-info/
+
+# Web/Node
+node_modules/
+web/uploads/
+*.log
+
+# TypeScript
+web/dist/
+*.js.map
+
+# Large files (optional local OCR models)
+*.onnx
+*.paddle
+models/
+
+# User transcript files (privacy)
+Transcript*.pdf
+*.transcript.pdf

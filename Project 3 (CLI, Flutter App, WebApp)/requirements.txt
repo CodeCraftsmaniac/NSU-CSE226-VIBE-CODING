@@ -1,0 +1,19 @@
+# NSU Degree Audit Engine - Requirements
+# ========================================
+
+# Core
+rich>=13.0.0           # Premium terminal UI
+
+# PDF & Image Processing (lightweight)
+PyMuPDF>=1.23.0        # PDF handling (fitz) - for native text extraction
+Pillow>=10.0.0         # Image processing/compression
+
+# Web Application
+flask>=3.0.0           # Web framework
+werkzeug>=3.0.0        # WSGI utilities
+
+# Note: OCR.space API is used for OCR (free, no downloads needed)
+# Optional heavy OCR (if you want local processing):
+# paddleocr>=2.7.0     # Uncomment for heavy local OCR
+# easyocr>=1.7.0       # Uncomment for fallback local OCR
+# opencv-python>=4.8.0 # Uncomment for image preprocessing
