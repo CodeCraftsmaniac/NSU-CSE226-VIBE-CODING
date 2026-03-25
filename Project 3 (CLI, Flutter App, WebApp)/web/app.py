@@ -55,15 +55,19 @@ def create_app():
 
     # Configure logging
     log_level = getattr(logging, os.getenv('LOG_LEVEL', 'INFO').upper(), logging.INFO)
-    log_file = os.getenv('LOG_FILE', str(logs_dir / 'app.log'))
+    log_file = logs_dir / 'app.log'
+
+    # Create handlers
+    handlers = [logging.StreamHandler()]
+    try:
+        handlers.append(logging.FileHandler(str(log_file)))
+    except Exception:
+        pass  # Skip file logging if can't create
 
     logging.basicConfig(
         level=log_level,
         format='%(asctime)s [%(levelname)s] %(message)s',
-        handlers=[
-            logging.FileHandler(log_file),
-            logging.StreamHandler()
-        ]
+        handlers=handlers
     )
 
     return app
