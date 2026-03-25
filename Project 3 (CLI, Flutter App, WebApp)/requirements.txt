@@ -11,6 +11,15 @@ Pillow>=10.0.0         # Image processing/compression
 # Web Application
 flask>=3.0.0           # Web framework
 werkzeug>=3.0.0        # WSGI utilities
+python-dotenv>=1.0.0   # Environment variable management
+
+# Production Server
+gunicorn>=21.0.0       # Production WSGI server (Linux/Mac)
+waitress>=2.1.0        # Production WSGI server (Windows compatible)
+
+# Optional: Rate limiting and CORS
+# flask-limiter>=3.0.0 # Rate limiting
+# flask-cors>=4.0.0    # CORS support
 
 # Note: OCR.space API is used for OCR (free, no downloads needed)
 # Optional heavy OCR (if you want local processing):

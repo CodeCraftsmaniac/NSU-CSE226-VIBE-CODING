@@ -42,3 +42,12 @@ models/
 # User transcript files (privacy)
 Transcript*.pdf
 *.transcript.pdf
+
+# Environment files (keep .env.example, ignore actual .env)
+.env
+.env.local
+.env.*.local
+
+# Logs
+logs/
+*.log

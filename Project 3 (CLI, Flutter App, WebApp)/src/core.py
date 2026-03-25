@@ -119,6 +119,47 @@ GRADE_POINTS = {
 PASSING_GRADES = {"A", "A-", "B+", "B", "B-", "C+", "C", "C-", "D+", "D", "P", "TR"}
 NON_GPA_GRADES = {"W", "I", "P", "TR"}
 
+# OCR corrections for common misreads (shared with ocr_web.py)
+OCR_GRADE_CORRECTIONS = {
+    '8+': 'B+', '8-': 'B-', '8': 'B',
+    '0': 'D', 'O': 'D', '6': 'B',
+    'A+': 'A', 'A1': 'A-', 'Al': 'A-', 'A|': 'A-', 'At': 'A-', 'A~': 'A-', 'A.': 'A',
+    'Bt': 'B+', 'B1': 'B-', 'B~': 'B-', 'B.': 'B',
+    'C1': 'C-', 'Ct': 'C+', 'C~': 'C-', 'C.': 'C',
+    'D1': 'D+', 'Dt': 'D+', 'D.': 'D',
+    'T8': 'TR', 'TR.': 'TR', 'T R': 'TR',
+    'P+': 'P', 'P.': 'P',
+    'E': 'F', 'S': 'B',
+}
+
+
+def validate_grade(grade: str) -> str:
+    """Normalize and validate grade string.
+
+    Applies OCR corrections and validates against known grades.
+
+    Args:
+        grade: Raw grade string from OCR or input
+
+    Returns:
+        Normalized grade string, or None if invalid
+    """
+    if not grade:
+        return None
+
+    grade = grade.strip().upper()
+
+    # Apply OCR corrections
+    if grade in OCR_GRADE_CORRECTIONS:
+        grade = OCR_GRADE_CORRECTIONS[grade]
+
+    # Validate against known grades
+    all_valid = set(GRADE_POINTS.keys()) | NON_GPA_GRADES
+    if grade not in all_valid:
+        return None
+
+    return grade
+
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 #  PREMIUM UI  ·  Gradient & Visual Helpers

@@ -32,13 +32,33 @@ from urllib.error import URLError, HTTPError
 
 warnings.filterwarnings('ignore')
 
-# API Keys
-GOOGLE_VISION_API_KEY = os.environ.get('GOOGLE_VISION_API_KEY', '')
-OCR_SPACE_API_KEY = os.environ.get('OCR_SPACE_API_KEY', 'K85483682688957')
+# Load environment variables if dotenv is available
+try:
+    from dotenv import load_dotenv
+    load_dotenv(Path(__file__).parent.parent / '.env')
+except ImportError:
+    pass
+
+# API Keys - Load from environment with fallback defaults
+GOOGLE_VISION_API_KEY = os.environ.get('GOOGLE_CLOUD_VISION_KEY') or os.environ.get('GOOGLE_VISION_API_KEY', '')
+OCR_SPACE_API_KEY = os.environ.get('OCR_SPACE_API_KEY', 'K85858573688957')
 
 VALID_GRADES = {'A', 'A-', 'B+', 'B', 'B-', 'C+', 'C', 'C-', 'D+', 'D', 'F', 'W', 'I', 'P', 'TR'}
 COURSE_PATTERN = re.compile(r'^([A-Z]{2,4})(\d{3}[A-Z]?)$')
 SEMESTER_PATTERN = re.compile(r'(Spring|Summer|Fall)\s*(\d{4})', re.IGNORECASE)
+
+# Full-line pattern: matches "CSE115 3 A-" or "CSE 115  3.0  B+" format
+# Note: Don't use \b at end because +/- are not word characters
+FULL_LINE_PATTERN = re.compile(
+    r'\b([A-Z]{2,4})\s*(\d{3}[A-Z]?)\s+(\d(?:\.\d)?)\s+([ABCDF][+-]?|W|I|P|TR)(?:\s|$)',
+    re.IGNORECASE
+)
+
+# Table header detection patterns
+TABLE_HEADER_PATTERNS = [
+    re.compile(r'Course\s*(?:Code)?.*Credit.*Grade', re.IGNORECASE),
+    re.compile(r'Subject.*(?:Credit|Cr\.?).*Grade', re.IGNORECASE),
+]
 
 # Extended course prefixes for any department
 ALL_COURSE_PREFIXES = {
@@ -51,13 +71,24 @@ ALL_COURSE_PREFIXES = {
     'ACC', 'MNS', 'BME', 'CEE', 'IPE', 'TEX', 'AER', 'NFS',  # More
 }
 
-# OCR corrections for common misreads
+# OCR corrections for common misreads (extended list)
 OCR_CORRECTIONS = {
+    # Number/letter confusion
     '8+': 'B+', '8-': 'B-', '8': 'B',
-    'A+': 'A', 'A1': 'A-', 'Al': 'A-', 'A|': 'A-',
-    'C1': 'C-', 'D1': 'D+', '0': 'D', 'O': 'D',
-    'Bt': 'B+', 'B1': 'B-', 'Ct': 'C+', 'Dt': 'D+',
-    'At': 'A-', 'A~': 'A-', 'B~': 'B-', 'C~': 'C-',
+    '0': 'D', 'O': 'D', '6': 'B',
+    # Plus/minus symbol issues
+    'A+': 'A', 'A1': 'A-', 'Al': 'A-', 'A|': 'A-', 'At': 'A-', 'A~': 'A-', 'A.': 'A',
+    'Bt': 'B+', 'B1': 'B-', 'B~': 'B-', 'B.': 'B',
+    'C1': 'C-', 'Ct': 'C+', 'C~': 'C-', 'C.': 'C',
+    'D1': 'D+', 'Dt': 'D+', 'D.': 'D',
+    # Transfer/special grades
+    'T8': 'TR', 'TR.': 'TR', 'T R': 'TR', 'ТR': 'TR',  # Cyrillic T
+    'P+': 'P', 'P.': 'P',
+    # Common OCR errors
+    'E': 'F', 'S': 'B',  # S often misread for B
+    # Course code corrections
+    'CSEIS': 'CSE15', 'MAT1I6': 'MAT116', 'MAT12O': 'MAT120',
+    'PHY1O7': 'PHY107', 'ENG1O2': 'ENG102',
 }
 
 
@@ -334,22 +365,22 @@ class WebOCR:
         """
         Parse transcript text into structured course data.
 
-        Strategy:
-        1. Find course codes (XXX123 format)
-        2. Look for credits and grades nearby
-        3. Track semester context
-        4. Handle table format (Course | Credits | Grade)
+        Multi-pass Strategy:
+        1. Pass 1: Extract full-line patterns (course+credits+grade on one line)
+        2. Pass 2: Extract courses with grades/credits on nearby lines
+        3. Pass 3: Validate and deduplicate
         """
         courses = []
         student_name = ""
         student_id = ""
         cgpa = 0.0
+        total_credits_from_pdf = 0.0
         current_semester = ""
         seen_courses = set()
 
         lines = text.replace('\r', '\n').split('\n')
 
-        # First pass: extract metadata
+        # First pass: extract metadata and summary section
         for line in lines:
             line_clean = line.strip()
 
@@ -359,45 +390,84 @@ class WebOCR:
                 if id_match:
                     student_id = id_match.group(1)
 
-            # CGPA
+            # CGPA from summary section
             if 'CGPA' in line_clean.upper() or 'Cumulative' in line_clean:
                 cgpa_match = re.search(r'(\d+\.\d{1,2})', line_clean)
                 if cgpa_match:
                     try:
-                        cgpa = float(cgpa_match.group(1))
+                        val = float(cgpa_match.group(1))
+                        if 0 <= val <= 4.0:
+                            cgpa = val
                     except:
                         pass
 
-        # Second pass: extract courses
+            # Total credits from summary
+            if 'Total Credit' in line_clean or 'Credits Earned' in line_clean:
+                cr_match = re.search(r'(\d+(?:\.\d)?)', line_clean)
+                if cr_match:
+                    try:
+                        total_credits_from_pdf = float(cr_match.group(1))
+                    except:
+                        pass
+
+        # Pass 1: Full-line extraction (most accurate when available)
         for i, line in enumerate(lines):
             line_clean = line.strip()
 
-            # Semester detection
+            # Update semester context
             sem_match = SEMESTER_PATTERN.search(line_clean)
             if sem_match:
-                current_semester = f"{sem_match.group(1)} {sem_match.group(2)}"
+                current_semester = f"{sem_match.group(1).capitalize()} {sem_match.group(2)}"
                 continue
 
-            # Look for course patterns in the line
-            # Pattern 1: Line-based format (course code on same line as credits/grade)
-            # Example: "CSE115 3 A" or "CSE 115   3.0   A-"
+            # Try full-line pattern first (course, credits, grade on same line)
+            full_matches = list(FULL_LINE_PATTERN.finditer(line_clean))
+            for match in full_matches:
+                prefix = match.group(1).upper()
+                number = match.group(2).upper()
+                credits = float(match.group(3))
+                grade = match.group(4).upper()
 
-            # Find all potential course codes in this line
+                # Apply OCR corrections to grade
+                grade = OCR_CORRECTIONS.get(grade, grade)
+
+                course_code = prefix + number
+                if course_code not in seen_courses and grade in VALID_GRADES:
+                    seen_courses.add(course_code)
+                    courses.append(CourseRecord(
+                        course_code=course_code,
+                        credits=credits,
+                        grade=grade,
+                        semester=current_semester,
+                        confidence=0.95
+                    ))
+
+        # Pass 2: Look for courses without full-line match
+        for i, line in enumerate(lines):
+            line_clean = line.strip()
+
+            # Update semester context
+            sem_match = SEMESTER_PATTERN.search(line_clean)
+            if sem_match:
+                current_semester = f"{sem_match.group(1).capitalize()} {sem_match.group(2)}"
+                continue
+
+            # Find course codes
             course_matches = list(re.finditer(r'\b([A-Z]{2,4})[\s-]?(\d{3}[A-Z]?)\b', line_clean))
 
             for match in course_matches:
-                prefix = match.group(1)
-                number = match.group(2)
+                prefix = match.group(1).upper()
+                number = match.group(2).upper()
                 course_code = prefix + number
 
-                # Skip if already seen
+                # Skip if already found
                 if course_code in seen_courses:
                     continue
 
                 # Look for credits and grade after the course code
                 after_course = line_clean[match.end():]
 
-                # Try to find credits (1-4 digit number, possibly with decimal)
+                # Find credits (number 0-10, possibly with decimal)
                 credits = 0.0
                 credit_match = re.search(r'\b(\d{1,2}(?:\.\d)?)\b', after_course)
                 if credit_match:
@@ -408,31 +478,35 @@ class WebOCR:
                     except:
                         pass
 
-                # Try to find grade
+                # Find grade - check for valid grades and OCR corrections
                 grade = ""
+
+                # First try valid grades
                 for g in VALID_GRADES:
-                    if re.search(r'\b' + re.escape(g) + r'\b', after_course):
+                    pattern = r'\b' + re.escape(g) + r'\b'
+                    if re.search(pattern, after_course, re.IGNORECASE):
                         grade = g
                         break
 
-                # Also check for OCR-misread grades
+                # Then try OCR corrections
                 if not grade:
                     for wrong, correct in OCR_CORRECTIONS.items():
                         if re.search(r'\b' + re.escape(wrong) + r'\b', after_course):
                             grade = correct
                             break
 
-                # If no grade found on same line, check next few lines
+                # If no grade on same line, check next few lines
                 if not grade and i + 1 < len(lines):
                     for j in range(i + 1, min(i + 4, len(lines))):
                         next_line = lines[j].strip()
 
-                        # Stop if we hit another course
-                        if re.search(r'\b[A-Z]{2,4}\d{3}[A-Z]?\b', next_line):
+                        # Stop if we hit another course code
+                        if re.search(r'\b[A-Z]{2,4}\s*\d{3}[A-Z]?\b', next_line):
                             break
 
+                        # Look for grade
                         for g in VALID_GRADES:
-                            if re.search(r'\b' + re.escape(g) + r'\b', next_line):
+                            if re.search(r'\b' + re.escape(g) + r'\b', next_line, re.IGNORECASE):
                                 grade = g
                                 break
 
@@ -457,20 +531,42 @@ class WebOCR:
                         course_code=course_code,
                         credits=credits,
                         grade=grade,
-                        semester=current_semester
+                        semester=current_semester,
+                        confidence=0.85 if credits > 0 else 0.70
                     ))
+
+        # Pass 3: Validate and sort courses
+        validated_courses = []
+        for course in courses:
+            # Ensure grade is valid
+            if course.grade in VALID_GRADES:
+                validated_courses.append(course)
+
+        # Sort by semester if available, then by course code
+        def sort_key(c):
+            if c.semester:
+                parts = c.semester.split()
+                if len(parts) == 2:
+                    season_order = {'Spring': 0, 'Summer': 1, 'Fall': 2}
+                    return (int(parts[1]), season_order.get(parts[0], 3), c.course_code)
+            return (9999, 9, c.course_code)
+
+        validated_courses.sort(key=sort_key)
 
         # Build raw text list for frontend display
         raw_text = [w for w in text.split() if w.strip()][:100]
 
-        return OCRResult(
+        result = OCRResult(
             success=True,
-            courses=courses,
+            courses=validated_courses,
             raw_text=raw_text,
             student_name=student_name,
             student_id=student_id,
-            cgpa=cgpa
+            cgpa=cgpa,
+            total_credits=total_credits_from_pdf
         )
+
+        return result
 
 
 # Alias for compatibility

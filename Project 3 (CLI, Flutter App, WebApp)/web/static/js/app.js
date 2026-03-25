@@ -294,6 +294,23 @@ function populateLevel2(level2) {
         `;
     }
 
+    // CGPA Warning (if mismatch detected)
+    const cgpaWarning = document.getElementById('cgpa-warning');
+    if (cgpaWarning && analysisData && analysisData.cgpa_warning) {
+        const warn = analysisData.cgpa_warning;
+        cgpaWarning.style.display = 'block';
+        cgpaWarning.innerHTML = `
+            <div class="warning-icon">⚠️</div>
+            <div class="warning-text">
+                <strong>CGPA Verification Warning</strong><br>
+                PDF shows: <strong>${warn.pdf_value}</strong> | Calculated: <strong>${warn.calculated_value}</strong><br>
+                <small>Difference: ${warn.difference} - Some courses may be missing or incorrectly parsed</small>
+            </div>
+        `;
+    } else if (cgpaWarning) {
+        cgpaWarning.style.display = 'none';
+    }
+
     // Stats
     const statsGrid = document.getElementById('level2-stats');
     if (statsGrid) {

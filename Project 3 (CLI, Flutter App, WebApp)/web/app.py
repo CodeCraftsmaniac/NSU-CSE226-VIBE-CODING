@@ -4,46 +4,148 @@ NSU Degree Audit Web Application
 Premium web interface with real-time OCR scanning display.
 Upload PDF/Image -> Watch OCR extract text -> View 3-level analysis.
 
-Run: python app.py
-Access: http://localhost:5000
+Development: python app.py
+Production:  waitress-serve --host=0.0.0.0 --port=5000 app:app
+             OR gunicorn -w 4 -b 0.0.0.0:5000 app:app (Linux/Mac)
 """
 
 import os
 import sys
+import re
 import json
-import time
+import logging
 from pathlib import Path
+from datetime import datetime
+
+# Load environment variables
+try:
+    from dotenv import load_dotenv
+    load_dotenv(Path(__file__).parent.parent / '.env')
+except ImportError:
+    pass  # dotenv not installed, use system env vars
 
 # Add parent directory for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
-from flask import Flask, render_template, request, jsonify, send_from_directory, Response, stream_with_context
+from flask import Flask, render_template, request, jsonify, send_from_directory
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Application Configuration
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def create_app():
+    """Application factory for Flask app."""
+    app = Flask(__name__)
+
+    # Load configuration from environment
+    app.config['ENV'] = os.getenv('FLASK_ENV', 'production')
+    app.config['DEBUG'] = os.getenv('DEBUG', 'false').lower() == 'true'
+    app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'nsu-audit-default-key-change-in-prod')
+
+    # File upload configuration
+    max_mb = int(os.getenv('MAX_CONTENT_LENGTH_MB', '16'))
+    app.config['MAX_CONTENT_LENGTH'] = max_mb * 1024 * 1024
+    app.config['UPLOAD_FOLDER'] = Path(__file__).parent / 'uploads'
+    app.config['UPLOAD_FOLDER'].mkdir(exist_ok=True)
+
+    # Create logs directory
+    logs_dir = Path(__file__).parent.parent / 'logs'
+    logs_dir.mkdir(exist_ok=True)
+
+    # Configure logging
+    log_level = getattr(logging, os.getenv('LOG_LEVEL', 'INFO').upper(), logging.INFO)
+    log_file = os.getenv('LOG_FILE', str(logs_dir / 'app.log'))
+
+    logging.basicConfig(
+        level=log_level,
+        format='%(asctime)s [%(levelname)s] %(message)s',
+        handlers=[
+            logging.FileHandler(log_file),
+            logging.StreamHandler()
+        ]
+    )
+
+    return app
+
+app = create_app()
+logger = logging.getLogger(__name__)
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Import modules after app creation
+# ═══════════════════════════════════════════════════════════════════════════════
+
 from werkzeug.utils import secure_filename
 
-# Import our modules - using lightweight web-based OCR (no heavy model downloads!)
 try:
-    from src.ocr_web import WebOCR as TranscriptOCR  # Fast, free OCR.space API
+    from src.ocr_web import WebOCR as TranscriptOCR
 except ImportError:
-    from src.ocr_engine import TranscriptOCR  # Fallback to heavy OCR
+    from src.ocr_engine import TranscriptOCR
 
-from src.core import resolve_retakes, GRADE_POINTS, get_academic_standing, parse_knowledge_base
-
-app = Flask(__name__)
-app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max upload
-app.config['UPLOAD_FOLDER'] = Path(__file__).parent / 'uploads'
-app.config['UPLOAD_FOLDER'].mkdir(exist_ok=True)
+from src.core import resolve_retakes, GRADE_POINTS, get_academic_standing, parse_knowledge_base, compute_cgpa, validate_grade
 
 # Knowledge base path
 KB_PATH = Path(__file__).parent.parent / 'knowledge_base.md'
 
-# Only PDF and images
-ALLOWED_EXTENSIONS = {'pdf', 'png', 'jpg', 'jpeg'}
+# Allowed file extensions
+ALLOWED_EXTENSIONS = set(os.getenv('ALLOWED_EXTENSIONS', 'pdf,png,jpg,jpeg').split(','))
 
 
 def allowed_file(filename):
+    """Check if file extension is allowed."""
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
+
+def detect_program(courses):
+    """Detect academic program from course prefixes.
+
+    Uses prefix-based detection which is more reliable than matching mandatory courses.
+
+    Args:
+        courses: List of course dicts with 'code' key
+
+    Returns:
+        Program key ('CSE', 'LLB', etc.) or None if not detected
+    """
+    if not courses:
+        return None
+
+    prefix_counts = {}
+    for c in courses:
+        code = c.get('code', '')
+        prefix_match = re.match(r'^([A-Z]{2,4})', code)
+        if prefix_match:
+            p = prefix_match.group(1)
+            prefix_counts[p] = prefix_counts.get(p, 0) + 1
+
+    if not prefix_counts:
+        return None
+
+    # CSE detection: CSE or EEE courses present
+    cse_count = prefix_counts.get('CSE', 0) + prefix_counts.get('EEE', 0)
+    if cse_count >= 3:
+        return 'CSE'
+
+    # LLB detection: LAW courses present
+    if prefix_counts.get('LAW', 0) >= 2:
+        return 'LLB'
+
+    # BBA/Business detection
+    bba_count = sum(prefix_counts.get(p, 0) for p in ['BUS', 'ACT', 'FIN', 'MKT', 'MGT'])
+    if bba_count >= 3:
+        return 'BBA'
+
+    # Fallback: return most common prefix if it has enough courses
+    most_common = max(prefix_counts, key=prefix_counts.get)
+    if prefix_counts[most_common] >= 3:
+        return most_common
+
+    return None
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Routes
+# ═══════════════════════════════════════════════════════════════════════════════
 
 @app.route('/')
 def index():
@@ -51,17 +153,30 @@ def index():
     return render_template('index.html')
 
 
+@app.route('/health')
+def health():
+    """Health check endpoint for production monitoring."""
+    return jsonify({
+        'status': 'healthy',
+        'timestamp': datetime.utcnow().isoformat(),
+        'version': '2.0.0'
+    })
+
+
 @app.route('/upload', methods=['POST'])
 def upload_file():
     """Handle file upload and OCR extraction."""
     if 'file' not in request.files:
+        logger.warning('Upload attempted without file')
         return jsonify({'success': False, 'error': 'No file provided'})
 
     file = request.files['file']
     if file.filename == '':
+        logger.warning('Upload attempted with empty filename')
         return jsonify({'success': False, 'error': 'No file selected'})
 
     if not allowed_file(file.filename):
+        logger.warning(f'Invalid file type attempted: {file.filename}')
         return jsonify({'success': False, 'error': 'Invalid file type. Only PDF, PNG, JPG allowed.'})
 
     filename = secure_filename(file.filename)
@@ -69,6 +184,7 @@ def upload_file():
 
     try:
         file.save(str(filepath))
+        logger.info(f'File uploaded: {filename}')
 
         # OCR extraction
         ocr = TranscriptOCR()
@@ -78,9 +194,11 @@ def upload_file():
         filepath.unlink(missing_ok=True)
 
         if not ocr_result.success:
+            logger.error(f'OCR failed: {ocr_result.error}')
             return jsonify({'success': False, 'error': ocr_result.error or 'OCR extraction failed'})
 
         if ocr_result.course_count == 0:
+            logger.warning('No courses found in uploaded file')
             return jsonify({'success': False, 'error': 'No courses found. Please upload a clear transcript image/PDF.'})
 
         # Prepare courses data
@@ -103,15 +221,30 @@ def upload_file():
             'confidence': round(ocr_result.confidence_score * 100, 1),
             'raw_text_count': len(ocr_result.raw_text),
             'student_name': ocr_result.student_name,
-            'student_id': ocr_result.student_id
+            'student_id': ocr_result.student_id,
+            'cgpa_from_pdf': ocr_result.cgpa,
+            'total_credits_from_pdf': getattr(ocr_result, 'total_credits', 0)
         }
 
-        # Add raw extracted texts for display
-        result['extracted_texts'] = ocr_result.raw_text[:100]  # First 100 texts
+        # CGPA verification: compare PDF vs calculated
+        if ocr_result.cgpa > 0 and result.get('level2'):
+            calculated_cgpa = result['level2']['cgpa']
+            if abs(calculated_cgpa - ocr_result.cgpa) > 0.05:
+                result['cgpa_warning'] = {
+                    'message': f'CGPA mismatch detected',
+                    'pdf_value': ocr_result.cgpa,
+                    'calculated_value': calculated_cgpa,
+                    'difference': round(abs(calculated_cgpa - ocr_result.cgpa), 2)
+                }
 
+        # Add raw extracted texts for display
+        result['extracted_texts'] = ocr_result.raw_text[:100]
+
+        logger.info(f'Analysis complete: {len(courses)} courses processed')
         return jsonify({'success': True, 'data': result})
 
     except Exception as e:
+        logger.exception(f'Error processing upload: {str(e)}')
         if filepath.exists():
             filepath.unlink(missing_ok=True)
         return jsonify({'success': False, 'error': str(e)})
@@ -242,22 +375,15 @@ def run_full_analysis(courses_raw):
     # ═══════════════════════════════════════════════════════════════════════════
     level3 = None
 
-    if KB_PATH.exists():
+    # Use prefix-based program detection first
+    detected_program = detect_program(course_details)
+    completed_codes = {c['code'] for c in course_details}
+
+    if KB_PATH.exists() and detected_program:
         try:
             programs = parse_knowledge_base(str(KB_PATH))
 
-            # Detect program from courses
-            completed_codes = {c['code'] for c in course_details}
-            detected_program = None
-
-            for prog_key, prog_data in programs.items():
-                mandatory = set(prog_data.get('mandatory', []))
-                overlap = len(completed_codes & mandatory)
-                if overlap > 3:  # At least 3 matching mandatory courses
-                    detected_program = prog_key
-                    break
-
-            if detected_program and detected_program in programs:
+            if detected_program in programs:
                 prog = programs[detected_program]
                 mandatory = prog.get('mandatory', [])
                 elective_groups = prog.get('elective_groups', {})
@@ -291,12 +417,26 @@ def run_full_analysis(courses_raw):
         except Exception:
             pass
 
+    # Fallback: show detected program even without knowledge base
+    if level3 is None and detected_program:
+        level3 = {
+            'program': detected_program,
+            'program_name': f'{detected_program} Program (detected)',
+            'mandatory_total': 0,
+            'mandatory_completed': 0,
+            'mandatory_missing': [],
+            'mandatory_progress': 0,
+            'elective_status': {},
+            'graduation_ready': False,
+            'note': 'Knowledge base not available for detailed audit'
+        }
+
     # ═══════════════════════════════════════════════════════════════════════════
     # Semester-grouped courses for display
     # ═══════════════════════════════════════════════════════════════════════════
     semesters = {}
     for c in course_details:
-        sem = c['semester'] or 'Unknown'
+        sem = c['semester'] or 'Not Specified'
         if sem not in semesters:
             semesters[sem] = []
         semesters[sem].append(c)
@@ -305,11 +445,14 @@ def run_full_analysis(courses_raw):
     semester_order = {'Spring': 0, 'Summer': 1, 'Fall': 2}
 
     def sem_sort_key(sem_name):
-        if sem_name == 'Unknown':
+        if sem_name == 'Not Specified':
             return (9999, 9)
         parts = sem_name.split()
         if len(parts) == 2:
-            return (int(parts[1]), semester_order.get(parts[0], 3))
+            try:
+                return (int(parts[1]), semester_order.get(parts[0], 3))
+            except ValueError:
+                return (9999, 9)
         return (9999, 9)
 
     sorted_semesters = []
@@ -330,14 +473,55 @@ def run_full_analysis(courses_raw):
 
 @app.route('/static/<path:filename>')
 def serve_static(filename):
+    """Serve static files."""
     return send_from_directory('static', filename)
 
 
+@app.errorhandler(404)
+def not_found(e):
+    """Handle 404 errors."""
+    return jsonify({'error': 'Not found'}), 404
+
+
+@app.errorhandler(500)
+def server_error(e):
+    """Handle 500 errors."""
+    logger.exception('Server error')
+    return jsonify({'error': 'Internal server error'}), 500
+
+
+@app.errorhandler(413)
+def file_too_large(e):
+    """Handle file too large errors."""
+    return jsonify({'error': 'File too large. Maximum size is 16MB.'}), 413
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Production Server Entry Point
+# ═══════════════════════════════════════════════════════════════════════════════
+
 if __name__ == '__main__':
+    host = os.getenv('HOST', '0.0.0.0')
+    port = int(os.getenv('PORT', 5000))
+    debug = os.getenv('DEBUG', 'false').lower() == 'true'
+
     print("\n" + "=" * 60)
     print("  NSU Degree Audit - Premium Web Application")
     print("=" * 60)
-    print(f"\n  Server: http://localhost:5000")
+    print(f"\n  Environment: {app.config['ENV']}")
+    print(f"  Debug: {debug}")
+    print(f"  Server: http://{host}:{port}")
     print("  Press Ctrl+C to stop\n")
 
-    app.run(debug=True, host='0.0.0.0', port=5000)
+    if app.config['ENV'] == 'production' and not debug:
+        # Use production server
+        try:
+            from waitress import serve
+            print("  Using Waitress production server...")
+            serve(app, host=host, port=port)
+        except ImportError:
+            print("  Waitress not installed, using Flask dev server (not recommended for production)")
+            app.run(debug=False, host=host, port=port)
+    else:
+        # Development mode
+        app.run(debug=debug, host=host, port=port)
