@@ -1,18 +1,13 @@
 {
   "name": "nsu-degree-audit-web",
-  "version": "1.0.0",
-  "description": "NSU Degree Audit - Web Application",
-  "main": "dist/app.js",
+  "version": "2.0.0",
+  "description": "NSU Degree Audit - Web Application with OCR",
   "scripts": {
-    "build": "tsc",
-    "watch": "tsc --watch",
-    "dev": "python app.py",
-    "start": "python app.py"
+    "dev": "cd .. && set DEBUG=true && python web/app.py",
+    "start": "cd .. && python web/app.py",
+    "prod": "cd .. && set FLASK_ENV=production && python web/app.py"
   },
-  "keywords": ["nsu", "degree-audit", "transcript"],
-  "author": "CSE226 Vibe Coding",
-  "license": "MIT",
-  "devDependencies": {
-    "typescript": "^5.3.0"
-  }
+  "keywords": ["nsu", "degree-audit", "transcript", "ocr"],
+  "author": "NSU CSE226",
+  "license": "MIT"
 }

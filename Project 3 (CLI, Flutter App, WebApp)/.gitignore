@@ -51,3 +51,4 @@ Transcript*.pdf
 # Logs
 logs/
 *.log
+.vercel

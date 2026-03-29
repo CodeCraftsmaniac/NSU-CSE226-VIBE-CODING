@@ -1,28 +1,26 @@
 """
-ocr_web.py  —  Improved Web-based OCR for NSU Transcript Extraction
+ocr_web.py  —  Web-based OCR for NSU Transcript Extraction
 =====================================================================
+VERSION: 2.1.0 - Production Release
+
 Features:
 1. Google Cloud Vision API (1000 free/month) - Most accurate
 2. OCR.space API (500 free/month) - Good fallback
 3. Native PDF text extraction - For digital PDFs
 4. Improved table parsing logic
-
-Setup Google Vision (recommended for accuracy):
-1. Go to https://console.cloud.google.com/
-2. Create project -> Enable Cloud Vision API
-3. Create API key -> Copy the key
-4. Set environment variable: GOOGLE_VISION_API_KEY=your_key
-
-Or just use OCR.space (works without setup, 500 free/month)
 """
+
+__version__ = "2.1.0"
 
 import os
 import re
 import io
+import sys
 import base64
 import json
 import tempfile
 import warnings
+import logging
 from dataclasses import dataclass, field
 from typing import Optional, List, Tuple
 from pathlib import Path
@@ -32,16 +30,28 @@ from urllib.error import URLError, HTTPError
 
 warnings.filterwarnings('ignore')
 
+# Configuration constants
+API_TIMEOUT = 30
+OCR_CONFIDENCE_THRESHOLD = 0.7
+MAX_CGPA = 4.0
+MAX_CREDITS_PER_COURSE = 6
+MAX_TOTAL_CREDITS = 200
+
+# Setup logging
+_logger = logging.getLogger(__name__)
+
 # Load environment variables if dotenv is available
 try:
     from dotenv import load_dotenv
-    load_dotenv(Path(__file__).parent.parent / '.env')
+    env_path = Path(__file__).parent.parent / '.env'
+    if env_path.exists():
+        load_dotenv(env_path, override=True)
 except ImportError:
     pass
 
-# API Keys - Load from environment with fallback defaults
+# API Keys - Load from environment
 GOOGLE_VISION_API_KEY = os.environ.get('GOOGLE_CLOUD_VISION_KEY') or os.environ.get('GOOGLE_VISION_API_KEY', '')
-OCR_SPACE_API_KEY = os.environ.get('OCR_SPACE_API_KEY', 'K85858573688957')
+OCR_SPACE_API_KEY = os.environ.get('OCR_SPACE_API_KEY', '')
 
 VALID_GRADES = {'A', 'A-', 'B+', 'B', 'B-', 'C+', 'C', 'C-', 'D+', 'D', 'F', 'W', 'I', 'P', 'TR'}
 COURSE_PATTERN = re.compile(r'^([A-Z]{2,4})(\d{3}[A-Z]?)$')
@@ -68,7 +78,7 @@ ALL_COURSE_PREFIXES = {
     'GEN', 'COM', 'MED', 'PHA', 'PUB', 'MPH', 'STA', 'IST', 'LIN',
     'JMS', 'CIS', 'MSC', 'NST', 'ART', 'MUS', 'THE', 'REL', 'GEO',
     'CHI', 'JPN', 'FRE', 'GER', 'SPA', 'ARA', 'BAN', 'URD', 'HIN',
-    'ACC', 'MNS', 'BME', 'CEE', 'IPE', 'TEX', 'AER', 'NFS',  # More
+    'ACC', 'MNS', 'BME', 'CEE', 'IPE', 'TEX', 'AER', 'NFS', 'PAD',  # PAD = Public Administration
 }
 
 # OCR corrections for common misreads (extended list)
@@ -143,9 +153,13 @@ class WebOCR:
 
     def __init__(self, google_api_key: str = None, ocr_space_key: str = None,
                  progress_callback=None):
-        self.google_api_key = google_api_key or GOOGLE_VISION_API_KEY
-        self.ocr_space_key = ocr_space_key or OCR_SPACE_API_KEY
+        # Use module-level constants as fallback (loaded from .env at import time)
+        # Also check environment directly for runtime flexibility
+        self.google_api_key = google_api_key or GOOGLE_VISION_API_KEY or os.environ.get('GOOGLE_CLOUD_VISION_KEY') or os.environ.get('GOOGLE_VISION_API_KEY', '')
+        self.ocr_space_key = ocr_space_key or OCR_SPACE_API_KEY or os.environ.get('OCR_SPACE_API_KEY', '')
         self.progress_callback = progress_callback
+        
+        _logger.info(f"WebOCR initialized - Google API key: {'present' if self.google_api_key else 'missing'}, OCR.space key: {'present' if self.ocr_space_key else 'missing'}")
 
     def _report(self, stage: str, progress: float, text: str = ""):
         if self.progress_callback:
@@ -168,6 +182,7 @@ class WebOCR:
             else:
                 return OCRResult(success=False, error=f"Unsupported: {ext}")
         except Exception as e:
+            _logger.exception(f"OCR extraction error: {e}")
             return OCRResult(success=False, error=str(e))
 
     def _extract_pdf(self, path: Path) -> OCRResult:
@@ -187,7 +202,7 @@ class WebOCR:
         full_text = "\n".join(all_text)
 
         # If we got substantial text, parse it directly
-        if len(full_text) > 500:
+        if len(full_text) > 50:
             doc.close()
             self._report("parse", 50, "Parsing digital PDF...")
             result = self._parse_transcript_text(full_text)
@@ -200,22 +215,38 @@ class WebOCR:
         self._report("ocr", 30, "Running OCR on scanned PDF...")
 
         ocr_text = ""
+        last_error = None
+        pages_processed = 0
+
         for i, page in enumerate(doc):
             self._report("page", 30 + (i / len(doc)) * 50, f"OCR page {i+1}/{len(doc)}...")
 
-            # Render page to image
-            pix = page.get_pixmap(matrix=fitz.Matrix(2.0, 2.0))
+            # Render page to image at higher resolution for better OCR
+            pix = page.get_pixmap(matrix=fitz.Matrix(3.0, 3.0))
             img_data = pix.tobytes("png")
 
+            # Compress if too large for OCR API (free tier limit ~1MB)
+            if len(img_data) > 900000:
+                img_data = self._compress_image(img_data)
+
             # Try Google Vision first, then OCR.space
-            page_text = self._ocr_image(img_data, "page.png")
+            page_text, error = self._ocr_image(img_data, "page.png")
+            pages_processed += 1
+
             if page_text:
                 ocr_text += page_text + "\n"
+            if error:
+                last_error = error
+                _logger.warning(f"Page {i+1} OCR error: {error}")
 
         doc.close()
 
         if not ocr_text.strip():
-            return OCRResult(success=False, error="OCR returned no text")
+            if last_error:
+                error_msg = f"OCR failed on {pages_processed} page(s): {last_error}"
+            else:
+                error_msg = f"OCR processed {pages_processed} page(s) but found no text. APIs configured: Google={bool(self.google_api_key)}, OCR.space={bool(self.ocr_space_key)}"
+            return OCRResult(success=False, error=error_msg)
 
         self._report("parse", 85, "Parsing extracted text...")
         result = self._parse_transcript_text(ocr_text)
@@ -238,10 +269,14 @@ class WebOCR:
             img_data = self._compress_image(img_data)
 
         self._report("ocr", 40, "Running OCR...")
-        text = self._ocr_image(img_data, path.name)
+        text, error = self._ocr_image(img_data, path.name)
 
         if not text:
-            return OCRResult(success=False, error="OCR returned no text")
+            if error:
+                error_msg = f"OCR failed: {error}"
+            else:
+                error_msg = f"OCR found no text. APIs configured: Google={bool(self.google_api_key)}, OCR.space={bool(self.ocr_space_key)}"
+            return OCRResult(success=False, error=error_msg)
 
         self._report("parse", 80, "Parsing...")
         result = self._parse_transcript_text(text)
@@ -251,21 +286,55 @@ class WebOCR:
         self._report("complete", 100, "Done!")
         return result
 
-    def _ocr_image(self, img_data: bytes, filename: str) -> str:
-        """Run OCR on image data using available API."""
+    def _ocr_image(self, img_data: bytes, filename: str) -> tuple:
+        """Run OCR on image data using available API.
+
+        Returns:
+            tuple: (text, error) - text is the extracted text, error is the error message if any
+        """
+        google_error = None
+        ocr_space_error = None
+        google_tried = False
+        ocr_space_tried = False
+
         # Try Google Vision first (more accurate)
         if self.google_api_key:
-            text = self._google_vision_ocr(img_data)
+            google_tried = True
+            text, google_error = self._google_vision_ocr(img_data)
             if text:
-                return text
+                return text, None
 
         # Fallback to OCR.space
-        return self._ocr_space_ocr(img_data, filename)
+        if self.ocr_space_key:
+            ocr_space_tried = True
+            text, ocr_space_error = self._ocr_space_ocr(img_data, filename)
+            if text:
+                return text, None
 
-    def _google_vision_ocr(self, img_data: bytes) -> str:
+        # Build error message
+        error_msg = ""
+        if google_tried and ocr_space_tried:
+            if google_error and ocr_space_error:
+                error_msg = f"Both OCR APIs failed - Google: {google_error}; OCR.space: {ocr_space_error}"
+            elif google_error:
+                error_msg = f"Google Vision failed ({google_error}), OCR.space found no text"
+            elif ocr_space_error:
+                error_msg = f"OCR.space failed ({ocr_space_error}), Google Vision found no text"
+            else:
+                error_msg = "Both OCR APIs processed OK but found no text."
+        elif google_tried:
+            error_msg = google_error or "Google Vision API processed but found no text"
+        elif ocr_space_tried:
+            error_msg = ocr_space_error or "OCR.space API processed but found no text"
+        else:
+            error_msg = "No OCR API keys configured. Set GOOGLE_CLOUD_VISION_KEY or OCR_SPACE_API_KEY in .env"
+        
+        return "", error_msg
+
+    def _google_vision_ocr(self, img_data: bytes) -> tuple:
         """Google Cloud Vision API text detection."""
         if not self.google_api_key:
-            return ""
+            return "", None
 
         try:
             b64_image = base64.b64encode(img_data).decode('utf-8')
@@ -277,38 +346,61 @@ class WebOCR:
                 }]
             }
 
-            url = f"https://vision.googleapis.com/v1/images:annotate?key={self.google_api_key}"
             req = urllib_request.Request(
-                url,
+                "https://vision.googleapis.com/v1/images:annotate",
                 data=json.dumps(payload).encode('utf-8'),
-                headers={'Content-Type': 'application/json'}
+                headers={
+                    'Content-Type': 'application/json',
+                    'x-goog-api-key': self.google_api_key
+                }
             )
 
-            with urllib_request.urlopen(req, timeout=60) as response:
+            with urllib_request.urlopen(req, timeout=API_TIMEOUT) as response:
                 result = json.loads(response.read().decode('utf-8'))
 
             responses = result.get('responses', [])
             if responses:
+                if 'error' in responses[0]:
+                    error_msg = responses[0]['error'].get('message', 'Unknown error')
+                    return "", f"API error: {error_msg}"
                 annotation = responses[0].get('fullTextAnnotation', {})
-                return annotation.get('text', '')
-
-        except Exception as e:
-            print(f"Google Vision error: {e}")
-
-        return ""
-
-    def _ocr_space_ocr(self, img_data: bytes, filename: str) -> str:
-        """OCR.space API text extraction."""
-        try:
-            b64_image = base64.b64encode(img_data).decode('utf-8')
-
-            if filename.lower().endswith('.pdf'):
-                data_prefix = "data:application/pdf;base64,"
-            elif filename.lower().endswith('.png'):
-                data_prefix = "data:image/png;base64,"
+                text = annotation.get('text', '')
+                if text:
+                    return text, None
+                return "", None
             else:
-                data_prefix = "data:image/jpeg;base64,"
+                return "", "No response from API"
 
+        except HTTPError as e:
+            try:
+                error_body = e.read().decode('utf-8')
+                error_json = json.loads(error_body)
+                error_msg = error_json.get('error', {}).get('message', str(e.reason))
+            except (json.JSONDecodeError, AttributeError):
+                error_msg = str(e.reason)
+            return "", f"HTTP {e.code}: {error_msg}"
+        except URLError as e:
+            return "", f"Network error: {e.reason}"
+        except Exception as e:
+            return "", f"Error: {str(e)}"
+
+    def _ocr_space_ocr(self, img_data: bytes, filename: str) -> tuple:
+        """OCR.space API text extraction."""
+        if not self.ocr_space_key:
+            return "", "OCR.space API key not configured"
+
+        if filename.lower().endswith('.pdf'):
+            data_prefix = "data:application/pdf;base64,"
+        elif filename.lower().endswith('.png'):
+            data_prefix = "data:image/png;base64,"
+        else:
+            data_prefix = "data:image/jpeg;base64,"
+
+        b64_image = base64.b64encode(img_data).decode('utf-8')
+        engine2_error = None
+        
+        # Try Engine 2 first (better for documents)
+        try:
             payload = {
                 'apikey': self.ocr_space_key,
                 'base64Image': data_prefix + b64_image,
@@ -327,20 +419,78 @@ class WebOCR:
                 headers={'Content-Type': 'application/x-www-form-urlencoded'}
             )
 
-            with urllib_request.urlopen(req, timeout=60) as response:
+            with urllib_request.urlopen(req, timeout=API_TIMEOUT) as response:
                 result = json.loads(response.read().decode('utf-8'))
 
             if result.get('IsErroredOnProcessing'):
-                return ""
+                error_msg = result.get('ErrorMessage', ['Unknown OCR error'])
+                if isinstance(error_msg, list):
+                    error_msg = '; '.join(error_msg)
+                engine2_error = f"Engine 2: {error_msg}"
+            else:
+                parsed = result.get('ParsedResults', [])
+                if parsed:
+                    texts = [pr.get('ParsedText', '') for pr in parsed]
+                    text = '\n'.join(texts)
+                    if text.strip():
+                        return text, None
+                    engine2_error = "Engine 2 returned empty text"
+                else:
+                    engine2_error = "Engine 2 returned no results"
 
-            parsed = result.get('ParsedResults', [])
-            texts = [pr.get('ParsedText', '') for pr in parsed]
-            return '\n'.join(texts)
-
+        except HTTPError as e:
+            engine2_error = f"Engine 2 HTTP error {e.code}"
+        except URLError as e:
+            return "", f"Network error: {e.reason}"
+        except json.JSONDecodeError as e:
+            engine2_error = f"Engine 2 JSON decode error: {str(e)}"
         except Exception as e:
-            print(f"OCR.space error: {e}")
+            engine2_error = f"Engine 2 error: {str(e)}"
 
-        return ""
+        # Retry with Engine 1 as fallback
+        try:
+            payload_e1 = {
+                'apikey': self.ocr_space_key,
+                'base64Image': data_prefix + b64_image,
+                'language': 'eng',
+                'isOverlayRequired': 'false',
+                'detectOrientation': 'true',
+                'scale': 'true',
+                'isTable': 'true',
+                'OCREngine': '1',
+            }
+            data_e1 = urllib_parse.urlencode(payload_e1).encode('utf-8')
+            req_e1 = urllib_request.Request(
+                'https://api.ocr.space/parse/image',
+                data=data_e1,
+                headers={'Content-Type': 'application/x-www-form-urlencoded'}
+            )
+            with urllib_request.urlopen(req_e1, timeout=API_TIMEOUT) as response_e1:
+                result_e1 = json.loads(response_e1.read().decode('utf-8'))
+
+            if result_e1.get('IsErroredOnProcessing'):
+                error_msg = result_e1.get('ErrorMessage', ['Unknown OCR error'])
+                if isinstance(error_msg, list):
+                    error_msg = '; '.join(error_msg)
+                return "", f"Both engines failed - {engine2_error}; Engine 1: {error_msg}"
+
+            parsed_e1 = result_e1.get('ParsedResults', [])
+            if parsed_e1:
+                texts_e1 = [pr.get('ParsedText', '') for pr in parsed_e1]
+                fallback_text = '\n'.join(texts_e1)
+                if fallback_text.strip():
+                    return fallback_text, None
+
+            return "", f"Both OCR engines returned empty text. {engine2_error}"
+
+        except HTTPError as e:
+            return "", f"OCR HTTP error: {e.code}"
+        except URLError as e:
+            return "", f"Network error: {e.reason}"
+        except json.JSONDecodeError as e:
+            return "", f"OCR JSON decode error: {str(e)}"
+        except Exception as e2:
+            return "", f"OCR error: {str(e2)}"
 
     def _compress_image(self, data: bytes) -> bytes:
         """Compress image for API limits."""
@@ -358,215 +508,210 @@ class WebOCR:
             output = io.BytesIO()
             img.save(output, format='JPEG', quality=80, optimize=True)
             return output.getvalue()
-        except:
+        except ImportError as e:
+            _logger.warning(f"PIL not available for image compression: {e}")
+            return data
+        except Exception as e:
+            _logger.warning(f"Image compression failed: {e}")
             return data
 
     def _parse_transcript_text(self, text: str) -> OCRResult:
         """
         Parse transcript text into structured course data.
-
-        Multi-pass Strategy:
-        1. Pass 1: Extract full-line patterns (course+credits+grade on one line)
-        2. Pass 2: Extract courses with grades/credits on nearby lines
-        3. Pass 3: Validate and deduplicate
+        
+        Strategy: Find grade patterns first (they're more reliable), then look
+        backwards to find the course code that goes with each grade.
         """
         courses = []
         student_name = ""
         student_id = ""
         cgpa = 0.0
         total_credits_from_pdf = 0.0
-        current_semester = ""
-        seen_courses = set()
 
         lines = text.replace('\r', '\n').split('\n')
 
-        # First pass: extract metadata and summary section
-        for line in lines:
+        # Extract metadata
+        for i, line in enumerate(lines):
             line_clean = line.strip()
-
-            # Student ID (10+ digit number)
+            
+            # Student ID
             if not student_id:
                 id_match = re.search(r'\b(\d{10,})\b', line_clean)
                 if id_match:
                     student_id = id_match.group(1)
-
-            # CGPA from summary section
-            if 'CGPA' in line_clean.upper() or 'Cumulative' in line_clean:
-                cgpa_match = re.search(r'(\d+\.\d{1,2})', line_clean)
+                id_match2 = re.search(r':\s*(\d{7})\s*(\d)\s*(\d{2})', line_clean)
+                if id_match2:
+                    student_id = id_match2.group(1) + id_match2.group(2) + id_match2.group(3)
+            
+            # Student name
+            if 'Student Name' in line_clean and i + 1 < len(lines):
+                next_line = lines[i + 1].strip()
+                if next_line and re.match(r'^[A-Za-z\s]+$', next_line):
+                    student_name = next_line
+            
+            # CGPA
+            if 'Cumulative Grade Point Average' in line_clean:
+                cgpa_match = re.search(r':\s*(\d+\.\d{1,2})', line_clean)
                 if cgpa_match:
-                    try:
-                        val = float(cgpa_match.group(1))
-                        if 0 <= val <= 4.0:
-                            cgpa = val
-                    except:
-                        pass
-
-            # Total credits from summary
-            if 'Total Credit' in line_clean or 'Credits Earned' in line_clean:
-                cr_match = re.search(r'(\d+(?:\.\d)?)', line_clean)
+                    cgpa = float(cgpa_match.group(1))
+            
+            # Total credits
+            if 'Total Credits' in line_clean:
+                cr_match = re.search(r':\s*(\d+(?:\.\d)?)', line_clean)
                 if cr_match:
-                    try:
-                        total_credits_from_pdf = float(cr_match.group(1))
-                    except:
-                        pass
+                    total_credits_from_pdf = float(cr_match.group(1))
 
-        # Pass 1: Full-line extraction (most accurate when available)
+        full_text = '\n'.join(lines)
+        
+        # Build line position map
+        line_starts = []
+        pos = 0
+        for line in lines:
+            line_starts.append(pos)
+            pos += len(line) + 1
+        
+        def get_line_index(char_pos):
+            for i, start in enumerate(line_starts):
+                if i + 1 < len(line_starts) and char_pos < line_starts[i + 1]:
+                    return i
+            return len(line_starts) - 1
+        
+        # Track semesters by line
+        semester_at_line = {}
+        current_sem = ""
         for i, line in enumerate(lines):
-            line_clean = line.strip()
-
-            # Update semester context
-            sem_match = SEMESTER_PATTERN.search(line_clean)
+            sem_match = re.search(r'(Spring|Summer|Fall)\s+(\d{4})', line, re.IGNORECASE)
             if sem_match:
-                current_semester = f"{sem_match.group(1).capitalize()} {sem_match.group(2)}"
+                current_sem = f"{sem_match.group(1).capitalize()} {sem_match.group(2)}"
+            semester_at_line[i] = current_sem
+        
+        # Course code pattern
+        course_pattern = re.compile(r'\b([A-Z]{2,4})\s?(\d{3}[A-Z]?)\b', re.IGNORECASE)
+        
+        # Find ALL grade occurrences with their positions
+        # Grade patterns: "X.0 [grade] X.0 X.0" or just "[grade] X.0 X.0"
+        grade_entries = []  # [(char_pos, credits, grade), ...]
+        
+        # Pattern 1: Full pattern "3.0 A- 3.0 3.0"
+        for match in re.finditer(r'([123456])\.0\s+([ABCDF][+-]?)\s+\d+\.\d+\s+\d+\.\d+', full_text, re.IGNORECASE):
+            grade_entries.append((match.start(), float(match.group(1)), match.group(2).upper()))
+        
+        # Pattern 2: "A- 3.0 3.0" (grade then CC CP)
+        for match in re.finditer(r'\b([ABCDF][+-]?)\s+\d+\.\d+\s+\d+\.\d+', full_text, re.IGNORECASE):
+            pos = match.start()
+            # Skip if already found by pattern 1
+            if any(abs(pos - e[0]) < 10 for e in grade_entries):
                 continue
-
-            # Try full-line pattern first (course, credits, grade on same line)
-            full_matches = list(FULL_LINE_PATTERN.finditer(line_clean))
-            for match in full_matches:
+            # Look back for credits
+            before = full_text[max(0, pos-30):pos]
+            cr_match = re.search(r'([123456])\.0\s*$', before)
+            credits = float(cr_match.group(1)) if cr_match else 3.0
+            grade_entries.append((pos, credits, match.group(1).upper()))
+        
+        # Sort by position
+        grade_entries.sort(key=lambda x: x[0])
+        
+        # For each grade, look BACKWARDS to find its course code
+        seen = set()
+        for grade_pos, credits, grade in grade_entries:
+            # Search backwards up to 300 chars for a course code
+            search_start = max(0, grade_pos - 300)
+            search_text = full_text[search_start:grade_pos]
+            
+            # Find all course codes in this region, take the LAST one (closest to grade)
+            best_course = None
+            best_pos = -1
+            
+            for match in course_pattern.finditer(search_text):
                 prefix = match.group(1).upper()
                 number = match.group(2).upper()
-                credits = float(match.group(3))
-                grade = match.group(4).upper()
-
-                # Apply OCR corrections to grade
-                grade = OCR_CORRECTIONS.get(grade, grade)
-
-                course_code = prefix + number
-                if course_code not in seen_courses and grade in VALID_GRADES:
-                    seen_courses.add(course_code)
-                    courses.append(CourseRecord(
-                        course_code=course_code,
-                        credits=credits,
-                        grade=grade,
-                        semester=current_semester,
-                        confidence=0.95
-                    ))
-
-        # Pass 2: Look for courses without full-line match
-        for i, line in enumerate(lines):
-            line_clean = line.strip()
-
-            # Update semester context
-            sem_match = SEMESTER_PATTERN.search(line_clean)
-            if sem_match:
-                current_semester = f"{sem_match.group(1).capitalize()} {sem_match.group(2)}"
-                continue
-
-            # Find course codes
-            course_matches = list(re.finditer(r'\b([A-Z]{2,4})[\s-]?(\d{3}[A-Z]?)\b', line_clean))
-
-            for match in course_matches:
-                prefix = match.group(1).upper()
-                number = match.group(2).upper()
-                course_code = prefix + number
-
-                # Skip if already found
-                if course_code in seen_courses:
+                
+                if prefix not in ALL_COURSE_PREFIXES:
                     continue
-
-                # Look for credits and grade after the course code
-                after_course = line_clean[match.end():]
-
-                # Find credits (number 0-10, possibly with decimal)
-                credits = 0.0
-                credit_match = re.search(r'\b(\d{1,2}(?:\.\d)?)\b', after_course)
-                if credit_match:
-                    try:
-                        val = float(credit_match.group(1))
-                        if 0 <= val <= 10:
-                            credits = val
-                    except:
-                        pass
-
-                # Find grade - check for valid grades and OCR corrections
-                grade = ""
-
-                # First try valid grades
-                for g in VALID_GRADES:
-                    pattern = r'\b' + re.escape(g) + r'\b'
-                    if re.search(pattern, after_course, re.IGNORECASE):
-                        grade = g
-                        break
-
-                # Then try OCR corrections
-                if not grade:
-                    for wrong, correct in OCR_CORRECTIONS.items():
-                        if re.search(r'\b' + re.escape(wrong) + r'\b', after_course):
-                            grade = correct
-                            break
-
-                # If no grade on same line, check next few lines
-                if not grade and i + 1 < len(lines):
-                    for j in range(i + 1, min(i + 4, len(lines))):
-                        next_line = lines[j].strip()
-
-                        # Stop if we hit another course code
-                        if re.search(r'\b[A-Z]{2,4}\s*\d{3}[A-Z]?\b', next_line):
-                            break
-
-                        # Look for grade
-                        for g in VALID_GRADES:
-                            if re.search(r'\b' + re.escape(g) + r'\b', next_line, re.IGNORECASE):
-                                grade = g
-                                break
-
-                        if grade:
-                            break
-
-                        # Also look for credits if not found
-                        if credits == 0.0:
-                            cm = re.search(r'\b(\d{1,2}(?:\.\d)?)\b', next_line)
-                            if cm:
-                                try:
-                                    val = float(cm.group(1))
-                                    if 0 < val <= 10:
-                                        credits = val
-                                except:
-                                    pass
-
-                # Add course if we have at least a grade
-                if grade:
-                    seen_courses.add(course_code)
-                    courses.append(CourseRecord(
-                        course_code=course_code,
-                        credits=credits,
-                        grade=grade,
-                        semester=current_semester,
-                        confidence=0.85 if credits > 0 else 0.70
-                    ))
-
-        # Pass 3: Validate and sort courses
-        validated_courses = []
-        for course in courses:
-            # Ensure grade is valid
-            if course.grade in VALID_GRADES:
-                validated_courses.append(course)
-
-        # Sort by semester if available, then by course code
+                
+                code = prefix + number
+                # Prefer the course closest to the grade (highest position)
+                if match.start() > best_pos:
+                    best_pos = match.start()
+                    best_course = code
+            
+            if not best_course:
+                continue
+            
+            # Get semester from the line where the grade appears
+            line_idx = get_line_index(grade_pos)
+            semester = semester_at_line.get(line_idx, "")
+            
+            # Allow retakes by using course+semester as key
+            key = f"{best_course}_{semester}"
+            if key in seen:
+                continue
+            seen.add(key)
+            
+            courses.append(CourseRecord(
+                course_code=best_course,
+                credits=credits,
+                grade=grade,
+                semester=semester,
+                confidence=0.90
+            ))
+        
+        # Sort by semester
         def sort_key(c):
             if c.semester:
                 parts = c.semester.split()
                 if len(parts) == 2:
                     season_order = {'Spring': 0, 'Summer': 1, 'Fall': 2}
-                    return (int(parts[1]), season_order.get(parts[0], 3), c.course_code)
+                    try:
+                        return (int(parts[1]), season_order.get(parts[0], 3), c.course_code)
+                    except ValueError:
+                        pass
             return (9999, 9, c.course_code)
 
-        validated_courses.sort(key=sort_key)
+        courses.sort(key=sort_key)
 
-        # Build raw text list for frontend display
         raw_text = [w for w in text.split() if w.strip()][:100]
 
-        result = OCRResult(
+        return OCRResult(
             success=True,
-            courses=validated_courses,
+            courses=courses,
             raw_text=raw_text,
             student_name=student_name,
             student_id=student_id,
             cgpa=cgpa,
             total_credits=total_credits_from_pdf
         )
+    
+    def _extract_grade_from_context(self, context: str) -> str:
+        """Extract grade from a small context string."""
+        # Order matters - check longer grades first
+        for g in ['A-', 'B+', 'B-', 'C+', 'C-', 'D+', 'A', 'B', 'C', 'D', 'F']:
+            if g in ['A', 'B', 'C', 'D', 'F']:
+                pattern = r'\b' + g + r'\b'
+            else:
+                pattern = r'\b' + re.escape(g)
+            if re.search(pattern, context):
+                return g
+        return ""
 
-        return result
+    def _is_noise_line(self, line: str) -> bool:
+        """Check if a line is mostly noise (watermarks, headers, etc.)."""
+        if not line or len(line.strip()) < 3:
+            return True
+        
+        line_clean = line.strip().upper()
+        
+        # Skip pure watermark lines
+        watermarks = ['NORTH SOUTH', 'UNIVERSITY', 'NIVERSITY', 'IVERSITY', 
+                     'VERSITY', 'ERSITY', 'RTH SO', 'ORTH SC', 'TH SOUTH']
+        
+        for w in watermarks:
+            if line_clean == w or (len(line_clean) < 20 and w in line_clean):
+                # But don't skip if it also contains a course code
+                if not re.search(r'[A-Z]{3}\d{3}', line_clean):
+                    return True
+        
+        return False
 
 
 # Alias for compatibility

@@ -14,6 +14,7 @@ import sys
 import re
 import json
 import logging
+import tempfile
 from pathlib import Path
 from datetime import datetime
 
@@ -38,6 +39,9 @@ def create_app():
     """Application factory for Flask app."""
     app = Flask(__name__)
 
+    project_root = Path(__file__).parent.parent
+    runtime_root = Path(tempfile.gettempdir()) / 'nsu-degree-audit' if os.getenv('VERCEL') else project_root
+
     # Load configuration from environment
     app.config['ENV'] = os.getenv('FLASK_ENV', 'production')
     app.config['DEBUG'] = os.getenv('DEBUG', 'false').lower() == 'true'
@@ -46,12 +50,12 @@ def create_app():
     # File upload configuration
     max_mb = int(os.getenv('MAX_CONTENT_LENGTH_MB', '16'))
     app.config['MAX_CONTENT_LENGTH'] = max_mb * 1024 * 1024
-    app.config['UPLOAD_FOLDER'] = Path(__file__).parent / 'uploads'
-    app.config['UPLOAD_FOLDER'].mkdir(exist_ok=True)
+    app.config['UPLOAD_FOLDER'] = runtime_root / 'uploads'
+    app.config['UPLOAD_FOLDER'].mkdir(parents=True, exist_ok=True)
 
     # Create logs directory
-    logs_dir = Path(__file__).parent.parent / 'logs'
-    logs_dir.mkdir(exist_ok=True)
+    logs_dir = runtime_root / 'logs'
+    logs_dir.mkdir(parents=True, exist_ok=True)
 
     # Configure logging
     log_level = getattr(logging, os.getenv('LOG_LEVEL', 'INFO').upper(), logging.INFO)
@@ -163,7 +167,7 @@ def health():
     return jsonify({
         'status': 'healthy',
         'timestamp': datetime.utcnow().isoformat(),
-        'version': '2.0.0'
+        'version': '2.1.0'
     })
 
 
@@ -175,6 +179,7 @@ def upload_file():
         return jsonify({'success': False, 'error': 'No file provided'})
 
     file = request.files['file']
+    
     if file.filename == '':
         logger.warning('Upload attempted with empty filename')
         return jsonify({'success': False, 'error': 'No file selected'})
@@ -188,7 +193,7 @@ def upload_file():
 
     try:
         file.save(str(filepath))
-        logger.info(f'File uploaded: {filename}')
+        logger.info(f'File uploaded: {filename}, size: {filepath.stat().st_size} bytes')
 
         # OCR extraction
         ocr = TranscriptOCR()
@@ -504,28 +509,53 @@ def file_too_large(e):
 # Production Server Entry Point
 # ═══════════════════════════════════════════════════════════════════════════════
 
+def get_local_ip():
+    """Get local IP address for network access."""
+    import socket
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("8.8.8.8", 80))
+        ip = s.getsockname()[0]
+        s.close()
+        return ip
+    except Exception:
+        return "127.0.0.1"
+
 if __name__ == '__main__':
+    import sys
     host = os.getenv('HOST', '0.0.0.0')
     port = int(os.getenv('PORT', 5000))
     debug = os.getenv('DEBUG', 'false').lower() == 'true'
+    local_ip = get_local_ip()
 
+    # Check OCR API configuration
+    ocr_key = os.getenv('OCR_SPACE_API_KEY', '')
+    google_key = os.getenv('GOOGLE_CLOUD_VISION_KEY', '')
+
+    # Print startup banner
     print("\n" + "=" * 60)
-    print("  NSU Degree Audit - Premium Web Application")
+    print("  NSU Degree Audit - Web Application")
     print("=" * 60)
-    print(f"\n  Environment: {app.config['ENV']}")
-    print(f"  Debug: {debug}")
-    print(f"  Server: http://{host}:{port}")
-    print("  Press Ctrl+C to stop\n")
+    print(f"\n  Mode        : {app.config['ENV'].upper()}")
+    print(f"\n  Local       : http://localhost:{port}")
+    print(f"  Network     : http://{local_ip}:{port}")
+    print(f"\n  OCR.space   : {'Configured' if ocr_key else 'Not configured'}")
+    print(f"  Google OCR  : {'Configured' if google_key else 'Not configured'}")
+
+    if not ocr_key and not google_key:
+        print("\n  [WARNING] No OCR API keys configured!")
+
+    print("\n  Press Ctrl+C to stop\n")
+    print("=" * 60)
+    sys.stdout.flush()
 
     if app.config['ENV'] == 'production' and not debug:
-        # Use production server
         try:
             from waitress import serve
-            print("  Using Waitress production server...")
+            import logging as wlog
+            wlog.getLogger('waitress').setLevel(wlog.ERROR)
             serve(app, host=host, port=port)
         except ImportError:
-            print("  Waitress not installed, using Flask dev server (not recommended for production)")
             app.run(debug=False, host=host, port=port)
     else:
-        # Development mode
         app.run(debug=debug, host=host, port=port)

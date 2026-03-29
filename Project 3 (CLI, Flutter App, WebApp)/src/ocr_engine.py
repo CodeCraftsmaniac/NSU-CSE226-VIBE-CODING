@@ -22,26 +22,49 @@ Dependencies:
   - PyMuPDF (pip install pymupdf)
   - Pillow (pip install Pillow)
   - opencv-python (pip install opencv-python)
-
-Usage:
-  from ocr_engine import TranscriptOCR
-
-  ocr = TranscriptOCR()
-  result = ocr.extract("transcript.pdf")
-  print(result.csv_data)
 """
 
 import os
 import re
 import io
+import logging
 import warnings
+import threading
 from dataclasses import dataclass, field
 from typing import Optional, List, Tuple, Dict, Callable
 from pathlib import Path
 
+# Setup logging
+_logger = logging.getLogger(__name__)
+
+
+def _log_error(msg: str, exc: Exception = None):
+    """Log error with optional exception details."""
+    if exc:
+        _logger.error(f"{msg}: {type(exc).__name__}: {exc}")
+    else:
+        _logger.error(msg)
+
+
+def _log_warning(msg: str):
+    """Log warning message."""
+    _logger.warning(msg)
+
+
+def _log_debug(msg: str):
+    """Log debug message."""
+    _logger.debug(msg)
+
+
 # Suppress warnings
 warnings.filterwarnings('ignore')
 os.environ['DISABLE_MODEL_SOURCE_CHECK'] = 'True'
+
+# Configuration constants
+OCR_CONFIDENCE_THRESHOLD = 0.7
+MAX_IMAGE_DIMENSION = 4000
+MIN_IMAGE_DIMENSION = 1500
+MAX_UPSCALE_FACTOR = 4.0
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 #  CONSTANTS
@@ -177,13 +200,25 @@ class ImagePreprocessor:
             # Read image
             img = cv2.imread(image_path)
             if img is None:
+                _log_warning(f"Could not read image: {image_path}")
                 return image_path
 
-            # Step 1: Upscale small images for better OCR
+            # Step 1: Upscale small images with BOUNDED scaling
             height, width = img.shape[:2]
-            if width < 2000:
-                scale = 2000 / width
-                img = cv2.resize(img, None, fx=scale, fy=scale, interpolation=cv2.INTER_CUBIC)
+            if width < MIN_IMAGE_DIMENSION:
+                # Calculate scale factor with limits
+                scale = min(MIN_IMAGE_DIMENSION / width, MAX_UPSCALE_FACTOR)
+                new_width = int(width * scale)
+                new_height = int(height * scale)
+                
+                # Ensure we don't exceed maximum dimensions
+                if new_width > MAX_IMAGE_DIMENSION or new_height > MAX_IMAGE_DIMENSION:
+                    scale = min(MAX_IMAGE_DIMENSION / width, MAX_IMAGE_DIMENSION / height)
+                    new_width = int(width * scale)
+                    new_height = int(height * scale)
+                
+                _log_debug(f"Scaling image from {width}x{height} to {new_width}x{new_height}")
+                img = cv2.resize(img, (new_width, new_height), interpolation=cv2.INTER_CUBIC)
 
             # Step 2: Convert to grayscale
             gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
@@ -207,17 +242,19 @@ class ImagePreprocessor:
                 cv2.THRESH_BINARY, 15, 4
             )
 
-            # Step 7: Denoise
-            denoised = cv2.fastNlMeansDenoising(binary, None, 12, 7, 21)
+            # Step 7: Denoise with moderate settings to preserve text detail
+            denoised = cv2.fastNlMeansDenoising(binary, None, 8, 7, 21)
 
             # Save preprocessed image
             with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as tmp:
                 cv2.imwrite(tmp.name, denoised)
                 return tmp.name
 
-        except ImportError:
+        except ImportError as e:
+            _log_warning(f"Image preprocessing dependencies not installed: {e}")
             return image_path
-        except Exception:
+        except Exception as e:
+            _log_error(f"Image preprocessing failed", e)
             return image_path
 
     @staticmethod
@@ -261,16 +298,19 @@ class ImagePreprocessor:
                                      flags=cv2.INTER_CUBIC,
                                      borderMode=cv2.BORDER_REPLICATE)
             return rotated
-        except Exception:
+        except Exception as e:
+            _log_warning(f"Deskew failed: {e}")
             return image
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-#  OCR ENGINE BACKENDS
+#  OCR ENGINE BACKENDS (with thread safety and cleanup)
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 class PaddleOCRBackend:
-    """PaddleOCR backend - primary engine."""
+    """PaddleOCR backend - primary engine with thread-safe lazy loading."""
+
+    _lock = threading.Lock()
 
     def __init__(self, lang: str = 'en'):
         self.lang = lang
@@ -278,8 +318,11 @@ class PaddleOCRBackend:
 
     def _get_ocr(self):
         if self._ocr is None:
-            from paddleocr import PaddleOCR
-            self._ocr = PaddleOCR(lang=self.lang)
+            with PaddleOCRBackend._lock:
+                if self._ocr is None:  # Double-check after acquiring lock
+                    from paddleocr import PaddleOCR
+                    self._ocr = PaddleOCR(lang=self.lang)
+                    _log_debug("PaddleOCR model loaded")
         return self._ocr
 
     def extract_text(self, image_path: str) -> List[Tuple[str, float]]:
@@ -294,12 +337,25 @@ class PaddleOCRBackend:
                 texts = page_result.get('rec_texts', [])
                 scores = page_result.get('rec_scores', [])
                 for text, score in zip(texts, scores):
-                    if score > 0.3:  # Lower threshold to catch more text
+                    if score >= OCR_CONFIDENCE_THRESHOLD:  # Use configurable threshold
                         texts_with_scores.append((text.strip(), score))
+                    elif score >= 0.5:  # Log low-confidence but potentially valid text
+                        _log_debug(f"Low confidence ({score:.2f}) text skipped: {text[:30]}...")
 
             return texts_with_scores
-        except Exception as e:
+        except ImportError as e:
+            _log_error("PaddleOCR not installed. Run: pip install paddleocr", e)
             return []
+        except Exception as e:
+            _log_error(f"PaddleOCR extraction failed for {image_path}", e)
+            return []
+
+    def cleanup(self):
+        """Release OCR model resources."""
+        if self._ocr is not None:
+            with PaddleOCRBackend._lock:
+                self._ocr = None
+                _log_debug("PaddleOCR model released")
 
     @property
     def name(self) -> str:
@@ -307,7 +363,9 @@ class PaddleOCRBackend:
 
 
 class EasyOCRBackend:
-    """EasyOCR backend - fallback engine."""
+    """EasyOCR backend - fallback engine with thread-safe lazy loading."""
+
+    _lock = threading.Lock()
 
     def __init__(self, lang: str = 'en'):
         self.lang = [lang]
@@ -315,8 +373,11 @@ class EasyOCRBackend:
 
     def _get_reader(self):
         if self._reader is None:
-            import easyocr
-            self._reader = easyocr.Reader(self.lang, gpu=False, verbose=False)
+            with EasyOCRBackend._lock:
+                if self._reader is None:  # Double-check after acquiring lock
+                    import easyocr
+                    self._reader = easyocr.Reader(self.lang, gpu=False, verbose=False)
+                    _log_debug("EasyOCR model loaded")
         return self._reader
 
     def extract_text(self, image_path: str) -> List[Tuple[str, float]]:
@@ -327,12 +388,25 @@ class EasyOCRBackend:
 
             texts_with_scores = []
             for (bbox, text, confidence) in results:
-                if confidence > 0.3:
+                if confidence >= OCR_CONFIDENCE_THRESHOLD:  # Use configurable threshold
                     texts_with_scores.append((text.strip(), confidence))
+                elif confidence >= 0.5:
+                    _log_debug(f"Low confidence ({confidence:.2f}) text skipped: {text[:30]}...")
 
             return texts_with_scores
-        except Exception as e:
+        except ImportError as e:
+            _log_error("EasyOCR not installed. Run: pip install easyocr", e)
             return []
+        except Exception as e:
+            _log_error(f"EasyOCR extraction failed for {image_path}", e)
+            return []
+
+    def cleanup(self):
+        """Release OCR model resources."""
+        if self._reader is not None:
+            with EasyOCRBackend._lock:
+                self._reader = None
+                _log_debug("EasyOCR model released")
 
     @property
     def name(self) -> str:
@@ -356,6 +430,8 @@ class TranscriptOCR:
     3. Cross-validation between engines
     """
 
+    _init_lock = threading.Lock()
+
     def __init__(self, lang: str = 'en', dpi: float = 4.0, use_fallback: bool = True,
                  progress_callback: Callable = None):
         """
@@ -373,7 +449,7 @@ class TranscriptOCR:
         self.preprocessor = ImagePreprocessor()
         self.progress_callback = progress_callback
 
-        # Initialize backends lazily
+        # Initialize backends lazily with thread safety
         self._paddle = None
         self._easyocr = None
 
@@ -384,13 +460,34 @@ class TranscriptOCR:
 
     def _get_paddle(self) -> PaddleOCRBackend:
         if self._paddle is None:
-            self._paddle = PaddleOCRBackend(self.lang)
+            with TranscriptOCR._init_lock:
+                if self._paddle is None:
+                    self._paddle = PaddleOCRBackend(self.lang)
         return self._paddle
 
     def _get_easyocr(self) -> EasyOCRBackend:
         if self._easyocr is None:
-            self._easyocr = EasyOCRBackend(self.lang)
+            with TranscriptOCR._init_lock:
+                if self._easyocr is None:
+                    self._easyocr = EasyOCRBackend(self.lang)
         return self._easyocr
+
+    def cleanup(self):
+        """Release all OCR model resources to free memory."""
+        if self._paddle:
+            self._paddle.cleanup()
+            self._paddle = None
+        if self._easyocr:
+            self._easyocr.cleanup()
+            self._easyocr = None
+        _log_debug("TranscriptOCR resources released")
+
+    def __del__(self):
+        """Destructor to ensure cleanup on garbage collection."""
+        try:
+            self.cleanup()
+        except Exception:
+            pass  # Ignore errors during cleanup in destructor
 
     def extract(self, file_path: str) -> OCRResult:
         """
@@ -405,6 +502,7 @@ class TranscriptOCR:
         path = Path(file_path)
 
         if not path.exists():
+            _log_error(f"File not found: {file_path}")
             return OCRResult(success=False, error=f"File not found: {file_path}")
 
         ext = path.suffix.lower()
@@ -568,8 +666,10 @@ class TranscriptOCR:
                 paddle = self._get_paddle()
                 paddle_results = paddle.extract_text(preprocessed_path)
                 self._report_progress("ocr", 40, "PaddleOCR extraction complete...")
-            except Exception:
-                pass
+            except ImportError as e:
+                _log_warning(f"PaddleOCR not available: {e}")
+            except Exception as e:
+                _log_error("PaddleOCR extraction error", e)
 
             # Calculate average confidence
             paddle_confidence = (
@@ -602,8 +702,10 @@ class TranscriptOCR:
                         engine_used = "EasyOCR" if easy_results else "None"
                         return easy_results or []
 
-                except Exception:
-                    pass
+                except ImportError as e:
+                    _log_warning(f"EasyOCR not available: {e}")
+                except Exception as e:
+                    _log_error("EasyOCR fallback error", e)
 
             return paddle_results
 
@@ -612,8 +714,8 @@ class TranscriptOCR:
             if cleanup_preprocessed and os.path.exists(preprocessed_path):
                 try:
                     os.unlink(preprocessed_path)
-                except Exception:
-                    pass
+                except OSError as e:
+                    _log_warning(f"Failed to cleanup temp file {preprocessed_path}: {e}")
 
     def _merge_results(
         self,
@@ -751,23 +853,31 @@ class TranscriptOCR:
                     if id_match:
                         student_id = id_match.group(1)
 
-            # Extract CGPA
+            # Extract CGPA with validation (0.0 - 4.0 range)
             if "CGPA" in text.upper() or "Cumulative" in text:
                 cgpa_match = re.search(r'(\d+\.\d+)', text)
                 if cgpa_match:
                     try:
-                        cgpa = float(cgpa_match.group(1))
-                    except:
-                        pass
+                        val = float(cgpa_match.group(1))
+                        if 0.0 <= val <= 4.0:  # Valid CGPA range
+                            cgpa = val
+                        else:
+                            _log_warning(f"Invalid CGPA value ignored: {val}")
+                    except ValueError as e:
+                        _log_warning(f"Failed to parse CGPA: {e}")
 
-            # Extract total credits
+            # Extract total credits with validation
             if "Total Credits" in text:
                 credits_match = re.search(r'(\d+\.?\d*)', text)
                 if credits_match:
                     try:
-                        total_credits = float(credits_match.group(1))
-                    except:
-                        pass
+                        val = float(credits_match.group(1))
+                        if 0.0 <= val <= 200:  # Reasonable total credits range
+                            total_credits = val
+                        else:
+                            _log_warning(f"Invalid total credits value ignored: {val}")
+                    except ValueError as e:
+                        _log_warning(f"Failed to parse total credits: {e}")
 
             # Detect semester
             sem_match = SEMESTER_PATTERN.search(text)
@@ -791,16 +901,19 @@ class TranscriptOCR:
                 for j in range(i + 1, min(i + 10, len(corrected_text))):
                     next_text = corrected_text[j].strip()
 
-                    # Check for credit value
+                    # Check for credit value with validation
                     if credits == 0.0:
                         credit_match = re.match(r'^(\d+\.?\d*)$', next_text)
                         if credit_match:
                             try:
                                 val = float(credit_match.group(1))
-                                # Credits should be reasonable (0-6 typically)
-                                if 0 < val <= 10:
+                                # Credits should be reasonable (0-6 typical, max 10 for special cases)
+                                if 0 < val <= 6:
                                     credits = val
-                            except:
+                                elif 6 < val <= 10:
+                                    _log_debug(f"Unusual credit value accepted: {val}")
+                                    credits = val
+                            except ValueError:
                                 pass
 
                     # Check for grade
