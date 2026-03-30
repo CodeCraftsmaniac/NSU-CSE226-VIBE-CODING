@@ -5,9 +5,18 @@ Pure REST API backend for OCR processing and degree analysis.
 NO UI - only JSON endpoints for CLI, Web, and Flutter apps.
 
 Endpoints:
-  GET  /health     - Service health, OCR limits, system info
-  POST /upload     - Upload transcript PDF/image for OCR + analysis
-  GET  /           - API info (JSON)
+  GET  /health        - Service health, OCR limits, system info
+  POST /upload        - Upload transcript PDF/image for OCR + analysis
+  GET  /              - API info (JSON)
+  
+Auth Endpoints:
+  POST /auth/google   - Google OAuth sign-in
+  GET  /auth/user     - Get current user info
+  
+History Endpoints:
+  GET  /history       - Get user's scan history
+  GET  /history/<id>  - Get specific scan
+  DELETE /history/<id> - Delete a scan
 """
 
 import os
@@ -15,8 +24,11 @@ import sys
 import logging
 import tempfile
 import platform
+import hashlib
+import secrets
 from pathlib import Path
 from datetime import datetime
+from functools import wraps
 
 # Load environment variables
 try:
@@ -28,7 +40,7 @@ except ImportError:
 # Add backend directory for local imports
 sys.path.insert(0, str(Path(__file__).parent))
 
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, g
 
 # Enable CORS for all frontends
 try:
@@ -36,6 +48,18 @@ try:
     CORS_AVAILABLE = True
 except ImportError:
     CORS_AVAILABLE = False
+
+# Database module
+try:
+    from database import (
+        create_user, get_user_by_email, get_user_by_id,
+        save_scan, get_user_scans, get_scan_by_id, delete_scan,
+        get_user_stats, check_db_connection
+    )
+    DB_AVAILABLE = True
+except Exception as e:
+    DB_AVAILABLE = False
+    print(f"Database not available: {e}")
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # Application Factory
@@ -90,6 +114,53 @@ except ImportError:
 
 from core import run_full_analysis
 
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Authentication Helpers
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def get_current_user():
+    """Get current user from Authorization header (Bearer token or API key)."""
+    auth_header = request.headers.get('Authorization', '')
+    
+    if not auth_header:
+        return None
+    
+    if auth_header.startswith('Bearer '):
+        token = auth_header[7:]
+        # For simplicity, token is email:hash format for session tokens
+        # In production, use proper JWT validation
+        try:
+            email = token.split(':')[0]
+            if DB_AVAILABLE:
+                return get_user_by_email(email)
+        except Exception:
+            pass
+    
+    return None
+
+
+def require_auth(f):
+    """Decorator to require authentication."""
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        user = get_current_user()
+        if not user:
+            return jsonify({'error': 'Authentication required'}), 401
+        g.user = user
+        return f(*args, **kwargs)
+    return decorated
+
+
+def optional_auth(f):
+    """Decorator to optionally capture auth info."""
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        g.user = get_current_user()
+        return f(*args, **kwargs)
+    return decorated
+
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # API Endpoints
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -99,15 +170,20 @@ def index():
     """API root - service info."""
     return jsonify({
         'service': 'NSU Degree Audit API',
-        'version': '2.0.0',
+        'version': '2.1.0',
         'project': 'CSE226 Project 3',
         'endpoints': {
             'GET /': 'This info',
             'GET /health': 'Health check with OCR limits and system info',
-            'POST /upload': 'Upload transcript for OCR + analysis'
+            'POST /upload': 'Upload transcript for OCR + analysis',
+            'POST /auth/google': 'Google OAuth sign-in',
+            'GET /auth/user': 'Get current user info',
+            'GET /history': 'Get scan history (requires auth)',
+            'DELETE /history/<id>': 'Delete scan (requires auth)'
         },
         'docs': 'https://github.com/your-repo/nsu-degree-audit',
-        'status': 'operational'
+        'status': 'operational',
+        'database': 'connected' if DB_AVAILABLE else 'unavailable'
     })
 
 
@@ -205,6 +281,12 @@ def health():
             'enabled': CORS_AVAILABLE,
             'origins': '*'
         },
+        'database': {
+            'enabled': DB_AVAILABLE,
+            'connected': check_db_connection() if DB_AVAILABLE else False,
+            'provider': 'Supabase',
+            'features': ['user_auth', 'scan_history', 'api_keys'] if DB_AVAILABLE else []
+        },
         'grading_scale': {
             'A': 4.00, 'A-': 3.70,
             'B+': 3.30, 'B': 3.00, 'B-': 2.70,
@@ -221,6 +303,7 @@ def health():
 
 
 @app.route('/upload', methods=['POST'])
+@optional_auth
 def upload():
     """Process transcript upload via OCR and return analysis."""
     
@@ -236,6 +319,9 @@ def upload():
     ext = file.filename.rsplit('.', 1)[-1].lower() if '.' in file.filename else ''
     if ext not in allowed:
         return jsonify({'success': False, 'error': f'Invalid file type. Allowed: {", ".join(allowed)}'}), 400
+
+    # Get source from request
+    source = request.form.get('source', 'web')
 
     try:
         # Save temporarily
@@ -295,12 +381,177 @@ def upload():
                     'difference': round(abs(calculated_cgpa - ocr_result.cgpa), 2)
                 }
 
+        # Save to history if user is authenticated
+        scan_id = None
+        if g.user and DB_AVAILABLE:
+            try:
+                level2 = result.get('level2', {})
+                scan_record = save_scan(
+                    user_id=g.user['id'],
+                    filename=file.filename,
+                    total_courses=len(courses),
+                    total_credits=level2.get('total_credits', 0),
+                    cgpa=level2.get('cgpa', 0),
+                    analysis_data=result,
+                    source=source
+                )
+                if scan_record:
+                    scan_id = scan_record['id']
+                    result['scan_id'] = scan_id
+            except Exception as e:
+                logger.warning(f"Failed to save to history: {e}")
+
         logger.info(f"Analysis complete: {len(courses)} courses processed")
         return jsonify({'success': True, 'data': result})
 
     except Exception as e:
         logger.exception(f"Error processing upload: {str(e)}")
         return jsonify({'success': False, 'error': str(e)}), 500
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Authentication Endpoints
+# ═══════════════════════════════════════════════════════════════════════════════
+
+@app.route('/auth/google', methods=['POST'])
+def auth_google():
+    """Handle Google OAuth sign-in."""
+    if not DB_AVAILABLE:
+        return jsonify({'error': 'Database not available'}), 503
+    
+    data = request.get_json()
+    if not data:
+        return jsonify({'error': 'No data provided'}), 400
+    
+    email = data.get('email')
+    name = data.get('name', '')
+    
+    if not email:
+        return jsonify({'error': 'Email is required'}), 400
+    
+    try:
+        # Create or get user
+        user = create_user(email=email, name=name, provider='google')
+        
+        if not user:
+            return jsonify({'error': 'Failed to create user'}), 500
+        
+        # Generate session token (email:random_hash)
+        token_hash = hashlib.sha256(f"{email}{secrets.token_hex(16)}".encode()).hexdigest()[:32]
+        session_token = f"{email}:{token_hash}"
+        
+        # Get user stats
+        stats = get_user_stats(user['id'])
+        
+        return jsonify({
+            'success': True,
+            'user': {
+                'id': user['id'],
+                'email': user['email'],
+                'name': user['name'],
+                'provider': user.get('provider', 'google'),
+                'created_at': user.get('created_at'),
+                'stats': stats
+            },
+            'token': session_token
+        })
+    
+    except Exception as e:
+        logger.exception(f"Auth error: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/auth/user')
+@require_auth
+def get_user():
+    """Get current user info."""
+    user = g.user
+    stats = get_user_stats(user['id']) if DB_AVAILABLE else {}
+    
+    return jsonify({
+        'success': True,
+        'user': {
+            'id': user['id'],
+            'email': user['email'],
+            'name': user['name'],
+            'provider': user.get('provider', 'google'),
+            'created_at': user.get('created_at'),
+            'stats': stats
+        }
+    })
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Scan History Endpoints
+# ═══════════════════════════════════════════════════════════════════════════════
+
+@app.route('/history')
+@require_auth
+def get_history():
+    """Get user's scan history."""
+    if not DB_AVAILABLE:
+        return jsonify({'error': 'Database not available'}), 503
+    
+    user = g.user
+    limit = request.args.get('limit', 50, type=int)
+    
+    scans = get_user_scans(user['id'], limit=min(limit, 100))
+    
+    # Simplify scan data for listing
+    history = []
+    for scan in scans:
+        history.append({
+            'id': scan['id'],
+            'filename': scan['filename'],
+            'total_courses': scan['total_courses'],
+            'total_credits': float(scan['total_credits']),
+            'cgpa': float(scan['cgpa']),
+            'source': scan['source'],
+            'created_at': scan['created_at']
+        })
+    
+    return jsonify({
+        'success': True,
+        'count': len(history),
+        'history': history
+    })
+
+
+@app.route('/history/<scan_id>')
+@require_auth
+def get_history_detail(scan_id):
+    """Get detailed scan result."""
+    if not DB_AVAILABLE:
+        return jsonify({'error': 'Database not available'}), 503
+    
+    scan = get_scan_by_id(scan_id)
+    
+    if not scan:
+        return jsonify({'error': 'Scan not found'}), 404
+    
+    # Verify ownership
+    if scan['user_id'] != g.user['id']:
+        return jsonify({'error': 'Access denied'}), 403
+    
+    return jsonify({
+        'success': True,
+        'scan': scan
+    })
+
+
+@app.route('/history/<scan_id>', methods=['DELETE'])
+@require_auth
+def delete_history(scan_id):
+    """Delete a scan from history."""
+    if not DB_AVAILABLE:
+        return jsonify({'error': 'Database not available'}), 503
+    
+    success = delete_scan(scan_id, g.user['id'])
+    
+    if not success:
+        return jsonify({'error': 'Scan not found or access denied'}), 404
+    
+    return jsonify({'success': True, 'message': 'Scan deleted'})
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
