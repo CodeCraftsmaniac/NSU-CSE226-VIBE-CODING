@@ -1,8 +1,8 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io';
 
 import 'package:file_picker/file_picker.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 
@@ -79,19 +79,38 @@ class _HomeScreenState extends State<HomeScreen> {
     final selection = await FilePicker.platform.pickFiles(
       type: FileType.custom,
       allowedExtensions: const ['pdf', 'png', 'jpg', 'jpeg'],
-      withData: false,
+      withData: kIsWeb, // Load bytes on web, path on native
     );
-    if (selection == null || selection.files.single.path == null) return;
+    if (selection == null || selection.files.isEmpty) return;
 
-    final file = File(selection.files.single.path!);
-    selectedFileName = selection.files.single.name;
+    final pickedFile = selection.files.single;
+    selectedFileName = pickedFile.name;
     startProgress();
 
     try {
       final request = http.MultipartRequest(
         'POST',
         Uri.parse(apiBaseUrl).resolve('/upload'),
-      )..files.add(await http.MultipartFile.fromPath('file', file.path));
+      );
+
+      // On web, use bytes; on native, use file path
+      if (kIsWeb) {
+        final bytes = pickedFile.bytes;
+        if (bytes == null) {
+          throw Exception('Could not read file data');
+        }
+        request.files.add(http.MultipartFile.fromBytes(
+          'file',
+          bytes,
+          filename: pickedFile.name,
+        ));
+      } else {
+        final filePath = pickedFile.path;
+        if (filePath == null) {
+          throw Exception('Could not get file path');
+        }
+        request.files.add(await http.MultipartFile.fromPath('file', filePath));
+      }
 
       final response = await request.send();
       final body = await response.stream.bytesToString();
