@@ -65,3 +65,5 @@ flutter_app/android/local.properties
 
 # Cleanup script
 cleanup.bat
+.vercel
+.env*.local
