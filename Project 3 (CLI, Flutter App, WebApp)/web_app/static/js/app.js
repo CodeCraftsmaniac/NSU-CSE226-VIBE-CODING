@@ -168,9 +168,6 @@ async function handleFile(file) {
     // Create abort controller for cancel functionality
     currentUploadController = new AbortController();
 
-    // Log where request is going
-    console.log(`📡 Sending to: ${API_BASE_URL}/upload`);
-
     try {
         // --- Run stage 1 & 2 (init + preprocess) immediately while fetch is in flight ---
         const fetchPromise = fetch(`${API_BASE_URL}/upload`, { 
@@ -210,7 +207,6 @@ async function handleFile(file) {
             // User cancelled - already handled
             return;
         }
-        console.error('Upload error:', error);
         showToast('Network error. Please try again.');
         resetToUpload();
     } finally {

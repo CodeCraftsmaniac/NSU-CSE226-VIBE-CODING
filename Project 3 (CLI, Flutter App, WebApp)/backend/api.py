@@ -45,9 +45,15 @@ def create_app():
     """Create Flask API application."""
     app = Flask(__name__)
     
-    # Enable CORS for all origins (CLI, Web, Flutter)
+    # CORS - Allow specific origins only
     if CORS_AVAILABLE:
-        CORS(app, origins="*", supports_credentials=True)
+        CORS(app, origins=[
+            "https://ocr.nsunexus.app",
+            "https://ocrapi.nsunexus.app",
+            "http://localhost:5000",
+            "http://localhost:8080",
+            "http://127.0.0.1:5000"
+        ])
 
     project_root = Path(__file__).parent.parent
     runtime_root = Path(tempfile.gettempdir()) / 'nsu-audit-api'
@@ -55,7 +61,7 @@ def create_app():
     # Configuration
     app.config['ENV'] = os.getenv('FLASK_ENV', 'production')
     app.config['DEBUG'] = os.getenv('DEBUG', 'false').lower() == 'true'
-    app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'nsu-audit-api-key')
+    app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', os.urandom(24).hex())
     
     # File upload
     max_mb = int(os.getenv('MAX_CONTENT_LENGTH_MB', '16'))
@@ -125,11 +131,10 @@ def health():
         'timezone': 'UTC'
     }
     
-    # OCR limits info
+    # OCR limits info (no key preview for security)
     ocr_info = {
         'google_vision': {
             'configured': bool(google_key),
-            'key_preview': f"{google_key[:8]}...{google_key[-4:]}" if len(google_key) > 12 else 'Not set',
             'free_tier': '1,000 requests/month',
             'rate_limit': '1,800 requests/minute',
             'max_file_size': '20 MB',
@@ -137,7 +142,6 @@ def health():
         },
         'ocr_space': {
             'configured': bool(ocrspace_key),
-            'key_preview': f"{ocrspace_key[:4]}...{ocrspace_key[-4:]}" if len(ocrspace_key) > 8 else 'Not set',
             'free_tier': '25,000 requests/month',
             'rate_limit': '500 requests/day (free)',
             'max_file_size': '1 MB (free) / 5 MB (pro)',
