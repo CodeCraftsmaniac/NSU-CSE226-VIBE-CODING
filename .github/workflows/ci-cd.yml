@@ -46,8 +46,8 @@ jobs:
 
       - name: Test Imports
         run: |
-          python -c "from src.core import run_full_analysis; print('✅ core.py imports OK')"
-          python -c "from src.ocr_web import WebOCR; print('✅ ocr_web.py imports OK')"
+          python -c "from backend.core import run_full_analysis; print('✅ core.py imports OK')"
+          python -c "from backend.ocr_web import WebOCR; print('✅ ocr_web.py imports OK')"
           python -c "from backend.api import app; print('✅ backend/api.py imports OK')"
 
   # ═══════════════════════════════════════════════════════════════
