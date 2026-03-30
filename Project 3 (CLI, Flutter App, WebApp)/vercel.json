@@ -8,18 +8,6 @@
   ],
   "routes": [
     {
-      "src": "/static/css/(.*)",
-      "dest": "/web_app/static/css/$1"
-    },
-    {
-      "src": "/static/js/(.*)",
-      "dest": "/web_app/static/js/$1"
-    },
-    {
-      "src": "/static/(.*\\.(svg|png|ico|jpg|jpeg|gif|webp))",
-      "dest": "/web_app/static/$1"
-    },
-    {
       "src": "/(.*)",
       "dest": "/web_app/app.py"
     }
