@@ -7,9 +7,8 @@
  */
 
 // ─── API Configuration ─────────────────────────────────────────────────────────
-// Use direct Cloud Run URL (custom domain SSL pending ~15-30 mins)
-const API_BASE_URL = 'https://cse226-ocr-p2-nsunexus-backend-cli-web-app-656129640010.us-central1.run.app';
-// Once SSL is ready, switch to: const API_BASE_URL = 'https://ocrapi.nsunexus.app';
+// Cloud Run Backend API
+const API_BASE_URL = 'https://ocrapi.nsunexus.app';
 
 // ─── DOM Elements ──────────────────────────────────────────────────────────────
 const uploadArea = document.getElementById('upload-area');

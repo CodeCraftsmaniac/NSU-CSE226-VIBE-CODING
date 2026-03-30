@@ -7,11 +7,10 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:http/http.dart' as http;
 
-// Use direct Cloud Run URL until custom domain SSL is provisioned (~15-30 mins)
+// Cloud Run backend API with custom domain
 const defaultApiBaseUrl = String.fromEnvironment(
   'API_BASE_URL',
-  defaultValue: 'https://cse226-ocr-p2-nsunexus-backend-cli-web-app-656129640010.us-central1.run.app',
-  // Once SSL ready, switch to: 'https://ocrapi.nsunexus.app'
+  defaultValue: 'https://ocrapi.nsunexus.app',
 );
 
 double asDouble(dynamic value) {

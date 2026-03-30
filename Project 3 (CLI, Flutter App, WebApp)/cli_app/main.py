@@ -48,9 +48,8 @@ console = Console(force_terminal=True)
 #  CLOUD API CONFIGURATION
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-# Use direct Cloud Run URL until custom domain SSL is provisioned
-CLOUD_API_URL = os.environ.get("CLOUD_API_URL", "https://cse226-ocr-p2-nsunexus-backend-cli-web-app-656129640010.us-central1.run.app")
-# Once SSL ready: CLOUD_API_URL = os.environ.get("CLOUD_API_URL", "https://ocrapi.nsunexus.app")
+# Use custom domain for Cloud Run backend
+CLOUD_API_URL = os.environ.get("CLOUD_API_URL", "https://ocrapi.nsunexus.app")
 
 # Default to cloud API - single backend for all
 USE_CLOUD_API = os.environ.get("USE_CLOUD_API", "true").lower() == "true" and "--local" not in sys.argv
