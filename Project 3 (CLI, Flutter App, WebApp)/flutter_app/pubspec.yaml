@@ -22,5 +22,8 @@ dev_dependencies:
   flutter_lints: ^6.0.0
   device_preview: ^1.2.0
 
+# Ignore device_preview import warning in main.dart
+# It's used conditionally in debug mode
+
 flutter:
   uses-material-design: true
