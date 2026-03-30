@@ -1,0 +1,13 @@
+{
+  "name": "nsu-degree-audit-web",
+  "version": "2.0.0",
+  "description": "NSU Degree Audit - Web Application with OCR",
+  "scripts": {
+    "dev": "cd .. && set DEBUG=true && python web_app/app.py",
+    "start": "cd .. && python web_app/app.py",
+    "prod": "cd .. && set FLASK_ENV=production && python web_app/app.py"
+  },
+  "keywords": ["nsu", "degree-audit", "transcript", "ocr"],
+  "author": "NSU CSE226",
+  "license": "MIT"
+}

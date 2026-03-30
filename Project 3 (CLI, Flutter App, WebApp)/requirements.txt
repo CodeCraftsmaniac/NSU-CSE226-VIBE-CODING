@@ -1,0 +1,29 @@
+# NSU Degree Audit Engine - Requirements
+# ========================================
+
+# Core
+rich>=13.0.0           # Premium terminal UI
+requests>=2.31.0       # HTTP client for cloud API
+
+# PDF & Image Processing (lightweight)
+PyMuPDF>=1.23.0        # PDF handling (fitz) - for native text extraction
+Pillow>=10.0.0         # Image processing/compression
+
+# Web Application
+flask>=3.0.0           # Web framework
+flask-cors>=4.0.0      # CORS support for Flutter/mobile apps
+werkzeug>=3.0.0        # WSGI utilities
+python-dotenv>=1.0.0   # Environment variable management
+
+# Production Server
+gunicorn>=21.0.0       # Production WSGI server (Linux/Mac/Cloud Run)
+waitress>=2.1.0        # Production WSGI server (Windows compatible)
+
+# Optional: Rate limiting
+# flask-limiter>=3.0.0 # Rate limiting
+
+# Note: OCR.space API is used for OCR (free, no downloads needed)
+# Optional heavy OCR (if you want local processing):
+# paddleocr>=2.7.0     # Uncomment for heavy local OCR
+# easyocr>=1.7.0       # Uncomment for fallback local OCR
+# opencv-python>=4.8.0 # Uncomment for image preprocessing

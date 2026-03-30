@@ -1,0 +1,26 @@
+name: Deploy Frontend to Vercel
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'Project 3 (CLI, Flutter App, WebApp)/web_app/**'
+      - 'Project 3 (CLI, Flutter App, WebApp)/vercel.json'
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Trigger Vercel Deploy
+        run: |
+          echo "✅ Vercel auto-deploys from GitHub integration"
+          echo "🌐 Deployment triggered via push to main branch"
+          echo ""
+          echo "📍 Frontend: https://ocr.nsunexus.app"
+          echo "📍 Backend:  https://ocrapi.nsunexus.app"
+          echo ""
+          echo "To monitor deployment:"
+          echo "  - Visit: https://vercel.com/adamjeeans-projects/nsu-degree-audit-engine"
+          echo "  - Or run: vercel ls"

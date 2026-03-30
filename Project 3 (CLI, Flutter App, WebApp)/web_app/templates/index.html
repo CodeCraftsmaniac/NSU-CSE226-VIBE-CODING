@@ -1,0 +1,396 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NSU Degree Audit Engine — Premium OCR Analysis</title>
+    <meta name="description" content="North South University Degree Audit Engine. Upload your transcript PDF or image for instant CGPA calculation, credit analysis, and graduation audit.">
+    <!-- Favicon -->
+    <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
+    <link rel="apple-touch-icon" href="/static/favicon.svg">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <canvas id="particle-canvas"></canvas>
+    <!-- Grid background overlay -->
+    <div class="bg-grid"></div>
+
+    <!-- Header -->
+    <header class="header" id="header">
+        <div class="header-container">
+            <div class="logo">
+                <div class="logo-icon">
+                    <img src="/static/logo.svg" alt="NSU Logo" width="48" height="48">
+                </div>
+                <div class="logo-text">
+                    <span class="logo-title">North South University</span>
+                    <span class="logo-subtitle">Degree Audit Engine <span class="version-badge">v2.0</span></span>
+                </div>
+            </div>
+            <div class="header-right">
+                <button class="btn-restart" id="btn-restart">
+                    <svg viewBox="0 0 20 20" fill="currentColor">
+                        <path fill-rule="evenodd" d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z" clip-rule="evenodd"/>
+                    </svg>
+                    <span>Upload New File</span>
+                </button>
+                <div class="header-badge">
+                    <svg viewBox="0 0 20 20" fill="currentColor" width="14" height="14">
+                        <path fill-rule="evenodd" d="M2.166 4.999A11.954 11.954 0 0010 1.944 11.954 11.954 0 0017.834 5c.11.65.166 1.32.166 2.001 0 5.225-3.34 9.67-8 11.317C5.34 16.67 2 12.225 2 7c0-.682.057-1.35.166-2.001zm11.541 3.708a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/>
+                    </svg>
+                    <span>Powered by Multi-Engine OCR</span>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="main">
+        <!-- Upload Section -->
+        <section id="upload-section" class="upload-section">
+            <div class="container">
+            <div class="hero-content">
+                    <h1 class="hero-title">Academic Transcript <span class="gradient-text">Analysis Engine</span></h1>
+                    <p class="hero-desc">Upload your NSU transcript PDF or image for instant AI-powered OCR extraction, CGPA calculation, waiver eligibility check, and full degree audit.</p>
+
+                    <div class="features-row">
+                        <div class="feature-chip">
+                            <svg viewBox="0 0 20 20" fill="currentColor" width="16" height="16"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/></svg>
+                            Credit Tally
+                        </div>
+                        <div class="feature-chip">
+                            <svg viewBox="0 0 20 20" fill="currentColor" width="16" height="16"><path d="M2 11a1 1 0 011-1h2a1 1 0 011 1v5a1 1 0 01-1 1H3a1 1 0 01-1-1v-5zM8 7a1 1 0 011-1h2a1 1 0 011 1v9a1 1 0 01-1 1H9a1 1 0 01-1-1V7zM14 4a1 1 0 011-1h2a1 1 0 011 1v12a1 1 0 01-1 1h-2a1 1 0 01-1-1V4z"/></svg>
+                            CGPA Analysis
+                        </div>
+                        <div class="feature-chip">
+                            <svg viewBox="0 0 20 20" fill="currentColor" width="16" height="16"><path fill-rule="evenodd" d="M6.267 3.455a3.066 3.066 0 001.745-.723 3.066 3.066 0 013.976 0 3.066 3.066 0 001.745.723 3.066 3.066 0 012.812 2.812c.051.643.304 1.254.723 1.745a3.066 3.066 0 010 3.976 3.066 3.066 0 00-.723 1.745 3.066 3.066 0 01-2.812 2.812 3.066 3.066 0 00-1.745.723 3.066 3.066 0 01-3.976 0 3.066 3.066 0 00-1.745-.723 3.066 3.066 0 01-2.812-2.812 3.066 3.066 0 00-.723-1.745 3.066 3.066 0 010-3.976 3.066 3.066 0 00.723-1.745 3.066 3.066 0 012.812-2.812zm7.44 5.252a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/></svg>
+                            Degree Audit
+                        </div>
+                        <div class="feature-chip feature-chip--waiver">
+                            <svg viewBox="0 0 20 20" fill="currentColor" width="16" height="16"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"/></svg>
+                            Waiver Check
+                        </div>
+                    </div>
+                </div>
+
+                <div class="upload-card" id="upload-card">
+                    <div class="upload-area" id="upload-area">
+                        <div class="upload-glow"></div>
+                        <div class="upload-icon-wrap">
+                            <div class="upload-icon-ring"></div>
+                            <svg class="upload-icon" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="1.5">
+                                <path d="M8 32l10-10 6 6 8-8 8 8"/>
+                                <rect x="4" y="6" width="40" height="36" rx="4"/>
+                                <circle cx="16" cy="18" r="4"/>
+                                <path d="M24 40V26m0 0l-5 5m5-5l5 5" stroke-linecap="round" stroke-linejoin="round"/>
+                            </svg>
+                        </div>
+                        <h3>Drop your transcript here</h3>
+                        <p>or <span class="browse-link">browse files</span> from your device</p>
+                        <div class="file-types">
+                            <span class="file-type"><svg viewBox="0 0 16 16" fill="currentColor" width="12" height="12"><path d="M4 0a2 2 0 00-2 2v12a2 2 0 002 2h8a2 2 0 002-2V4.5L9.5 0H4z"/></svg> PDF</span>
+                            <span class="file-type"><svg viewBox="0 0 16 16" fill="currentColor" width="12" height="12"><path d="M6.002 5.5a1.5 1.5 0 11-3 0 1.5 1.5 0 013 0z"/><path d="M2.002 1a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V3a2 2 0 00-2-2h-12z"/></svg> PNG</span>
+                            <span class="file-type"><svg viewBox="0 0 16 16" fill="currentColor" width="12" height="12"><path d="M6.002 5.5a1.5 1.5 0 11-3 0 1.5 1.5 0 013 0z"/><path d="M2.002 1a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V3a2 2 0 00-2-2h-12z"/></svg> JPG</span>
+                        </div>
+                        <div class="upload-limit">Max file size: 16MB</div>
+                        <input type="file" id="file-input" accept=".pdf,.png,.jpg,.jpeg" hidden>
+                    </div>
+                </div>
+
+                <!-- OCR Scanning Animation -->
+                <div class="scanning-section" id="scanning-section" style="display: none;">
+                    <!-- Processing Status Header -->
+                    <div class="processing-header">
+                        <div class="processing-info">
+                            <div class="file-info">
+                                <!-- PDF Icon -->
+                                <svg id="file-icon-pdf" class="file-type-icon" viewBox="0 0 24 24" fill="currentColor" width="22" height="22">
+                                    <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8l-6-6z" fill="#EF4444"/>
+                                    <path d="M14 2v6h6" fill="#FCA5A5"/>
+                                    <text x="7" y="17" font-size="6" font-weight="bold" fill="white">PDF</text>
+                                </svg>
+                                <!-- Image Icon -->
+                                <svg id="file-icon-image" class="file-type-icon" viewBox="0 0 24 24" fill="currentColor" width="22" height="22" style="display:none;">
+                                    <rect x="3" y="3" width="18" height="18" rx="2" fill="#10B981"/>
+                                    <circle cx="8.5" cy="8.5" r="2" fill="white"/>
+                                    <path d="M21 15l-5-5-6 6-3-3-4 4v3a2 2 0 002 2h14a2 2 0 002-2v-5z" fill="#059669"/>
+                                </svg>
+                                <div class="file-details">
+                                    <span class="file-name" id="processing-filename">transcript.pdf</span>
+                                    <span class="file-meta" id="processing-filemeta">2.4 MB</span>
+                                </div>
+                            </div>
+                            <div class="processing-right">
+                                <div class="elapsed-time" id="elapsed-time">
+                                    <svg viewBox="0 0 20 20" fill="currentColor" width="14" height="14">
+                                        <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clip-rule="evenodd"/>
+                                    </svg>
+                                    <span id="elapsed-counter">0:00</span>
+                                </div>
+                                <div class="status-badge processing">
+                                    <span class="status-pulse"></span>
+                                    Processing
+                                </div>
+                                <button class="btn-cancel-upload" id="btn-cancel-upload" title="Cancel Processing">
+                                    <svg viewBox="0 0 20 20" fill="currentColor" width="14" height="14">
+                                        <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"/>
+                                    </svg>
+                                </button>
+                            </div>
+                        </div>
+                        <div class="processing-tip">
+                            <svg viewBox="0 0 20 20" fill="currentColor" width="14" height="14">
+                                <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"/>
+                            </svg>
+                            <span>Processing typically takes 15-45 seconds depending on document complexity</span>
+                        </div>
+                    </div>
+
+                    <div class="scanning-card">
+                        <div class="scanning-header">
+                            <div class="scanning-icon" id="scanning-icon-container">
+                                <div class="scan-beam"></div>
+                                <!-- Default document icon -->
+                                <svg id="scan-icon-default" viewBox="0 0 32 32" fill="none" stroke="rgba(56,189,248,0.9)" stroke-width="1.5">
+                                    <rect x="4" y="4" width="24" height="24" rx="2"/>
+                                    <path d="M8 12h16M8 16h12M8 20h8"/>
+                                </svg>
+                                <!-- File thumbnail preview -->
+                                <img id="file-thumbnail" class="file-thumbnail" style="display:none;" alt="File preview"/>
+                            </div>
+                            <div class="scanning-title">
+                                <h3>Extracting Transcript Data</h3>
+                                <p class="scanning-subtitle" id="scanning-stage">Initializing OCR engine...</p>
+                            </div>
+                        </div>
+
+                        <div class="scanning-progress">
+                            <div class="progress-bar">
+                                <div class="progress-fill" id="scan-progress"></div>
+                                <div class="progress-glow" id="progress-glow"></div>
+                            </div>
+                            <div class="progress-info">
+                                <span class="progress-text" id="progress-text">0%</span>
+                                <span class="progress-eta" id="progress-eta">Estimating...</span>
+                            </div>
+                        </div>
+
+                        <div class="scanning-steps">
+                            <div class="scan-step active" id="step-init">
+                                <div class="step-indicator"><div class="step-dot"></div></div>
+                                <span>Initialize Engine</span>
+                            </div>
+                            <div class="scan-step" id="step-preprocess">
+                                <div class="step-indicator"><div class="step-dot"></div></div>
+                                <span>Image Processing</span>
+                            </div>
+                            <div class="scan-step" id="step-extract">
+                                <div class="step-indicator"><div class="step-dot"></div></div>
+                                <span>Text Extraction</span>
+                            </div>
+                            <div class="scan-step" id="step-parse">
+                                <div class="step-indicator"><div class="step-dot"></div></div>
+                                <span>Data Parsing</span>
+                            </div>
+                            <div class="scan-step" id="step-analyze">
+                                <div class="step-indicator"><div class="step-dot"></div></div>
+                                <span>Analysis</span>
+                            </div>
+                        </div>
+
+                        <div class="extracted-text-container">
+                            <div class="extracted-text-header">
+                                <span class="pulse-dot"></span>
+                                <span>Live Text Extraction</span>
+                                <span class="text-count" id="text-count">0 items</span>
+                            </div>
+                            <div class="extracted-text" id="extracted-text">
+                                <div class="cursor-blink">|</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Results Section -->
+        <section id="results-section" class="results-section" style="display: none;">
+            <div class="container">
+                <!-- OCR Summary Banner -->
+                <div class="ocr-banner" id="ocr-banner">
+                    <div class="ocr-banner-left">
+                        <div class="ocr-success-icon">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                                <path d="M9 12l2 2 4-4" stroke-linecap="round" stroke-linejoin="round"/>
+                                <circle cx="12" cy="12" r="10"/>
+                            </svg>
+                        </div>
+                        <div>
+                            <div class="ocr-banner-title">Extraction Complete</div>
+                            <div class="ocr-banner-meta" id="ocr-meta">—</div>
+                        </div>
+                    </div>
+                    <div class="ocr-banner-stats">
+                        <div class="ocr-stat">
+                            <span class="ocr-stat-value" id="ocr-courses-count">0</span>
+                            <span class="ocr-stat-label">Courses</span>
+                        </div>
+                        <div class="ocr-stat">
+                            <span class="ocr-stat-value" id="ocr-confidence-value">0%</span>
+                            <span class="ocr-stat-label">Confidence</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Student Info Card -->
+                <div class="student-card" id="student-card" style="display:none;">
+                    <div class="student-info">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="20" height="20">
+                            <path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/>
+                            <circle cx="12" cy="7" r="4"/>
+                        </svg>
+                        <span id="student-name">—</span>
+                    </div>
+                    <div class="student-info">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="20" height="20">
+                            <rect x="3" y="4" width="18" height="16" rx="2"/>
+                            <path d="M7 8h10M7 12h6"/>
+                        </svg>
+                        <span id="student-id">—</span>
+                    </div>
+                </div>
+
+                <!-- Level Tabs -->
+                <div class="level-tabs">
+                    <button class="level-tab active" data-level="1" id="tab-1">
+                        <span class="tab-icon">
+                            <svg viewBox="0 0 20 20" fill="currentColor" width="16" height="16"><path d="M9 2a1 1 0 000 2h2a1 1 0 100-2H9z"/><path fill-rule="evenodd" d="M4 5a2 2 0 012-2 3 3 0 003 3h2a3 3 0 003-3 2 2 0 012 2v11a2 2 0 01-2 2H6a2 2 0 01-2-2V5zm3 4a1 1 0 000 2h.01a1 1 0 100-2H7zm3 0a1 1 0 000 2h3a1 1 0 100-2h-3zm-3 4a1 1 0 100 2h.01a1 1 0 100-2H7zm3 0a1 1 0 100 2h3a1 1 0 100-2h-3z" clip-rule="evenodd"/></svg>
+                        </span>
+                        <span class="tab-text">
+                            <span class="tab-number">L1</span>
+                            <span class="tab-name">Credit Tally</span>
+                        </span>
+                    </button>
+                    <button class="level-tab" data-level="2" id="tab-2">
+                        <span class="tab-icon">
+                            <svg viewBox="0 0 20 20" fill="currentColor" width="16" height="16"><path d="M2 11a1 1 0 011-1h2a1 1 0 011 1v5a1 1 0 01-1 1H3a1 1 0 01-1-1v-5zM8 7a1 1 0 011-1h2a1 1 0 011 1v9a1 1 0 01-1 1H9a1 1 0 01-1-1V7zM14 4a1 1 0 011-1h2a1 1 0 011 1v12a1 1 0 01-1 1h-2a1 1 0 01-1-1V4z"/></svg>
+                        </span>
+                        <span class="tab-text">
+                            <span class="tab-number">L2</span>
+                            <span class="tab-name">CGPA Analysis</span>
+                        </span>
+                    </button>
+                    <button class="level-tab" data-level="3" id="tab-3">
+                        <span class="tab-icon">
+                            <svg viewBox="0 0 20 20" fill="currentColor" width="16" height="16"><path fill-rule="evenodd" d="M6.267 3.455a3.066 3.066 0 001.745-.723 3.066 3.066 0 013.976 0 3.066 3.066 0 001.745.723 3.066 3.066 0 012.812 2.812c.051.643.304 1.254.723 1.745a3.066 3.066 0 010 3.976 3.066 3.066 0 00-.723 1.745 3.066 3.066 0 01-2.812 2.812 3.066 3.066 0 00-1.745.723 3.066 3.066 0 01-3.976 0 3.066 3.066 0 00-1.745-.723 3.066 3.066 0 01-2.812-2.812 3.066 3.066 0 00-.723-1.745 3.066 3.066 0 010-3.976 3.066 3.066 0 00.723-1.745 3.066 3.066 0 012.812-2.812zm7.44 5.252a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/></svg>
+                        </span>
+                        <span class="tab-text">
+                            <span class="tab-number">L3</span>
+                            <span class="tab-name">Degree Audit</span>
+                        </span>
+                    </button>
+                </div>
+
+                <!-- Level 1: Credit Tally -->
+                <div class="level-content" id="level-1" style="display: block;">
+                    <div class="level-header">
+                        <h2><span class="level-badge">Level 1</span> Credit Tally</h2>
+                        <p>Course count, credit tracking, and retake analysis</p>
+                    </div>
+                    <div class="stats-grid" id="level1-stats"></div>
+                    <div class="credit-progress-card" id="credit-progress-card">
+                        <h3>Graduation Progress</h3>
+                        <div class="big-progress">
+                            <div class="big-progress-bar">
+                                <div class="big-progress-fill" id="credit-progress-fill"></div>
+                            </div>
+                            <div class="big-progress-labels">
+                                <span id="credits-earned-label">0</span>
+                                <span>of 130 credits</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="retakes-card" id="retakes-card" style="display: none;">
+                        <h3>
+                            <svg viewBox="0 0 20 20" fill="currentColor" width="18" height="18"><path fill-rule="evenodd" d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z" clip-rule="evenodd"/></svg>
+                            Retaken Courses
+                        </h3>
+                        <div class="retakes-list" id="retakes-list"></div>
+                    </div>
+                </div>
+
+                <!-- Level 2: CGPA Analysis -->
+                <div class="level-content" id="level-2" style="display: none;">
+                    <div class="level-header">
+                        <h2><span class="level-badge">Level 2</span> CGPA Analysis</h2>
+                        <p>Grade point calculation and academic standing</p>
+                    </div>
+                    <div class="cgpa-hero" id="cgpa-display"></div>
+                    <!-- CGPA Warning Banner (shows if mismatch detected) -->
+                    <div class="cgpa-warning" id="cgpa-warning" style="display: none;"></div>
+                    <div class="stats-grid" id="level2-stats"></div>
+                    <div class="waiver-card" id="waiver-card" style="display: none;"></div>
+                    <div class="grade-distribution-card" id="grade-distribution">
+                        <h3>Grade Distribution</h3>
+                        <div class="grade-chart" id="grade-bars"></div>
+                    </div>
+                </div>
+
+                <!-- Level 3: Degree Audit -->
+                <div class="level-content" id="level-3" style="display: none;">
+                    <div class="level-header">
+                        <h2><span class="level-badge">Level 3</span> Degree Audit</h2>
+                        <p>Graduation requirements and course completion check</p>
+                    </div>
+                    <div id="level3-content"></div>
+                </div>
+
+                <!-- Semester-wise Course Table -->
+                <div class="course-table-section">
+                    <div class="section-title-row">
+                        <h3>
+                            <svg viewBox="0 0 20 20" fill="currentColor" width="20" height="20"><path fill-rule="evenodd" d="M3 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1z" clip-rule="evenodd"/></svg>
+                            All Courses
+                        </h3>
+                        <span class="course-count" id="course-count">0 courses</span>
+                    </div>
+                    <div id="semester-tables"></div>
+                </div>
+
+                <!-- Reset Button -->
+                <button class="reset-btn" onclick="resetAnalysis()">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20">
+                        <path d="M3 12a9 9 0 019-9 9.75 9.75 0 016.74 2.74L21 8"/>
+                        <path d="M21 3v5h-5"/>
+                        <path d="M21 12a9 9 0 01-9 9 9.75 9.75 0 01-6.74-2.74L3 16"/>
+                        <path d="M3 21v-5h5"/>
+                    </svg>
+                    Analyze Another Transcript
+                </button>
+            </div>
+        </section>
+    </main>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="container">
+            <div class="footer-content">
+                <div class="footer-brand">
+                    <span class="footer-logo">NSU</span>
+                    <span>Degree Audit Engine</span>
+                </div>
+                <p class="footer-text">CSE226 Project &bull; North South University</p>
+                <p class="disclaimer">Unofficial tool. Always verify with NSU Registrar for official records.</p>
+            </div>
+        </div>
+    </footer>
+
+    <!-- Error Toast -->
+    <div class="toast" id="toast"></div>
+
+    <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+</body>
+</html>

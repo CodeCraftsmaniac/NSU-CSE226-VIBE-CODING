@@ -1,0 +1,67 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyo
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+Thumbs.db
+Desktop.ini
+.DS_Store
+
+# Distribution
+dist/
+build/
+*.egg-info/
+
+# Old web folder (replaced by web_app/)
+web/
+
+# Web uploads (keep .gitkeep)
+web_app/uploads/*
+!web_app/uploads/.gitkeep
+*.log
+
+# Large files (optional local OCR models)
+*.onnx
+*.paddle
+models/
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# Logs
+logs/
+
+# Temporary/Debug files
+uploads/
+ocr_dump.txt
+*.bak
+
+# Flutter build artifacts
+flutter_app/.dart_tool/
+flutter_app/build/
+flutter_app/.idea/
+flutter_app/.flutter-plugins
+flutter_app/.flutter-plugins-dependencies
+flutter_app/flutter_app.iml
+flutter_app/android/local.properties
+
+# Vercel
+.vercel/
+
+# Cleanup script
+cleanup.bat

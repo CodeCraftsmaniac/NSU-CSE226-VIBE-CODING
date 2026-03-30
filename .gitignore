@@ -1,3 +1,16 @@
 ﻿__pycache__/
 *.pyc
 Project 1 (Jubayer)/
+
+# Build artifacts
+*.dex
+flutter_app/build/
+flutter_app/.dart_tool/
+flutter_app/.idea/
+flutter_app/android/.gradle/
+.venv/
+.env.local
+.vercel/
+logs/
+uploads/
+*.log
