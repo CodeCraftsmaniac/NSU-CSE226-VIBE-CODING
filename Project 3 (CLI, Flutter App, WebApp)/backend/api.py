@@ -45,15 +45,9 @@ def create_app():
     """Create Flask API application."""
     app = Flask(__name__)
     
-    # CORS - Allow specific origins only
+    # CORS - Allow all origins for mobile/Flutter app compatibility
     if CORS_AVAILABLE:
-        CORS(app, origins=[
-            "https://ocr.nsunexus.app",
-            "https://ocrapi.nsunexus.app",
-            "http://localhost:5000",
-            "http://localhost:8080",
-            "http://127.0.0.1:5000"
-        ])
+        CORS(app, resources={r"/*": {"origins": "*"}})
 
     project_root = Path(__file__).parent.parent
     runtime_root = Path(tempfile.gettempdir()) / 'nsu-audit-api'

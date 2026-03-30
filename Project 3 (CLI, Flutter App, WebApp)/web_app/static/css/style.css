@@ -2668,4 +2668,70 @@ body.review-active .main {
     .logo-subtitle { font-size: 0.7rem; }
     .upload-area { padding: var(--space-8) var(--space-4); }
     .features-row { flex-direction: column; align-items: center; }
+    
+    /* Mobile Header */
+    .header-container {
+        flex-direction: column;
+        gap: var(--space-3);
+        padding: var(--space-3);
+    }
+    .header-right {
+        flex-direction: column;
+        width: 100%;
+        gap: var(--space-2);
+    }
+    .btn-restart {
+        width: 100%;
+        justify-content: center;
+    }
+    .header-badge {
+        justify-content: center;
+    }
+    
+    /* Mobile Upload */
+    .upload-card {
+        margin: var(--space-4);
+        padding: var(--space-4);
+    }
+    .upload-icon { width: 48px; height: 48px; }
+    .upload-title { font-size: 1.1rem; }
+    .upload-desc { font-size: 0.85rem; }
+    
+    /* Mobile Hero */
+    .hero-content {
+        padding: var(--space-4);
+        text-align: center;
+    }
+    .hero-desc { font-size: 0.9rem; }
+    .feature-chip { font-size: 0.75rem; padding: 6px 10px; }
+    
+    /* Mobile Results */
+    .cgpa-value { font-size: 2.5rem; }
+    .level-tabs { gap: var(--space-1); }
+    .level-tab { padding: var(--space-2) var(--space-3); font-size: 0.75rem; }
+    .stat-card { padding: var(--space-3); }
+    .stat-value { font-size: 1.5rem; }
+    .stat-label { font-size: 0.7rem; }
+    
+    /* Mobile OCR Banner */
+    .ocr-banner { padding: var(--space-3); flex-direction: column; }
+    .ocr-banner-left { flex-direction: column; gap: var(--space-2); }
+    .ocr-engine-badge { font-size: 0.7rem; }
+    
+    /* Mobile Scanning */
+    .scanning-card { padding: var(--space-4); margin: var(--space-4); }
+    .scan-step { flex-direction: column; gap: 4px; }
+    .scan-step span { font-size: 0.65rem; }
+    
+    /* Mobile Student Card */
+    .student-card { padding: var(--space-3); }
+    .student-info { flex-direction: column; gap: var(--space-2); }
+    
+    /* Mobile Course Table */
+    .course-table { font-size: 0.75rem; }
+    .course-table th, .course-table td { padding: var(--space-2); }
+    
+    /* Container padding */
+    .container { padding: 0 var(--space-3); }
+    .main { padding-top: 80px; }
 }

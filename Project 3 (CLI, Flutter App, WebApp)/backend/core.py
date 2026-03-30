@@ -668,6 +668,8 @@ def parse_knowledge_base(md_path):
 
 def classify_credit(grade, credits):
     """Classify a course → (earned_credits, status_label, colour)."""
+    if grade == "" or grade is None:
+        return 0.0, "IN PROGRESS", C.ELECTRIC
     if grade in NON_GPA_GRADES:
         if grade in ("P", "TR") and credits > 0:
             return credits, "EARNED (P/TR)", C.LAVENDER
@@ -690,7 +692,7 @@ def compute_cgpa(rows):
     total_qp = total_gpa_cr = total_earned = 0.0
     for r in rows:
         grade, credits = r["grade"], r["credits"]
-        if grade in NON_GPA_GRADES:
+        if grade == "" or grade is None or grade in NON_GPA_GRADES:
             if grade in ("P", "TR") and credits > 0:
                 total_earned += credits
             continue
@@ -928,7 +930,8 @@ def run_full_analysis(courses_raw, kb_path=None):
 
     if kb_path and os.path.isfile(kb_path) and detected_program:
         try:
-            programs = parse_knowledge_base(str(kb_path))
+            kb = parse_knowledge_base(str(kb_path))
+            programs = kb.get('programs', {})
 
             if detected_program in programs:
                 prog = programs[detected_program]

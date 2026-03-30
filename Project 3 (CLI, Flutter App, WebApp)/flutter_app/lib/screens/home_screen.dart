@@ -214,18 +214,11 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       body: GradientBackground(
-        child: Stack(
-          children: [
-            const Positioned(top: -120, left: -90, child: AuroraBlob(color: Color(0xFF0FA3FF), size: 250)),
-            const Positioned(top: 220, right: -70, child: AuroraBlob(color: Color(0xFFF6B75D), size: 220)),
-            const Positioned(bottom: -120, left: 40, child: AuroraBlob(color: Color(0xFF7A7CFF), size: 280)),
-            SafeArea(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.fromLTRB(20, 18, 20, 32),
-                child: buildContent(context),
-              ),
-            ),
-          ],
+        child: SafeArea(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(20, 18, 20, 32),
+            child: buildContent(context),
+          ),
         ),
       ),
     );
@@ -251,10 +244,10 @@ class _HomeScreenState extends State<HomeScreen> {
                     width: 50,
                     height: 50,
                     decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(18),
-                      gradient: const LinearGradient(colors: [Color(0xFF57C5FF), Color(0xFF0058A8)]),
+                      borderRadius: BorderRadius.circular(14),
+                      gradient: const LinearGradient(colors: [Color(0xFF0066CC), Color(0xFF0284C7)]),
                     ),
-                    child: const Icon(Icons.auto_awesome, color: Colors.white),
+                    child: const Icon(Icons.school_outlined, color: Colors.white),
                   ),
                   const SizedBox(width: 14),
                   Expanded(
@@ -262,20 +255,20 @@ class _HomeScreenState extends State<HomeScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text('North South University', style: theme.textTheme.bodyMedium),
-                        Text('Degree Audit Mobile Suite', style: theme.textTheme.titleLarge),
+                        Text('Degree Audit', style: theme.textTheme.titleLarge),
                       ],
                     ),
                   ),
                   IconButton(
                     onPressed: editEndpoint,
-                    icon: const Icon(Icons.settings_outlined, color: Color(0xFF7A8BA6)),
+                    icon: const Icon(Icons.settings_outlined, color: Color(0xFF64748B)),
                     tooltip: 'API Settings',
                   ),
                 ],
               ),
               const SizedBox(height: 20),
               Text(
-                'Academic transcript analysis with the same backend logic as the website, rebuilt for a sharper mobile experience.',
+                'Upload your transcript PDF or image for instant CGPA calculation, credit analysis, and degree audit.',
                 style: theme.textTheme.bodyLarge?.copyWith(fontSize: 15, height: 1.5),
               ),
               const SizedBox(height: 16),
@@ -283,21 +276,21 @@ class _HomeScreenState extends State<HomeScreen> {
                 spacing: 10,
                 runSpacing: 10,
                 children: [
-                  FeatureChip(icon: Icons.document_scanner_outlined, label: 'PDF and image upload'),
-                  FeatureChip(icon: Icons.stacked_bar_chart, label: 'Three audit levels'),
-                  FeatureChip(icon: Icons.workspace_premium, label: 'Premium mobile UI'),
+                  FeatureChip(icon: Icons.document_scanner_outlined, label: 'PDF/Image Upload'),
+                  FeatureChip(icon: Icons.stacked_bar_chart, label: 'CGPA Analysis'),
+                  FeatureChip(icon: Icons.workspace_premium, label: 'Degree Audit'),
                 ],
               ),
               const SizedBox(height: 18),
               GlassTone(
                 child: Row(
                   children: [
-                    const Icon(Icons.cloud_done_outlined, color: Color(0xFF57C5FF)),
+                    const Icon(Icons.cloud_done_outlined, color: Color(0xFF0066CC)),
                     const SizedBox(width: 12),
                     Expanded(
                       child: Text(
                         apiBaseUrl,
-                        style: theme.textTheme.bodyMedium?.copyWith(color: Colors.white),
+                        style: theme.textTheme.bodyMedium,
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
@@ -307,12 +300,12 @@ class _HomeScreenState extends State<HomeScreen> {
               const SizedBox(height: 18),
               SizedBox(
                 width: double.infinity,
-                child: FilledButton.icon(
+                child: ElevatedButton.icon(
                   onPressed: stage == UploadStage.uploading ? null : pickTranscript,
-                  icon: const Icon(Icons.file_open_outlined),
+                  icon: const Icon(Icons.file_upload_outlined),
                   label: const Padding(
                     padding: EdgeInsets.symmetric(vertical: 14),
-                    child: Text('Pick Transcript'),
+                    child: Text('Upload Transcript'),
                   ),
                 ),
               ),
@@ -324,9 +317,9 @@ class _HomeScreenState extends State<HomeScreen> {
           GlassCard(
             child: Row(
               children: [
-                const Icon(Icons.insert_drive_file_outlined, color: Color(0xFF57C5FF)),
+                const Icon(Icons.insert_drive_file_outlined, color: Color(0xFF0066CC)),
                 const SizedBox(width: 12),
-                Expanded(child: Text(selectedFileName!, style: theme.textTheme.titleMedium?.copyWith(color: Colors.white))),
+                Expanded(child: Text(selectedFileName!, style: theme.textTheme.titleMedium)),
               ],
             ),
           ),
@@ -337,29 +330,29 @@ class _HomeScreenState extends State<HomeScreen> {
         ],
         if (stage == UploadStage.failure && errorMessage != null) ...[
           const SizedBox(height: 18),
-          AlertBox(accent: const Color(0xFFFF7B7B), icon: Icons.error_outline, title: 'Upload failed', body: errorMessage!),
+          AlertBox(accent: const Color(0xFFEF4444), icon: Icons.error_outline, title: 'Upload failed', body: errorMessage!),
         ],
         if (data != null) ...[
           const SizedBox(height: 24),
           SectionHeader(
-            eyebrow: 'Result cockpit',
-            title: 'Transcript intelligence at a glance',
+            eyebrow: 'Analysis Results',
+            title: 'Transcript Summary',
             subtitle: statusMessage,
           ),
           const SizedBox(height: 14),
           Row(
             children: [
-              Expanded(child: StatCard(label: 'Resolved courses', value: '${courses.length}', icon: Icons.layers_outlined, accent: const Color(0xFF57C5FF))),
+              Expanded(child: StatCard(label: 'Courses', value: '${courses.length}', icon: Icons.layers_outlined, accent: const Color(0xFF0066CC))),
               const SizedBox(width: 12),
-              Expanded(child: StatCard(label: 'Earned credits', value: asDouble(level1['earned_credits']).toStringAsFixed(1), icon: Icons.stacked_line_chart, accent: const Color(0xFFF6B75D))),
+              Expanded(child: StatCard(label: 'Credits Earned', value: asDouble(level1['earned_credits']).toStringAsFixed(1), icon: Icons.stacked_line_chart, accent: const Color(0xFF10B981))),
             ],
           ),
           const SizedBox(height: 12),
           Row(
             children: [
-              Expanded(child: StatCard(label: 'Calculated CGPA', value: asDouble(level2['cgpa']).toStringAsFixed(2), icon: Icons.insights_outlined, accent: const Color(0xFF80FFBD))),
+              Expanded(child: StatCard(label: 'CGPA', value: asDouble(level2['cgpa']).toStringAsFixed(2), icon: Icons.insights_outlined, accent: const Color(0xFF8B5CF6))),
               const SizedBox(width: 12),
-              Expanded(child: StatCard(label: 'OCR confidence', value: '${asDouble(info['confidence']).toStringAsFixed(1)}%', icon: Icons.track_changes_outlined, accent: const Color(0xFFA699FF))),
+              Expanded(child: StatCard(label: 'Confidence', value: '${asDouble(info['confidence']).toStringAsFixed(1)}%', icon: Icons.track_changes_outlined, accent: const Color(0xFFF59E0B))),
             ],
           ),
           const SizedBox(height: 14),
@@ -367,7 +360,7 @@ class _HomeScreenState extends State<HomeScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('OCR snapshot', style: theme.textTheme.titleMedium?.copyWith(color: Colors.white)),
+                Text('OCR Details', style: theme.textTheme.titleMedium),
                 const SizedBox(height: 10),
                 Wrap(
                   spacing: 10,
@@ -382,9 +375,9 @@ class _HomeScreenState extends State<HomeScreen> {
                   const SizedBox(height: 14),
                   Row(
                     children: [
-                      Expanded(child: StripMetric(label: 'Official PDF credits', value: asDouble(info['total_credits_from_pdf']) > 0 ? asDouble(info['total_credits_from_pdf']).toStringAsFixed(1) : 'n/a')),
+                      Expanded(child: StripMetric(label: 'PDF Credits', value: asDouble(info['total_credits_from_pdf']) > 0 ? asDouble(info['total_credits_from_pdf']).toStringAsFixed(1) : 'n/a')),
                       const SizedBox(width: 12),
-                      Expanded(child: StripMetric(label: 'Official PDF CGPA', value: asDouble(info['cgpa_from_pdf']) > 0 ? asDouble(info['cgpa_from_pdf']).toStringAsFixed(2) : 'n/a')),
+                      Expanded(child: StripMetric(label: 'PDF CGPA', value: asDouble(info['cgpa_from_pdf']) > 0 ? asDouble(info['cgpa_from_pdf']).toStringAsFixed(2) : 'n/a')),
                     ],
                   ),
                 ],
@@ -394,15 +387,29 @@ class _HomeScreenState extends State<HomeScreen> {
           if (data!['cgpa_warning'] != null) ...[
             const SizedBox(height: 14),
             AlertBox(
-              accent: const Color(0xFFF6B75D),
+              accent: const Color(0xFFF59E0B),
               icon: Icons.warning_amber_rounded,
-              title: 'CGPA mismatch detected',
-              body: 'PDF ${asDouble(asMap(data!['cgpa_warning'])['pdf_value']).toStringAsFixed(2)} | Calculated ${asDouble(asMap(data!['cgpa_warning'])['calculated_value']).toStringAsFixed(2)} | Difference ${asDouble(asMap(data!['cgpa_warning'])['difference']).toStringAsFixed(2)}',
+              title: 'CGPA Mismatch',
+              body: 'PDF ${asDouble(asMap(data!['cgpa_warning'])['pdf_value']).toStringAsFixed(2)} | Calculated ${asDouble(asMap(data!['cgpa_warning'])['calculated_value']).toStringAsFixed(2)} | Diff ${asDouble(asMap(data!['cgpa_warning'])['difference']).toStringAsFixed(2)}',
             ),
           ],
           const SizedBox(height: 18),
           SegmentedButton<int>(
             showSelectedIcon: false,
+            style: ButtonStyle(
+              backgroundColor: WidgetStateProperty.resolveWith((states) {
+                if (states.contains(WidgetState.selected)) {
+                  return const Color(0xFF0066CC);
+                }
+                return Colors.white;
+              }),
+              foregroundColor: WidgetStateProperty.resolveWith((states) {
+                if (states.contains(WidgetState.selected)) {
+                  return Colors.white;
+                }
+                return const Color(0xFF64748B);
+              }),
+            ),
             segments: const [
               ButtonSegment(value: 1, label: Text('Level 1')),
               ButtonSegment(value: 2, label: Text('Level 2')),

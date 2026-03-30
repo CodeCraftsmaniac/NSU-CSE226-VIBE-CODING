@@ -42,7 +42,7 @@ class AuroraBlob extends StatelessWidget {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// Glass Card
+// Glass Card - Light Theme
 // ═══════════════════════════════════════════════════════════════════════════════
 
 class GlassCard extends StatelessWidget {
@@ -57,21 +57,14 @@ class GlassCard extends StatelessWidget {
       width: double.infinity,
       padding: padding ?? const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(28),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            Colors.white.withValues(alpha: 0.10),
-            Colors.white.withValues(alpha: 0.04),
-          ],
-        ),
+        borderRadius: BorderRadius.circular(20),
+        color: Colors.white,
+        border: Border.all(color: const Color(0xFFE2E8F0)),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.24),
-            blurRadius: 40,
-            offset: const Offset(0, 24),
+            color: Colors.black.withValues(alpha: 0.06),
+            blurRadius: 20,
+            offset: const Offset(0, 8),
           ),
         ],
       ),
@@ -81,7 +74,7 @@ class GlassCard extends StatelessWidget {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// Glass Tone (Lighter Container)
+// Glass Tone (Lighter Container) - Light Theme
 // ═══════════════════════════════════════════════════════════════════════════════
 
 class GlassTone extends StatelessWidget {
@@ -96,9 +89,9 @@ class GlassTone extends StatelessWidget {
       width: double.infinity,
       padding: padding ?? const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.05),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
+        color: const Color(0xFFF1F5F9),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
       ),
       child: child,
     );
@@ -106,7 +99,7 @@ class GlassTone extends StatelessWidget {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// Section Header
+// Section Header - Light Theme
 // ═══════════════════════════════════════════════════════════════════════════════
 
 class SectionHeader extends StatelessWidget {
@@ -129,9 +122,10 @@ class SectionHeader extends StatelessWidget {
         Text(
           eyebrow.toUpperCase(),
           style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-            color: const Color(0xFF57C5FF),
+            color: const Color(0xFF0066CC),
             letterSpacing: 1.6,
             fontWeight: FontWeight.w700,
+            fontSize: 12,
           ),
         ),
         const SizedBox(height: 6),
@@ -144,7 +138,7 @@ class SectionHeader extends StatelessWidget {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// Feature Chip
+// Feature Chip - Light Theme
 // ═══════════════════════════════════════════════════════════════════════════════
 
 class FeatureChip extends StatelessWidget {
@@ -158,16 +152,16 @@ class FeatureChip extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.06),
+        color: const Color(0xFFEFF6FF),
         borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+        border: Border.all(color: const Color(0xFFBFDBFE)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 18, color: const Color(0xFF57C5FF)),
+          Icon(icon, size: 18, color: const Color(0xFF0066CC)),
           const SizedBox(width: 8),
-          Text(label),
+          Text(label, style: const TextStyle(color: Color(0xFF1E40AF), fontWeight: FontWeight.w500)),
         ],
       ),
     );
@@ -175,7 +169,7 @@ class FeatureChip extends StatelessWidget {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// Stat Card
+// Stat Card - Light Theme
 // ═══════════════════════════════════════════════════════════════════════════════
 
 class StatCard extends StatelessWidget {
@@ -197,9 +191,9 @@ class StatCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(24),
-        color: accent.withValues(alpha: 0.10),
-        border: Border.all(color: accent.withValues(alpha: 0.18)),
+        borderRadius: BorderRadius.circular(16),
+        color: accent.withValues(alpha: 0.08),
+        border: Border.all(color: accent.withValues(alpha: 0.20)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -208,7 +202,7 @@ class StatCard extends StatelessWidget {
           const SizedBox(height: 14),
           Text(label, style: Theme.of(context).textTheme.bodyMedium),
           const SizedBox(height: 6),
-          Text(value, style: Theme.of(context).textTheme.headlineMedium?.copyWith(fontSize: 22)),
+          Text(value, style: Theme.of(context).textTheme.headlineMedium?.copyWith(fontSize: 22, color: const Color(0xFF1E293B))),
         ],
       ),
     );
@@ -231,9 +225,9 @@ class SmallMetric extends StatelessWidget {
       constraints: const BoxConstraints(minWidth: 110),
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.04),
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+        color: const Color(0xFFF1F5F9),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -242,7 +236,7 @@ class SmallMetric extends StatelessWidget {
           const SizedBox(height: 6),
           Text(
             value,
-            style: Theme.of(context).textTheme.titleMedium?.copyWith(color: Colors.white),
+            style: Theme.of(context).textTheme.titleMedium?.copyWith(color: const Color(0xFF1E293B)),
           ),
         ],
       ),
@@ -251,7 +245,7 @@ class SmallMetric extends StatelessWidget {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// Strip Metric
+// Strip Metric - Light Theme
 // ═══════════════════════════════════════════════════════════════════════════════
 
 class StripMetric extends StatelessWidget {
@@ -265,8 +259,8 @@ class StripMetric extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.04),
-        borderRadius: BorderRadius.circular(18),
+        color: const Color(0xFFF1F5F9),
+        borderRadius: BorderRadius.circular(14),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -275,7 +269,7 @@ class StripMetric extends StatelessWidget {
           const SizedBox(height: 6),
           Text(
             value,
-            style: Theme.of(context).textTheme.titleMedium?.copyWith(color: Colors.white),
+            style: Theme.of(context).textTheme.titleMedium?.copyWith(color: const Color(0xFF1E293B)),
           ),
         ],
       ),
@@ -284,7 +278,7 @@ class StripMetric extends StatelessWidget {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// Data Pill
+// Data Pill - Light Theme
 // ═══════════════════════════════════════════════════════════════════════════════
 
 class DataPill extends StatelessWidget {
@@ -304,14 +298,14 @@ class DataPill extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.05),
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+        color: const Color(0xFFF1F5F9),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 18, color: const Color(0xFF57C5FF)),
+          Icon(icon, size: 18, color: const Color(0xFF0066CC)),
           const SizedBox(width: 8),
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -319,7 +313,7 @@ class DataPill extends StatelessWidget {
               Text(label, style: Theme.of(context).textTheme.bodyMedium),
               Text(
                 value,
-                style: Theme.of(context).textTheme.bodyLarge?.copyWith(color: Colors.white),
+                style: Theme.of(context).textTheme.bodyLarge?.copyWith(color: const Color(0xFF1E293B)),
               ),
             ],
           ),
@@ -330,7 +324,7 @@ class DataPill extends StatelessWidget {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// Alert Box
+// Alert Box - Light Theme
 // ═══════════════════════════════════════════════════════════════════════════════
 
 class AlertBox extends StatelessWidget {
@@ -353,9 +347,9 @@ class AlertBox extends StatelessWidget {
       width: double.infinity,
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(22),
-        color: accent.withValues(alpha: 0.11),
-        border: Border.all(color: accent.withValues(alpha: 0.20)),
+        borderRadius: BorderRadius.circular(16),
+        color: accent.withValues(alpha: 0.08),
+        border: Border.all(color: accent.withValues(alpha: 0.25)),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -368,7 +362,7 @@ class AlertBox extends StatelessWidget {
               children: [
                 Text(
                   title,
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(color: Colors.white),
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(color: const Color(0xFF1E293B)),
                 ),
                 const SizedBox(height: 6),
                 Text(body, style: Theme.of(context).textTheme.bodyMedium),
@@ -408,7 +402,7 @@ class GradeChip extends StatelessWidget {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// Processing Panel
+// Processing Panel - Light Theme
 // ═══════════════════════════════════════════════════════════════════════════════
 
 class ProcessingPanel extends StatelessWidget {
@@ -433,12 +427,13 @@ class ProcessingPanel extends StatelessWidget {
           const SizedBox(height: 14),
           LinearProgressIndicator(
             value: progress,
-            minHeight: 14,
+            minHeight: 10,
             borderRadius: BorderRadius.circular(999),
-            backgroundColor: Colors.white.withValues(alpha: 0.08),
+            backgroundColor: const Color(0xFFE2E8F0),
+            color: const Color(0xFF0066CC),
           ),
           const SizedBox(height: 10),
-          Text('${(progress * 100).round()}% complete'),
+          Text('${(progress * 100).round()}% complete', style: const TextStyle(color: Color(0xFF64748B))),
         ],
       ),
     );
@@ -446,53 +441,74 @@ class ProcessingPanel extends StatelessWidget {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// App Theme Builder
+// App Theme Builder - Light Professional Theme
 // ═══════════════════════════════════════════════════════════════════════════════
 
 ThemeData buildAppTheme() {
-  final base = ThemeData(brightness: Brightness.dark, useMaterial3: true);
-  final textTheme = GoogleFonts.soraTextTheme(base.textTheme).copyWith(
-    displaySmall: GoogleFonts.spaceGrotesk(
+  final base = ThemeData(brightness: Brightness.light, useMaterial3: true);
+  final textTheme = GoogleFonts.interTextTheme(base.textTheme).copyWith(
+    displaySmall: GoogleFonts.inter(
       fontSize: 34,
       fontWeight: FontWeight.w700,
-      color: Colors.white,
+      color: const Color(0xFF1E293B),
     ),
-    headlineMedium: GoogleFonts.spaceGrotesk(
+    headlineMedium: GoogleFonts.inter(
       fontSize: 24,
       fontWeight: FontWeight.w700,
-      color: Colors.white,
+      color: const Color(0xFF1E293B),
     ),
-    titleLarge: GoogleFonts.spaceGrotesk(
+    titleLarge: GoogleFonts.inter(
       fontSize: 20,
-      fontWeight: FontWeight.w700,
-      color: Colors.white,
+      fontWeight: FontWeight.w600,
+      color: const Color(0xFF1E293B),
     ),
-    bodyLarge: GoogleFonts.sora(color: const Color(0xFFE5F3FF)),
-    bodyMedium: GoogleFonts.sora(color: const Color(0xFFB4C7DA)),
-    labelLarge: GoogleFonts.sora(fontWeight: FontWeight.w600),
+    titleMedium: GoogleFonts.inter(
+      fontSize: 16,
+      fontWeight: FontWeight.w600,
+      color: const Color(0xFF334155),
+    ),
+    bodyLarge: GoogleFonts.inter(color: const Color(0xFF334155)),
+    bodyMedium: GoogleFonts.inter(color: const Color(0xFF64748B)),
+    labelLarge: GoogleFonts.inter(fontWeight: FontWeight.w600),
   );
 
   return base.copyWith(
-    scaffoldBackgroundColor: Colors.transparent,
+    scaffoldBackgroundColor: const Color(0xFFF8FAFC),
     colorScheme: ColorScheme.fromSeed(
-      seedColor: const Color(0xFF59C4FF),
-      brightness: Brightness.dark,
-      primary: const Color(0xFF59C4FF),
-      secondary: const Color(0xFFF6B75D),
-      surface: const Color(0xFF08111F),
+      seedColor: const Color(0xFF0066CC),
+      brightness: Brightness.light,
+      primary: const Color(0xFF0066CC),
+      secondary: const Color(0xFF10B981),
+      surface: Colors.white,
+      onSurface: const Color(0xFF1E293B),
     ),
     textTheme: textTheme,
-    cardTheme: const CardThemeData(
-      color: Colors.transparent,
-      elevation: 0,
+    cardTheme: CardThemeData(
+      color: Colors.white,
+      elevation: 2,
+      shadowColor: Colors.black.withValues(alpha: 0.08),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       margin: EdgeInsets.zero,
     ),
-    dividerColor: Colors.white.withValues(alpha: 0.08),
+    appBarTheme: const AppBarTheme(
+      backgroundColor: Colors.white,
+      foregroundColor: Color(0xFF1E293B),
+      elevation: 0,
+    ),
+    elevatedButtonTheme: ElevatedButtonThemeData(
+      style: ElevatedButton.styleFrom(
+        backgroundColor: const Color(0xFF0066CC),
+        foregroundColor: Colors.white,
+        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      ),
+    ),
+    dividerColor: const Color(0xFFE2E8F0),
   );
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// Gradient Background
+// Light Background (Clean White)
 // ═══════════════════════════════════════════════════════════════════════════════
 
 class GradientBackground extends StatelessWidget {
@@ -507,7 +523,7 @@ class GradientBackground extends StatelessWidget {
         gradient: LinearGradient(
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
-          colors: [Color(0xFF020611), Color(0xFF071122), Color(0xFF0D1728)],
+          colors: [Color(0xFFF8FAFC), Color(0xFFEFF6FF), Color(0xFFF1F5F9)],
         ),
       ),
       child: child,
