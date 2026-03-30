@@ -69,23 +69,19 @@ All 3 frontends call the **same backend API** — only the UI differs:
 ```
 Project 3/
 │
-├── backend/                    # 🚀 CLOUD RUN API (ocrapi.nsunexus.app)
-│   └── api.py                  #   Pure REST API - /health, /upload
-│
-├── src/                        # 🧠 SHARED BACKEND LOGIC
+├── backend/                    # 🚀 SINGLE BACKEND (Cloud Run: ocrapi.nsunexus.app)
+│   ├── api.py                  #   REST API entry point - /health, /upload
 │   ├── core.py                 #   Grade mapping, CGPA, credit logic
 │   ├── ocr_web.py              #   OCR via Google Vision / OCR.space
-│   ├── credit_engine.py        #   Level 1 - Credit tally
-│   ├── cgpa_analyzer.py        #   Level 2 - CGPA & waiver
-│   └── degree_audit.py         #   Level 3 - Degree audit
-│
-├── cli_app/                    # 🖥️ CLI APPLICATION
-│   └── main.py                 #   Terminal UI (Rich library)
+│   └── ocr_engine.py           #   PDF text extraction
 │
 ├── web_app/                    # 🌐 WEB FRONTEND (ocr.nsunexus.app)
 │   ├── app.py                  #   Flask server (Vercel)
 │   ├── templates/index.html    #   Main page
 │   └── static/                 #   CSS, JS, SVG assets
+│
+├── cli_app/                    # 🖥️ CLI APPLICATION
+│   └── main.py                 #   Terminal UI (Rich library)
 │
 ├── flutter_app/                # 📱 FLUTTER MOBILE APP
 │   ├── lib/main.dart           #   Full Flutter app

@@ -25,9 +25,8 @@ try:
 except ImportError:
     pass
 
-# Add parent directory for imports
-sys.path.insert(0, str(Path(__file__).parent.parent))
-sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
+# Add backend directory for local imports
+sys.path.insert(0, str(Path(__file__).parent))
 
 from flask import Flask, request, jsonify
 
@@ -85,11 +84,11 @@ KB_PATH = Path(__file__).parent.parent / 'knowledge_base.md'
 # ═══════════════════════════════════════════════════════════════════════════════
 
 try:
-    from src.ocr_web import WebOCR as TranscriptOCR
+    from ocr_web import WebOCR as TranscriptOCR
 except ImportError:
-    from src.ocr_engine import TranscriptOCR
+    from ocr_engine import TranscriptOCR
 
-from src.core import run_full_analysis
+from core import run_full_analysis
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # API Endpoints

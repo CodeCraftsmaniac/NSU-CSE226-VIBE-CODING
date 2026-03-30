@@ -27,7 +27,7 @@ from pathlib import Path
 # Add project root and src to path for imports
 PROJECT_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
-sys.path.insert(0, str(PROJECT_ROOT / "src"))
+sys.path.insert(0, str(PROJECT_ROOT / "backend"))
 
 from rich.console import Console
 from rich.panel import Panel
@@ -66,13 +66,13 @@ try:
 except ImportError:
     pass
 
-from src.core import run_full_analysis  # THE analysis engine — same for all 3 apps
+from core import run_full_analysis  # THE analysis engine — same for all 3 apps
 
 # OCR engine: try web API first (same as website), fall back to local
 try:
-    from src.ocr_web import WebOCR as TranscriptOCR
+    from ocr_web import WebOCR as TranscriptOCR
 except ImportError:
-    from src.ocr_engine import TranscriptOCR
+    from ocr_engine import TranscriptOCR
 
 # Knowledge base path
 KB_PATH = PROJECT_ROOT / 'knowledge_base.md'

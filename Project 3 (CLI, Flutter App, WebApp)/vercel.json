@@ -4,15 +4,19 @@
     {
       "src": "web_app/app.py",
       "use": "@vercel/python"
-    },
-    {
-      "src": "web_app/static/**",
-      "use": "@vercel/static"
     }
   ],
   "routes": [
     {
-      "src": "/static/(.*)",
+      "src": "/static/css/(.*)",
+      "dest": "/web_app/static/css/$1"
+    },
+    {
+      "src": "/static/js/(.*)",
+      "dest": "/web_app/static/js/$1"
+    },
+    {
+      "src": "/static/(.*\\.(svg|png|ico|jpg|jpeg|gif|webp))",
       "dest": "/web_app/static/$1"
     },
     {

@@ -15,9 +15,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Backend API and shared logic
+# Backend API and shared logic (all in backend/ now)
 COPY backend/ ./backend/
-COPY src/ ./src/
 COPY knowledge_base.md .
 
 # Create uploads directory

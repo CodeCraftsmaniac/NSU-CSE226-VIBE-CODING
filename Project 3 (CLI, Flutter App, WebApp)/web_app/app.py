@@ -26,8 +26,8 @@ except ImportError:
     pass  # dotenv not installed, use system env vars
 
 # Add parent directory for imports
-sys.path.insert(0, str(Path(__file__).parent.parent))
-sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
+# Add backend directory for shared imports
+sys.path.insert(0, str(Path(__file__).parent.parent / "backend"))
 
 from flask import Flask, render_template, request, jsonify, send_from_directory
 
@@ -97,11 +97,11 @@ logger = logging.getLogger(__name__)
 from werkzeug.utils import secure_filename
 
 try:
-    from src.ocr_web import WebOCR as TranscriptOCR
+    from ocr_web import WebOCR as TranscriptOCR
 except ImportError:
-    from src.ocr_engine import TranscriptOCR
+    from ocr_engine import TranscriptOCR
 
-from src.core import resolve_retakes, GRADE_POINTS, get_academic_standing, parse_knowledge_base, compute_cgpa, validate_grade, detect_program, run_full_analysis
+from core import resolve_retakes, GRADE_POINTS, get_academic_standing, parse_knowledge_base, compute_cgpa, validate_grade, detect_program, run_full_analysis
 
 # Knowledge base path
 KB_PATH = Path(__file__).parent.parent / 'knowledge_base.md'
