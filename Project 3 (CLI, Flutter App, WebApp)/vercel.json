@@ -1,16 +1,11 @@
 {
   "version": 2,
-  "name": "nsu-degree-audit-engine",
-  "framework": null,
-  "buildCommand": null,
-  "outputDirectory": null,
-  "installCommand": "pip install -r requirements.txt",
-  "functions": {
-    "web_app/app.py": {
-      "runtime": "python3.11",
-      "maxDuration": 30
+  "builds": [
+    {
+      "src": "web_app/app.py",
+      "use": "@vercel/python"
     }
-  },
+  ],
   "routes": [
     {
       "src": "/static/(.*)",
@@ -20,9 +15,5 @@
       "src": "/(.*)",
       "dest": "/web_app/app.py"
     }
-  ],
-  "env": {
-    "PYTHONUNBUFFERED": "1",
-    "VERCEL": "1"
-  }
+  ]
 }

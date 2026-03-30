@@ -40,27 +40,17 @@ jobs:
         with:
           project_id: ${{ env.PROJECT_ID }}
 
-      - name: Configure Docker for GCR
-        run: gcloud auth configure-docker
-
-      - name: Build and Push Container
-        run: |
-          gcloud builds submit \
-            --tag gcr.io/${{ env.PROJECT_ID }}/${{ env.SERVICE }}:${{ github.sha }} \
-            --tag gcr.io/${{ env.PROJECT_ID }}/${{ env.SERVICE }}:latest
-
-      - name: Deploy to Cloud Run
+      - name: Deploy to Cloud Run (source-based)
         run: |
           gcloud run deploy ${{ env.SERVICE }} \
-            --image gcr.io/${{ env.PROJECT_ID }}/${{ env.SERVICE }}:${{ github.sha }} \
+            --source . \
             --platform managed \
             --region ${{ env.REGION }} \
             --allow-unauthenticated \
-            --set-env-vars "GOOGLE_CLOUD_VISION_KEY=${{ secrets.GOOGLE_CLOUD_VISION_KEY }},OCR_SPACE_API_KEY=${{ secrets.OCR_SPACE_API_KEY }},FLASK_ENV=production,LOG_LEVEL=INFO"
+            --set-env-vars "GOOGLE_CLOUD_VISION_KEY=${{ secrets.GOOGLE_CLOUD_VISION_KEY }},OCR_SPACE_API_KEY=${{ secrets.OCR_SPACE_API_KEY }},FLASK_ENV=production,LOG_LEVEL=INFO" \
+            --quiet
 
       - name: Deployment Summary
         run: |
           echo "✅ Backend deployed to Cloud Run"
           echo "🌐 URL: https://ocrapi.nsunexus.app"
-          echo "📍 Service: ${{ env.SERVICE }}"
-          echo "📍 Region: ${{ env.REGION }}"
