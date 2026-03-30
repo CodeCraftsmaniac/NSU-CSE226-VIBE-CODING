@@ -10,8 +10,9 @@ Endpoints:
   GET  /              - API info (JSON)
   
 Auth Endpoints:
-  POST /auth/google   - Google OAuth sign-in
+  GET  /auth/config   - Get auth configuration for frontend
   GET  /auth/user     - Get current user info
+  GET  /auth/callback - OAuth callback handler
   
 History Endpoints:
   GET  /history       - Get user's scan history
@@ -24,11 +25,8 @@ import sys
 import logging
 import tempfile
 import platform
-import hashlib
-import secrets
 from pathlib import Path
 from datetime import datetime
-from functools import wraps
 
 # Load environment variables
 try:
@@ -40,7 +38,7 @@ except ImportError:
 # Add backend directory for local imports
 sys.path.insert(0, str(Path(__file__).parent))
 
-from flask import Flask, request, jsonify, g
+from flask import Flask, request, jsonify, g, redirect
 
 # Enable CORS for all frontends
 try:
@@ -48,6 +46,31 @@ try:
     CORS_AVAILABLE = True
 except ImportError:
     CORS_AVAILABLE = False
+
+# Auth module
+try:
+    from auth import (
+        require_auth, optional_auth, get_current_user,
+        get_auth_config, verify_supabase_token
+    )
+    AUTH_AVAILABLE = True
+except Exception as e:
+    AUTH_AVAILABLE = False
+    print(f"Auth module not available: {e}")
+    # Fallback decorators
+    def require_auth(f):
+        from functools import wraps
+        @wraps(f)
+        def decorated(*args, **kwargs):
+            return jsonify({'error': 'Auth not available'}), 503
+        return decorated
+    def optional_auth(f):
+        from functools import wraps
+        @wraps(f)
+        def decorated(*args, **kwargs):
+            g.user = None
+            return f(*args, **kwargs)
+        return decorated
 
 # Database module
 try:
@@ -116,52 +139,6 @@ from core import run_full_analysis
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# Authentication Helpers
-# ═══════════════════════════════════════════════════════════════════════════════
-
-def get_current_user():
-    """Get current user from Authorization header (Bearer token or API key)."""
-    auth_header = request.headers.get('Authorization', '')
-    
-    if not auth_header:
-        return None
-    
-    if auth_header.startswith('Bearer '):
-        token = auth_header[7:]
-        # For simplicity, token is email:hash format for session tokens
-        # In production, use proper JWT validation
-        try:
-            email = token.split(':')[0]
-            if DB_AVAILABLE:
-                return get_user_by_email(email)
-        except Exception:
-            pass
-    
-    return None
-
-
-def require_auth(f):
-    """Decorator to require authentication."""
-    @wraps(f)
-    def decorated(*args, **kwargs):
-        user = get_current_user()
-        if not user:
-            return jsonify({'error': 'Authentication required'}), 401
-        g.user = user
-        return f(*args, **kwargs)
-    return decorated
-
-
-def optional_auth(f):
-    """Decorator to optionally capture auth info."""
-    @wraps(f)
-    def decorated(*args, **kwargs):
-        g.user = get_current_user()
-        return f(*args, **kwargs)
-    return decorated
-
-
-# ═══════════════════════════════════════════════════════════════════════════════
 # API Endpoints
 # ═══════════════════════════════════════════════════════════════════════════════
 
@@ -170,7 +147,7 @@ def index():
     """API root - service info."""
     return jsonify({
         'service': 'NSU Degree Audit API',
-        'version': '2.1.0',
+        'version': '2.2.0',
         'project': 'CSE226 Project 3',
         'endpoints': {
             'GET /': 'This info',
@@ -413,52 +390,24 @@ def upload():
 # Authentication Endpoints
 # ═══════════════════════════════════════════════════════════════════════════════
 
-@app.route('/auth/google', methods=['POST'])
-def auth_google():
-    """Handle Google OAuth sign-in."""
-    if not DB_AVAILABLE:
-        return jsonify({'error': 'Database not available'}), 503
+@app.route('/auth/config')
+def auth_config():
+    """Get auth configuration for frontend apps."""
+    if AUTH_AVAILABLE:
+        config = get_auth_config()
+    else:
+        config = {
+            'supabase_url': os.getenv('SUPABASE_URL', ''),
+            'supabase_key': os.getenv('SUPABASE_KEY', ''),
+            'google_client_id': os.getenv('GOOGLE_CLIENT_ID', '')
+        }
     
-    data = request.get_json()
-    if not data:
-        return jsonify({'error': 'No data provided'}), 400
-    
-    email = data.get('email')
-    name = data.get('name', '')
-    
-    if not email:
-        return jsonify({'error': 'Email is required'}), 400
-    
-    try:
-        # Create or get user
-        user = create_user(email=email, name=name, provider='google')
-        
-        if not user:
-            return jsonify({'error': 'Failed to create user'}), 500
-        
-        # Generate session token (email:random_hash)
-        token_hash = hashlib.sha256(f"{email}{secrets.token_hex(16)}".encode()).hexdigest()[:32]
-        session_token = f"{email}:{token_hash}"
-        
-        # Get user stats
-        stats = get_user_stats(user['id'])
-        
-        return jsonify({
-            'success': True,
-            'user': {
-                'id': user['id'],
-                'email': user['email'],
-                'name': user['name'],
-                'provider': user.get('provider', 'google'),
-                'created_at': user.get('created_at'),
-                'stats': stats
-            },
-            'token': session_token
-        })
-    
-    except Exception as e:
-        logger.exception(f"Auth error: {str(e)}")
-        return jsonify({'error': str(e)}), 500
+    return jsonify({
+        'success': True,
+        'config': config,
+        'auth_available': AUTH_AVAILABLE,
+        'db_available': DB_AVAILABLE
+    })
 
 
 @app.route('/auth/user')
@@ -466,14 +415,24 @@ def auth_google():
 def get_user():
     """Get current user info."""
     user = g.user
-    stats = get_user_stats(user['id']) if DB_AVAILABLE else {}
+    
+    # Get db_id for history queries
+    db_user_id = user.get('db_id')
+    if not db_user_id and DB_AVAILABLE:
+        db_user = get_user_by_email(user['email'])
+        if db_user:
+            db_user_id = db_user['id']
+    
+    stats = get_user_stats(db_user_id) if DB_AVAILABLE and db_user_id else {}
     
     return jsonify({
         'success': True,
         'user': {
-            'id': user['id'],
-            'email': user['email'],
-            'name': user['name'],
+            'id': user.get('id'),
+            'db_id': db_user_id,
+            'email': user.get('email'),
+            'name': user.get('name', ''),
+            'avatar_url': user.get('avatar_url', ''),
             'provider': user.get('provider', 'google'),
             'created_at': user.get('created_at'),
             'stats': stats
@@ -495,7 +454,17 @@ def get_history():
     user = g.user
     limit = request.args.get('limit', 50, type=int)
     
-    scans = get_user_scans(user['id'], limit=min(limit, 100))
+    # Get db_id for queries
+    db_user_id = user.get('db_id')
+    if not db_user_id:
+        db_user = get_user_by_email(user['email'])
+        if db_user:
+            db_user_id = db_user['id']
+    
+    if not db_user_id:
+        return jsonify({'success': True, 'count': 0, 'history': []})
+    
+    scans = get_user_scans(db_user_id, limit=min(limit, 100))
     
     # Simplify scan data for listing
     history = []
@@ -504,9 +473,9 @@ def get_history():
             'id': scan['id'],
             'filename': scan['filename'],
             'total_courses': scan['total_courses'],
-            'total_credits': float(scan['total_credits']),
-            'cgpa': float(scan['cgpa']),
-            'source': scan['source'],
+            'total_credits': float(scan['total_credits']) if scan.get('total_credits') else 0,
+            'cgpa': float(scan['cgpa']) if scan.get('cgpa') else 0,
+            'source': scan.get('source', 'web'),
             'created_at': scan['created_at']
         })
     
@@ -529,8 +498,16 @@ def get_history_detail(scan_id):
     if not scan:
         return jsonify({'error': 'Scan not found'}), 404
     
+    # Get db_id for ownership check
+    user = g.user
+    db_user_id = user.get('db_id')
+    if not db_user_id:
+        db_user = get_user_by_email(user['email'])
+        if db_user:
+            db_user_id = db_user['id']
+    
     # Verify ownership
-    if scan['user_id'] != g.user['id']:
+    if scan['user_id'] != db_user_id:
         return jsonify({'error': 'Access denied'}), 403
     
     return jsonify({
@@ -546,7 +523,18 @@ def delete_history(scan_id):
     if not DB_AVAILABLE:
         return jsonify({'error': 'Database not available'}), 503
     
-    success = delete_scan(scan_id, g.user['id'])
+    # Get db_id
+    user = g.user
+    db_user_id = user.get('db_id')
+    if not db_user_id:
+        db_user = get_user_by_email(user['email'])
+        if db_user:
+            db_user_id = db_user['id']
+    
+    if not db_user_id:
+        return jsonify({'error': 'User not found'}), 404
+    
+    success = delete_scan(scan_id, db_user_id)
     
     if not success:
         return jsonify({'error': 'Scan not found or access denied'}), 404
