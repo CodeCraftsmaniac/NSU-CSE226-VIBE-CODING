@@ -120,6 +120,37 @@ def get_user_by_id(user_id: str) -> Optional[Dict]:
         return None
 
 
+def get_user_by_token(token: str) -> Optional[Dict]:
+    """Get user by CLI token from cse226_ocr_users table."""
+    supabase = get_supabase()
+    if not supabase:
+        return None
+    try:
+        result = supabase.table('cse226_ocr_users').select('*').eq('cli_token', token).execute()
+        return result.data[0] if result.data else None
+    except Exception as e:
+        # Column may not exist yet - try alternative lookup
+        logger.debug(f"get_user_by_token: cli_token column may not exist: {e}")
+        return None
+
+
+def save_user_token(user_id: str, token: str) -> bool:
+    """Save CLI token for a user."""
+    supabase = get_supabase()
+    if not supabase:
+        return False
+    try:
+        supabase.table('cse226_ocr_users').update({
+            'cli_token': token
+        }).eq('id', user_id).execute()
+        logger.info(f"Token saved for user {user_id}")
+        return True
+    except Exception as e:
+        # Column may not exist - log and continue
+        logger.warning(f"save_user_token: cli_token column may not exist: {e}")
+        return False
+
+
 # ─── Scan History Operations ────────────────────────────────────────────────────
 
 def save_scan(

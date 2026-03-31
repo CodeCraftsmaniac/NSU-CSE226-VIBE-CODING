@@ -78,7 +78,7 @@ try:
     from database import (
         create_user, get_user_by_email, get_user_by_id,
         save_scan, get_user_scans, get_scan_by_id, delete_scan,
-        get_user_stats, check_db_connection
+        get_user_stats, check_db_connection, save_user_token
     )
     DB_AVAILABLE = True
 except Exception as e:
@@ -628,6 +628,10 @@ def auth_google():
         import time
         token_data = f"{db_user['id']}:{time.time()}:{os.urandom(16).hex()}"
         token = hashlib.sha256(token_data.encode()).hexdigest()
+        
+        # Save token to database for later validation
+        if DB_AVAILABLE:
+            save_user_token(db_user['id'], token)
         
         return jsonify({
             'success': True,

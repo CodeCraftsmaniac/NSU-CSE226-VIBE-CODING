@@ -71,7 +71,12 @@ def verify_supabase_token(access_token: str) -> Optional[Dict[str, Any]]:
 
 
 def get_current_user() -> Optional[Dict[str, Any]]:
-    """Get current user from Authorization header."""
+    """Get current user from Authorization header.
+    
+    Supports two token types:
+    1. Supabase JWT tokens (from web app Google OAuth)
+    2. CLI tokens (simple hash tokens from /auth/google)
+    """
     auth_header = request.headers.get('Authorization', '')
     
     if not auth_header or not auth_header.startswith('Bearer '):
@@ -79,13 +84,38 @@ def get_current_user() -> Optional[Dict[str, Any]]:
     
     token = auth_header[7:]  # Remove 'Bearer ' prefix
     
-    # Try Supabase token verification
+    # Try Supabase token verification first (web app Google OAuth)
     user = verify_supabase_token(token)
     if user:
         # Sync user to our database
         sync_user_to_db(user)
         return user
     
+    # Try CLI token verification (from /auth/google endpoint)
+    user = verify_cli_token(token)
+    if user:
+        return user
+    
+    return None
+
+
+def verify_cli_token(token: str) -> Optional[Dict[str, Any]]:
+    """Verify CLI token by looking up in database."""
+    try:
+        from database import get_user_by_token
+        db_user = get_user_by_token(token)
+        if db_user:
+            return {
+                'id': db_user['id'],
+                'db_id': db_user['id'],
+                'email': db_user['email'],
+                'name': db_user.get('name', ''),
+                'avatar_url': db_user.get('avatar_url', ''),
+                'provider': db_user.get('provider', 'cli'),
+                'created_at': db_user.get('created_at')
+            }
+    except Exception as e:
+        logger.debug(f"CLI token verification error: {e}")
     return None
 
 
