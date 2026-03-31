@@ -149,6 +149,31 @@
         </div>
     </section>
 
+    <!-- Auth Loading Overlay -->
+    <div id="auth-loading-overlay" class="auth-loading-overlay" style="display: none;">
+        <div class="auth-loading-card">
+            <div class="auth-loading-spinner">
+                <svg viewBox="0 0 50 50">
+                    <circle cx="25" cy="25" r="20" fill="none" stroke="url(#gradient)" stroke-width="4" stroke-dasharray="31.4 31.4" stroke-linecap="round">
+                        <animateTransform attributeName="transform" type="rotate" from="0 25 25" to="360 25 25" dur="1s" repeatCount="indefinite"/>
+                    </circle>
+                    <defs>
+                        <linearGradient id="gradient" x1="0%" y1="0%" x2="100%" y2="0%">
+                            <stop offset="0%" style="stop-color:#00b4d8;stop-opacity:1" />
+                            <stop offset="100%" style="stop-color:#1a1f4d;stop-opacity:1" />
+                        </linearGradient>
+                    </defs>
+                </svg>
+                <svg class="checkmark" viewBox="0 0 52 52" style="display: none;">
+                    <circle class="checkmark-circle" cx="26" cy="26" r="25" fill="none"/>
+                    <path class="checkmark-check" fill="none" d="M14.1 27.2l7.1 7.2 16.7-16.8"/>
+                </svg>
+            </div>
+            <h3 class="auth-loading-title" id="auth-loading-title">Creating your account...</h3>
+            <p class="auth-loading-subtitle" id="auth-loading-subtitle">Setting up your profile</p>
+        </div>
+    </div>
+
     <!-- Main Content -->
     <main class="main" id="main-content" style="display: none;">
         <!-- Upload Section -->

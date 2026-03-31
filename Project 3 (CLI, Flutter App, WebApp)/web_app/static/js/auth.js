@@ -57,8 +57,8 @@ async function initAuth() {
             // Check URL hash for OAuth callback
             const hashParams = new URLSearchParams(window.location.hash.substring(1));
             if (hashParams.has('access_token')) {
-                // OAuth callback in progress, wait for auth state change
-                console.log('OAuth callback detected, waiting for session...');
+                // OAuth callback in progress, show loading instead of auth landing
+                showAuthLoading();
             } else {
                 showAuthLanding();
             }
@@ -70,8 +70,19 @@ async function initAuth() {
                 currentUser = session.user;
                 isGuestMode = false;
                 sessionStorage.removeItem('nsu_guest_mode');
+                
+                // Show loading overlay
+                showAuthLoading();
+                
+                // Sync user to backend
                 await syncUserToBackend();
+                
+                // Show success animation
+                await showAuthSuccess();
+                
+                // Update UI and show main content
                 updateAuthUI(true);
+                hideAuthLoading();
                 showMainContent();
             } else if (event === 'SIGNED_OUT') {
                 currentUser = null;
@@ -104,20 +115,60 @@ function showAuthLanding() {
     const landing = document.getElementById('auth-landing');
     const main = document.getElementById('main-content');
     const header = document.querySelector('header');
+    const loadingOverlay = document.getElementById('auth-loading-overlay');
     
     if (landing) landing.style.display = 'flex';
     if (main) main.style.display = 'none';
     if (header) header.style.display = 'none';
+    if (loadingOverlay) loadingOverlay.style.display = 'none';
 }
 
 function showMainContent() {
     const landing = document.getElementById('auth-landing');
     const main = document.getElementById('main-content');
     const header = document.querySelector('header');
+    const loadingOverlay = document.getElementById('auth-loading-overlay');
     
     if (landing) landing.style.display = 'none';
     if (main) main.style.display = 'block';
     if (header) header.style.display = 'block';
+    if (loadingOverlay) loadingOverlay.style.display = 'none';
+}
+
+function showAuthLoading() {
+    const landing = document.getElementById('auth-landing');
+    const loadingOverlay = document.getElementById('auth-loading-overlay');
+    const title = document.getElementById('auth-loading-title');
+    const subtitle = document.getElementById('auth-loading-subtitle');
+    
+    if (landing) landing.style.display = 'none';
+    if (loadingOverlay) loadingOverlay.style.display = 'flex';
+    if (title) title.textContent = 'Creating your account...';
+    if (subtitle) subtitle.textContent = 'Setting up your profile';
+}
+
+async function showAuthSuccess() {
+    const title = document.getElementById('auth-loading-title');
+    const subtitle = document.getElementById('auth-loading-subtitle');
+    const spinner = document.querySelector('.auth-loading-spinner svg:first-child');
+    const checkmark = document.querySelector('.checkmark');
+    
+    // Wait a moment for sync to complete
+    await new Promise(resolve => setTimeout(resolve, 800));
+    
+    // Show success state
+    if (spinner) spinner.style.display = 'none';
+    if (checkmark) checkmark.style.display = 'block';
+    if (title) title.textContent = 'Account ready!';
+    if (subtitle) subtitle.textContent = 'Redirecting to dashboard...';
+    
+    // Wait for animation
+    await new Promise(resolve => setTimeout(resolve, 1200));
+}
+
+function hideAuthLoading() {
+    const loadingOverlay = document.getElementById('auth-loading-overlay');
+    if (loadingOverlay) loadingOverlay.style.display = 'none';
 }
 
 function continueAsGuest() {
@@ -174,8 +225,19 @@ async function signInWithGoogle() {
                     currentUser = session.user;
                     isGuestMode = false;
                     sessionStorage.removeItem('nsu_guest_mode');
+                    
+                    // Show loading overlay
+                    showAuthLoading();
+                    
+                    // Sync user to backend
                     await syncUserToBackend();
+                    
+                    // Show success animation
+                    await showAuthSuccess();
+                    
+                    // Update UI and show main content
                     updateAuthUI(true);
+                    hideAuthLoading();
                     showMainContent();
                 } else if (event === 'SIGNED_OUT') {
                     currentUser = null;
