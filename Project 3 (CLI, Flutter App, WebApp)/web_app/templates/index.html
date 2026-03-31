@@ -18,6 +18,17 @@
     <canvas id="particle-canvas"></canvas>
     <!-- Grid background overlay -->
     <div class="bg-grid"></div>
+    
+    <!-- Initial Loading (while checking auth) -->
+    <div id="initial-loading" style="position: fixed; inset: 0; background: #0a0e1a; display: flex; align-items: center; justify-content: center; z-index: 10000;">
+        <div style="text-align: center;">
+            <svg viewBox="0 0 50 50" width="50" height="50">
+                <circle cx="25" cy="25" r="20" fill="none" stroke="#00b4d8" stroke-width="4" stroke-dasharray="31.4 31.4" stroke-linecap="round">
+                    <animateTransform attributeName="transform" type="rotate" from="0 25 25" to="360 25 25" dur="1s" repeatCount="indefinite"/>
+                </circle>
+            </svg>
+        </div>
+    </div>
 
     <!-- Header -->
     <header class="header" id="header" style="display: none;">
@@ -67,8 +78,8 @@
         </div>
     </header>
 
-    <!-- Auth Landing Section (shown first on page load) -->
-    <section id="auth-landing" class="auth-landing">
+    <!-- Auth Landing Section (hidden by default until auth check) -->
+    <section id="auth-landing" class="auth-landing" style="display: none;">
         <div class="auth-container">
             <div class="auth-card">
                 <!-- Logo and Title Section - Horizontal Layout -->

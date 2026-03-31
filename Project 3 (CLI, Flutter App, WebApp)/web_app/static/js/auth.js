@@ -18,6 +18,7 @@ async function initAuth() {
     // Check guest mode first (before any API calls)
     isGuestMode = sessionStorage.getItem('nsu_guest_mode') === 'true';
     if (isGuestMode) {
+        hideInitialLoading();
         showMainContent();
         return true;
     }
@@ -29,6 +30,7 @@ async function initAuth() {
         
         if (!data.success || !data.config || !data.config.supabase_url || !data.config.supabase_key) {
             console.warn('Auth config not available or incomplete');
+            hideInitialLoading();
             showAuthLanding();
             authInitialized = true;
             return false;
@@ -39,6 +41,7 @@ async function initAuth() {
         // Initialize Supabase client (library loaded via CDN in HTML)
         if (typeof supabase === 'undefined') {
             console.warn('Supabase library not loaded');
+            hideInitialLoading();
             showAuthLanding();
             authInitialized = true;
             return false;
@@ -59,6 +62,7 @@ async function initAuth() {
                     sessionStorage.removeItem('nsu_guest_mode');
                     
                     // Show loading overlay
+                    hideInitialLoading();
                     showAuthLoading();
                     
                     // Sync user to backend with timeout
@@ -102,6 +106,7 @@ async function initAuth() {
         if (session) {
             // User already has a session - go straight to main content
             currentUser = session.user;
+            hideInitialLoading();
             updateAuthUI(true);
             showMainContent();
             
@@ -109,9 +114,11 @@ async function initAuth() {
             syncUserToBackend().catch(err => console.warn('Background sync failed:', err));
         } else if (isOAuthCallback) {
             // OAuth callback in progress - show loading and wait for session
+            hideInitialLoading();
             showAuthLoading();
         } else {
             // No session, no callback - show auth landing
+            hideInitialLoading();
             showAuthLanding();
         }
         
@@ -128,10 +135,18 @@ async function initAuth() {
         return true;
     } catch (error) {
         console.error('Auth init error:', error);
+        hideInitialLoading();
         showAuthLanding();
         authInitialized = true;
         return false;
     }
+}
+
+// ─── Initial Loading Control ───────────────────────────────────────────────────
+
+function hideInitialLoading() {
+    const initialLoading = document.getElementById('initial-loading');
+    if (initialLoading) initialLoading.style.display = 'none';
 }
 
 // ─── Auth Landing Control ──────────────────────────────────────────────────────
