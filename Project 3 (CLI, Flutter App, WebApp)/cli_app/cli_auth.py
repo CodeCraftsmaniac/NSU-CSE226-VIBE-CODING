@@ -328,6 +328,10 @@ class CLIAuth:
         """
         Login with Google OAuth via browser.
         Opens browser for authentication, captures token via local callback server.
+        
+        NOTE: Requires Supabase to have localhost URLs in allowed redirects.
+        If you see a 500 error, go to Supabase Dashboard > Authentication > URL Configuration
+        and add: http://localhost:* to Redirect URLs.
         """
         port = self._find_free_port()
         redirect_url = f"http://localhost:{port}/callback"
@@ -344,6 +348,7 @@ class CLIAuth:
         server.access_token = None
         server.refresh_token = None
         server.auth_complete = False
+        server.auth_error = None
         server.timeout = 120  # 2 minute timeout
         
         # Open browser
@@ -372,9 +377,14 @@ class CLIAuth:
                 return True
             else:
                 print("❌ Token validation failed")
+                print("\n[TIP] Try using Quick Email Login (option 2) instead.")
                 return False
         else:
-            print("❌ No token received")
+            print("❌ No token received from OAuth callback")
+            if server.auth_error:
+                print(f"   Error: {server.auth_error}")
+            print("\n[TIP] Google OAuth requires Supabase configuration.")
+            print("      Use Quick Email Login (option 2) for now.")
             return False
     
     def _sync_user_to_backend(self):
