@@ -492,19 +492,36 @@ def upload():
         scan_id = None
         if g.user and DB_AVAILABLE:
             try:
-                level2 = result.get('level2', {})
-                scan_record = save_scan(
-                    user_id=g.user['id'],
-                    filename=file.filename,
-                    total_courses=len(courses),
-                    total_credits=level2.get('total_credits', 0),
-                    cgpa=level2.get('cgpa', 0),
-                    analysis_data=result,
-                    source=source
-                )
-                if scan_record:
-                    scan_id = scan_record['id']
-                    result['scan_id'] = scan_id
+                # Get db_id for database operations
+                db_user_id = g.user.get('db_id')
+                if not db_user_id:
+                    # Try to get from database by email
+                    db_user = get_user_by_email(g.user['email'])
+                    if not db_user:
+                        # Create user if doesn't exist
+                        db_user = create_user(
+                            email=g.user['email'],
+                            name=g.user.get('name', ''),
+                            provider=g.user.get('provider', 'google')
+                        )
+                    if db_user:
+                        db_user_id = db_user['id']
+                
+                if db_user_id:
+                    level2 = result.get('level2', {})
+                    scan_record = save_scan(
+                        user_id=db_user_id,
+                        filename=file.filename,
+                        total_courses=len(courses),
+                        total_credits=level2.get('gpa_credits', 0),
+                        cgpa=level2.get('cgpa', 0),
+                        analysis_data=result,
+                        source=source
+                    )
+                    if scan_record:
+                        scan_id = scan_record['id']
+                        result['scan_id'] = scan_id
+                        logger.info(f"Scan saved to history: {scan_id}")
             except Exception as e:
                 logger.warning(f"Failed to save to history: {e}")
 
