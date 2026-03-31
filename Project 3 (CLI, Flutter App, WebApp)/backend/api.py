@@ -630,8 +630,9 @@ def auth_google():
         import json as token_json
         import time as token_time
         
-        # Secret key for signing (uses service role key for security)
-        SECRET_KEY = os.getenv('SUPABASE_SERVICE_ROLE_KEY', 'fallback-secret-key')[:32]
+        # Secret key for signing - use hardcoded fallback for Cloud Run
+        from auth import SUPABASE_SERVICE_ROLE_KEY as AUTH_SERVICE_KEY
+        SECRET_KEY = AUTH_SERVICE_KEY[:32] if AUTH_SERVICE_KEY else 'fallback-secret-key'[:32]
         
         # Token payload
         payload = {
