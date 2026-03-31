@@ -140,6 +140,13 @@ async function syncUserToBackend() {
 
 async function signInWithGoogle() {
     if (!supabaseClient) {
+        // If in guest mode or auth not initialized, go back to auth landing
+        if (isGuestMode || !authInitialized) {
+            isGuestMode = false;
+            sessionStorage.removeItem('nsu_guest_mode');
+            showAuthLanding();
+            return;
+        }
         showToast('Authentication not available', 'error');
         return;
     }
