@@ -7,8 +7,9 @@
  */
 
 // ─── API Configuration ─────────────────────────────────────────────────────────
-// Cloud Run Backend API
-const API_BASE_URL = 'https://ocrapi.nsunexus.app';
+// Cloud Run Backend API (shared via window to avoid conflicts)
+window.API_BASE_URL = window.API_BASE_URL || 'https://ocrapi.nsunexus.app';
+const API_BASE_URL = window.API_BASE_URL;
 
 // ─── DOM Elements ──────────────────────────────────────────────────────────────
 const uploadArea = document.getElementById('upload-area');
