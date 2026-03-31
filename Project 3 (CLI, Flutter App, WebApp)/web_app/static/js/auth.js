@@ -139,19 +139,23 @@ async function syncUserToBackend() {
 // ─── Sign In with Google ───────────────────────────────────────────────────────
 
 async function signInWithGoogle() {
-    // If supabaseClient is not initialized, try to initialize it now
-    if (!supabaseClient) {
-        try {
-            // Get auth config from backend
-            const response = await fetch(`${API_BASE_URL}/auth/config`);
-            const data = await response.json();
+    try {
+        // If Supabase client not initialized, try to initialize it now
+        if (!supabaseClient) {
+            console.log('Supabase client not ready, initializing...');
             
-            if (!data.success || !data.config.supabase_url || !data.config.supabase_key) {
-                showToast('Authentication service not configured. Please contact administrator.', 'error');
-                return;
+            // Fetch auth config if not already loaded
+            if (!authConfig) {
+                const response = await fetch(`${API_BASE_URL}/auth/config`);
+                const data = await response.json();
+                
+                if (!data.success || !data.config.supabase_url || !data.config.supabase_key) {
+                    showToast('Authentication service unavailable. Please try again later.', 'error');
+                    return;
+                }
+                
+                authConfig = data.config;
             }
-            
-            authConfig = data.config;
             
             // Initialize Supabase client
             if (typeof supabase === 'undefined') {
@@ -161,29 +165,10 @@ async function signInWithGoogle() {
             
             const { createClient } = supabase;
             supabaseClient = createClient(authConfig.supabase_url, authConfig.supabase_key);
-            
-            // Setup auth state listener
-            supabaseClient.auth.onAuthStateChange(async (event, session) => {
-                if (event === 'SIGNED_IN' && session) {
-                    currentUser = session.user;
-                    isGuestMode = false;
-                    sessionStorage.removeItem('nsu_guest_mode');
-                    await syncUserToBackend();
-                    updateAuthUI(true);
-                    showMainContent();
-                } else if (event === 'SIGNED_OUT') {
-                    currentUser = null;
-                    updateAuthUI(false);
-                }
-            });
-        } catch (error) {
-            console.error('Failed to initialize auth:', error);
-            showToast('Failed to initialize authentication. Please try again.', 'error');
-            return;
+            console.log('Supabase client initialized successfully');
         }
-    }
-    
-    try {
+        
+        // Proceed with OAuth sign-in
         const { data, error } = await supabaseClient.auth.signInWithOAuth({
             provider: 'google',
             options: {
@@ -200,7 +185,7 @@ async function signInWithGoogle() {
             
             // Show user-friendly error messages
             if (error.message.includes('unexpected_failure')) {
-                showToast('Google OAuth not configured in Supabase. Please contact administrator.', 'error');
+                showToast('Google OAuth not configured. Please contact administrator.', 'error');
             } else if (error.message.includes('redirect_uri_mismatch')) {
                 showToast('OAuth redirect URL mismatch. Please contact administrator.', 'error');
             } else {
