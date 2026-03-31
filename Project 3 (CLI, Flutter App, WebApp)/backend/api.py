@@ -628,6 +628,7 @@ def auth_google():
         import hmac
         import base64
         import json as token_json
+        import time as token_time
         
         # Secret key for signing (uses service role key for security)
         SECRET_KEY = os.getenv('SUPABASE_SERVICE_ROLE_KEY', 'fallback-secret-key')[:32]
@@ -636,7 +637,7 @@ def auth_google():
         payload = {
             'user_id': db_user['id'],
             'email': db_user['email'],
-            'exp': int(time.time()) + (30 * 24 * 60 * 60)  # 30 days expiry
+            'exp': int(token_time.time()) + (30 * 24 * 60 * 60)  # 30 days expiry
         }
         payload_b64 = base64.urlsafe_b64encode(token_json.dumps(payload).encode()).decode()
         
