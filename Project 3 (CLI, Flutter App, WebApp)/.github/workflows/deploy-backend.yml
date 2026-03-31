@@ -35,23 +35,10 @@ jobs:
       - name: Set up Cloud SDK
         uses: google-github-actions/setup-gcloud@v2
       
-      - name: Configure Docker for GCR
-        run: gcloud auth configure-docker
-      
-      - name: Build Docker image
-        run: |
-          docker build -t gcr.io/$PROJECT_ID/$SERVICE_NAME:$GITHUB_SHA \
-                       -t gcr.io/$PROJECT_ID/$SERVICE_NAME:latest .
-      
-      - name: Push to Google Container Registry
-        run: |
-          docker push gcr.io/$PROJECT_ID/$SERVICE_NAME:$GITHUB_SHA
-          docker push gcr.io/$PROJECT_ID/$SERVICE_NAME:latest
-      
-      - name: Deploy to Cloud Run
+      - name: Deploy to Cloud Run from source
         run: |
           gcloud run deploy $SERVICE_NAME \
-            --image gcr.io/$PROJECT_ID/$SERVICE_NAME:$GITHUB_SHA \
+            --source . \
             --platform managed \
             --region $REGION \
             --allow-unauthenticated \
@@ -59,7 +46,18 @@ jobs:
             --cpu 1 \
             --timeout 300 \
             --max-instances 10 \
-            --update-env-vars FLASK_ENV=production,DEBUG=false,LOG_LEVEL=INFO,MAX_CONTENT_LENGTH_MB=16,SUPABASE_URL=${{ secrets.SUPABASE_URL }},SUPABASE_KEY=${{ secrets.SUPABASE_KEY }},SUPABASE_SERVICE_ROLE_KEY=${{ secrets.SUPABASE_SERVICE_ROLE_KEY }},SUPABASE_JWT_SECRET=${{ secrets.SUPABASE_JWT_SECRET }},GOOGLE_CLIENT_ID=${{ secrets.GOOGLE_CLIENT_ID }},GOOGLE_CLIENT_SECRET=${{ secrets.GOOGLE_CLIENT_SECRET }},OCR_SPACE_API_KEY=${{ secrets.OCR_SPACE_API_KEY }},GOOGLE_CLOUD_VISION_KEY=${{ secrets.GOOGLE_CLOUD_VISION_KEY }}
+            --set-env-vars FLASK_ENV=production \
+            --set-env-vars DEBUG=false \
+            --set-env-vars LOG_LEVEL=INFO \
+            --set-env-vars MAX_CONTENT_LENGTH_MB=16 \
+            --set-env-vars SUPABASE_URL=${{ secrets.SUPABASE_URL }} \
+            --set-env-vars SUPABASE_KEY=${{ secrets.SUPABASE_KEY }} \
+            --set-env-vars SUPABASE_SERVICE_ROLE_KEY=${{ secrets.SUPABASE_SERVICE_ROLE_KEY }} \
+            --set-env-vars SUPABASE_JWT_SECRET=${{ secrets.SUPABASE_JWT_SECRET }} \
+            --set-env-vars GOOGLE_CLIENT_ID=${{ secrets.GOOGLE_CLIENT_ID }} \
+            --set-env-vars GOOGLE_CLIENT_SECRET=${{ secrets.GOOGLE_CLIENT_SECRET }} \
+            --set-env-vars OCR_SPACE_API_KEY=${{ secrets.OCR_SPACE_API_KEY }} \
+            --set-env-vars GOOGLE_CLOUD_VISION_KEY=${{ secrets.GOOGLE_CLOUD_VISION_KEY }}
       
       - name: Get service URL
         run: |
@@ -69,6 +67,6 @@ jobs:
       
       - name: Verify deployment
         run: |
-          sleep 10
+          sleep 15
           curl -f $SERVICE_URL/health || exit 1
           echo "✅ Backend deployment verified"
