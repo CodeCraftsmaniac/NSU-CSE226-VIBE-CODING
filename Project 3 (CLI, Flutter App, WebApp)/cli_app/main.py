@@ -172,11 +172,19 @@ def scan_transcript_cloud(file_path):
         ) as progress:
             task = progress.add_task("Uploading to cloud...", total=None)
             
+            # Get auth headers if user is logged in
+            headers = {}
+            if AUTH_AVAILABLE and cli_auth and cli_auth.is_authenticated:
+                headers = cli_auth._get_headers()
+            
             with open(file_path, 'rb') as f:
                 files = {'file': (file_name, f, 'application/pdf')}
+                data = {'source': 'cli'}
                 response = requests.post(
                     f"{CLOUD_API_URL}/upload",
                     files=files,
+                    data=data,
+                    headers=headers,
                     timeout=120
                 )
         
