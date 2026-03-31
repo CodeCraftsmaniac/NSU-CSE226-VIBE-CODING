@@ -47,7 +47,7 @@ jobs:
             --platform managed \
             --region ${{ env.REGION }} \
             --allow-unauthenticated \
-            --set-env-vars "GOOGLE_CLOUD_VISION_KEY=${{ secrets.GOOGLE_CLOUD_VISION_KEY }},OCR_SPACE_API_KEY=${{ secrets.OCR_SPACE_API_KEY }},FLASK_ENV=production,LOG_LEVEL=INFO" \
+            --set-env-vars "GOOGLE_CLOUD_VISION_KEY=${{ secrets.GOOGLE_CLOUD_VISION_KEY }},OCR_SPACE_API_KEY=${{ secrets.OCR_SPACE_API_KEY }},SUPABASE_URL=${{ secrets.SUPABASE_URL }},SUPABASE_KEY=${{ secrets.SUPABASE_KEY }},GOOGLE_CLIENT_ID=${{ secrets.GOOGLE_CLIENT_ID }},GOOGLE_CLIENT_SECRET=${{ secrets.GOOGLE_CLIENT_SECRET }},FLASK_ENV=production,LOG_LEVEL=INFO" \
             --quiet
 
       - name: Deployment Summary
