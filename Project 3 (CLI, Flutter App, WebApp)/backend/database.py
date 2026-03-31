@@ -14,7 +14,8 @@ from typing import Optional, Dict, List, Any
 
 # Supabase Configuration
 SUPABASE_URL = os.getenv('SUPABASE_URL', 'https://kmbltplmjdkjlbungbbh.supabase.co')
-SUPABASE_KEY = os.getenv('SUPABASE_KEY', 'sb_publishable__YBlZyxhug91jxofNKInVw_xPcQtezV')
+SUPABASE_KEY = os.getenv('SUPABASE_KEY', '')
+SUPABASE_SERVICE_ROLE_KEY = os.getenv('SUPABASE_SERVICE_ROLE_KEY', '')
 
 # Thread-safe client management for concurrent users
 _supabase_client = None
@@ -24,6 +25,7 @@ def get_supabase():
     """
     Get or create Supabase client (thread-safe).
     Uses double-check locking for concurrent access.
+    Uses service role key for backend operations.
     """
     global _supabase_client
     if _supabase_client is None:
@@ -32,7 +34,9 @@ def get_supabase():
             if _supabase_client is None:
                 try:
                     from supabase import create_client
-                    _supabase_client = create_client(SUPABASE_URL, SUPABASE_KEY)
+                    # Use service role key for backend operations (bypasses RLS)
+                    key = SUPABASE_SERVICE_ROLE_KEY or SUPABASE_KEY
+                    _supabase_client = create_client(SUPABASE_URL, key)
                 except Exception as e:
                     print(f"Failed to create Supabase client: {e}")
                     return None

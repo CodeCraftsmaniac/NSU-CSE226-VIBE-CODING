@@ -148,15 +148,31 @@ async function signInWithGoogle() {
         const { data, error } = await supabaseClient.auth.signInWithOAuth({
             provider: 'google',
             options: {
-                redirectTo: window.location.origin
+                redirectTo: window.location.origin,
+                queryParams: {
+                    access_type: 'offline',
+                    prompt: 'consent',
+                }
             }
         });
         
-        if (error) throw error;
+        if (error) {
+            console.error('OAuth error:', error);
+            
+            // Show user-friendly error messages
+            if (error.message.includes('unexpected_failure')) {
+                showToast('Google OAuth not configured in Supabase. Please contact administrator.', 'error');
+            } else if (error.message.includes('redirect_uri_mismatch')) {
+                showToast('OAuth redirect URL mismatch. Please contact administrator.', 'error');
+            } else {
+                showToast('Sign in failed: ' + error.message, 'error');
+            }
+            throw error;
+        }
         
     } catch (error) {
         console.error('Sign in error:', error);
-        showToast('Sign in failed: ' + error.message, 'error');
+        // Error already shown via toast above
     }
 }
 

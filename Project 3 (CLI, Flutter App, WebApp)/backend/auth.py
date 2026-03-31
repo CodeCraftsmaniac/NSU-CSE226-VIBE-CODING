@@ -12,18 +12,21 @@ from flask import request, jsonify, g
 
 # Supabase configuration
 SUPABASE_URL = os.getenv('SUPABASE_URL', 'https://kmbltplmjdkjlbungbbh.supabase.co')
-SUPABASE_KEY = os.getenv('SUPABASE_KEY', '')
+SUPABASE_KEY = os.getenv('SUPABASE_KEY', '')  # Anon key for frontend
+SUPABASE_SERVICE_ROLE_KEY = os.getenv('SUPABASE_SERVICE_ROLE_KEY', '')  # Service role for backend
 
 _supabase_client = None
 
 
 def get_supabase():
-    """Get Supabase client."""
+    """Get Supabase client with service role key for backend operations."""
     global _supabase_client
     if _supabase_client is None:
         try:
             from supabase import create_client
-            _supabase_client = create_client(SUPABASE_URL, SUPABASE_KEY)
+            # Use service role key for backend operations (bypasses RLS)
+            key = SUPABASE_SERVICE_ROLE_KEY or SUPABASE_KEY
+            _supabase_client = create_client(SUPABASE_URL, key)
         except Exception as e:
             print(f"Supabase client error: {e}")
             return None
@@ -116,7 +119,7 @@ def get_auth_config() -> Dict[str, Any]:
     """Get auth configuration for frontend."""
     return {
         'supabase_url': SUPABASE_URL,
-        'supabase_key': SUPABASE_KEY,
+        'supabase_key': SUPABASE_KEY,  # Send anon key to frontend
         'google_client_id': os.getenv('GOOGLE_CLIENT_ID', ''),
         'callback_url': f"{SUPABASE_URL}/auth/v1/callback"
     }
