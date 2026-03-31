@@ -3,6 +3,7 @@ NSU Degree Audit - Backend API
 ==============================
 Pure REST API backend for OCR processing and degree analysis.
 NO UI - only JSON endpoints for CLI, Web, and Flutter apps.
+Version: 2.3.1
 
 Endpoints:
   GET  /health        - Service health, OCR limits, system info
