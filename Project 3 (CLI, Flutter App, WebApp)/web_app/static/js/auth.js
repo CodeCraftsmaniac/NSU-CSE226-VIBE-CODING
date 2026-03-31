@@ -10,12 +10,11 @@ let currentUser = null;
 let authConfig = null;
 let isGuestMode = false;
 let authInitialized = false;
-let authStateListenerRegistered = false;
 
 // ─── Initialize Auth ───────────────────────────────────────────────────────────
 
 async function initAuth() {
-    // Check guest mode first (before any API calls)
+    // Check guest mode first
     isGuestMode = sessionStorage.getItem('nsu_guest_mode') === 'true';
     if (isGuestMode) {
         hideInitialLoading();
@@ -29,7 +28,7 @@ async function initAuth() {
         const data = await response.json();
         
         if (!data.success || !data.config || !data.config.supabase_url || !data.config.supabase_key) {
-            console.warn('Auth config not available or incomplete');
+            console.warn('Auth config not available');
             hideInitialLoading();
             showAuthLanding();
             authInitialized = true;
@@ -38,7 +37,6 @@ async function initAuth() {
         
         authConfig = data.config;
         
-        // Initialize Supabase client (library loaded via CDN in HTML)
         if (typeof supabase === 'undefined') {
             console.warn('Supabase library not loaded');
             hideInitialLoading();
@@ -50,30 +48,47 @@ async function initAuth() {
         const { createClient } = supabase;
         supabaseClient = createClient(authConfig.supabase_url, authConfig.supabase_key);
         
-        // Register auth state listener FIRST (before checking session)
-        if (!authStateListenerRegistered) {
-            supabaseClient.auth.onAuthStateChange(async (event, session) => {
-                console.log('Auth state change:', event, 'currentUser:', currentUser);
-                
-                // CRITICAL: Only show loading animation for INITIAL_SESSION or TOKEN_REFRESHED when currentUser is null
-                // This prevents showing loading on every page refresh
-                if (event === 'SIGNED_IN' && session && !currentUser) {
+        // Check for existing session FIRST
+        const { data: { session } } = await supabaseClient.auth.getSession();
+        
+        if (session) {
+            // User has existing session - go directly to main content
+            currentUser = session.user;
+            hideInitialLoading();
+            updateAuthUI(true);
+            showMainContent();
+            
+            // Sync silently in background (no UI changes)
+            syncUserToBackend().catch(err => console.warn('Background sync failed:', err));
+            
+            authInitialized = true;
+            return true;
+        }
+        
+        // No existing session - check if OAuth callback
+        const hashParams = new URLSearchParams(window.location.hash.substring(1));
+        const isOAuthCallback = hashParams.has('access_token');
+        
+        if (isOAuthCallback) {
+            // OAuth callback - show loading and wait for Supabase to process
+            hideInitialLoading();
+            showAuthLoading();
+            
+            // Register ONE-TIME listener for this OAuth callback
+            const { data: authListener } = supabaseClient.auth.onAuthStateChange(async (event, session) => {
+                if (event === 'SIGNED_IN' && session) {
                     currentUser = session.user;
                     isGuestMode = false;
                     sessionStorage.removeItem('nsu_guest_mode');
                     
-                    // Show loading overlay
-                    hideInitialLoading();
-                    showAuthLoading();
-                    
-                    // Sync user to backend with timeout
+                    // Sync user to backend
                     try {
                         await Promise.race([
                             syncUserToBackend(),
                             new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 5000))
                         ]);
                     } catch (error) {
-                        console.warn('User sync timeout or error:', error);
+                        console.warn('User sync error:', error);
                     }
                     
                     // Show success animation
@@ -88,38 +103,11 @@ async function initAuth() {
                     if (window.location.hash) {
                         history.replaceState(null, '', window.location.pathname);
                     }
-                } else if (event === 'INITIAL_SESSION' && session && currentUser) {
-                    // Session already loaded, just update UI (no loading animation)
-                    console.log('Initial session detected, user already set');
-                } else if (event === 'SIGNED_OUT') {
-                    currentUser = null;
-                    updateAuthUI(false);
-                    showAuthLanding();
+                    
+                    // Unsubscribe this listener
+                    authListener.subscription.unsubscribe();
                 }
             });
-            authStateListenerRegistered = true;
-        }
-        
-        // Check for existing session AFTER listener is registered
-        const { data: { session } } = await supabaseClient.auth.getSession();
-        
-        // Check URL hash for OAuth callback
-        const hashParams = new URLSearchParams(window.location.hash.substring(1));
-        const isOAuthCallback = hashParams.has('access_token');
-        
-        if (session && !isOAuthCallback) {
-            // User already has a session AND not in OAuth callback - go straight to main content
-            currentUser = session.user;
-            hideInitialLoading();
-            updateAuthUI(true);
-            showMainContent();
-            
-            // Sync silently in background
-            syncUserToBackend().catch(err => console.warn('Background sync failed:', err));
-        } else if (isOAuthCallback) {
-            // OAuth callback in progress - show loading and wait for listener to handle it
-            hideInitialLoading();
-            showAuthLoading();
         } else {
             // No session, no callback - show auth landing
             hideInitialLoading();
@@ -193,8 +181,8 @@ function showAuthLoading() {
     if (main) main.style.display = 'none';
     if (header) header.style.display = 'none';
     if (loadingOverlay) loadingOverlay.style.display = 'flex';
-    if (title) title.textContent = 'Creating your account...';
-    if (subtitle) subtitle.textContent = 'Setting up your profile';
+    if (title) title.textContent = 'Setting up your account...';
+    if (subtitle) subtitle.textContent = 'Saving to database';
     
     // Reset spinner/checkmark state
     if (spinner) spinner.style.display = 'block';
@@ -228,6 +216,7 @@ function hideAuthLoading() {
 function continueAsGuest() {
     isGuestMode = true;
     sessionStorage.setItem('nsu_guest_mode', 'true');
+    hideInitialLoading();
     showMainContent();
     showToast('Continuing as guest. Your scans won\'t be saved.', 'info');
 }
@@ -258,7 +247,6 @@ async function syncUserToBackend() {
 // ─── Sign In with Google ───────────────────────────────────────────────────────
 
 async function signInWithGoogle() {
-    // Initialize Supabase client if not already done
     if (!supabaseClient) {
         await initAuth();
         if (!supabaseClient) {
@@ -281,14 +269,7 @@ async function signInWithGoogle() {
         
         if (error) {
             console.error('OAuth error:', error);
-            
-            if (error.message.includes('unexpected_failure')) {
-                showToast('Google OAuth not configured in Supabase. Please contact administrator.', 'error');
-            } else if (error.message.includes('redirect_uri_mismatch')) {
-                showToast('OAuth redirect URL mismatch. Please contact administrator.', 'error');
-            } else {
-                showToast('Sign in failed: ' + error.message, 'error');
-            }
+            showToast('Sign in failed: ' + error.message, 'error');
             throw error;
         }
         
@@ -398,6 +379,13 @@ function closeUserMenu() {
     }
 }
 
+// ─── Initial Loading Control ───────────────────────────────────────────────────
+
+function hideInitialLoading() {
+    const initialLoading = document.getElementById('initial-loading');
+    if (initialLoading) initialLoading.style.display = 'none';
+}
+
 // ─── Auth Landing Control ──────────────────────────────────────────────────────
 
 function showAuthLanding() {
@@ -438,8 +426,8 @@ function showAuthLoading() {
     if (main) main.style.display = 'none';
     if (header) header.style.display = 'none';
     if (loadingOverlay) loadingOverlay.style.display = 'flex';
-    if (title) title.textContent = 'Creating your account...';
-    if (subtitle) subtitle.textContent = 'Setting up your profile';
+    if (title) title.textContent = 'Setting up your account...';
+    if (subtitle) subtitle.textContent = 'Saving to database';
     
     // Reset spinner/checkmark state
     if (spinner) spinner.style.display = 'block';
@@ -473,6 +461,7 @@ function hideAuthLoading() {
 function continueAsGuest() {
     isGuestMode = true;
     sessionStorage.setItem('nsu_guest_mode', 'true');
+    hideInitialLoading();
     showMainContent();
     showToast('Continuing as guest. Your scans won\'t be saved.', 'info');
 }
@@ -503,7 +492,6 @@ async function syncUserToBackend() {
 // ─── Sign In with Google ───────────────────────────────────────────────────────
 
 async function signInWithGoogle() {
-    // Initialize Supabase client if not already done
     if (!supabaseClient) {
         await initAuth();
         if (!supabaseClient) {
@@ -526,14 +514,7 @@ async function signInWithGoogle() {
         
         if (error) {
             console.error('OAuth error:', error);
-            
-            if (error.message.includes('unexpected_failure')) {
-                showToast('Google OAuth not configured in Supabase. Please contact administrator.', 'error');
-            } else if (error.message.includes('redirect_uri_mismatch')) {
-                showToast('OAuth redirect URL mismatch. Please contact administrator.', 'error');
-            } else {
-                showToast('Sign in failed: ' + error.message, 'error');
-            }
+            showToast('Sign in failed: ' + error.message, 'error');
             throw error;
         }
         
