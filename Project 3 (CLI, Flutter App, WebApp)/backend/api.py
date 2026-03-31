@@ -259,7 +259,7 @@ def index():
     """API root - service info."""
     return jsonify({
         'service': 'NSU Degree Audit API',
-        'version': '2.3.0',
+        'version': '2.3.1',
         'project': 'CSE226 Project 3',
         'endpoints': {
             'GET /': 'This info',
