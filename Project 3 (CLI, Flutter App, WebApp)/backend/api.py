@@ -483,20 +483,10 @@ def upload():
                 'raw_text_count': len(ocr_result.raw_text),
                 'student_name': ocr_result.student_name,
                 'student_id': ocr_result.student_id,
-                'cgpa_from_pdf': ocr_result.cgpa,
-                'total_credits_from_pdf': getattr(ocr_result, 'total_credits', 0)
             }
 
-            # CGPA verification
-            if ocr_result.cgpa > 0 and result.get('level2'):
-                calculated_cgpa = result['level2']['cgpa']
-                if abs(calculated_cgpa - ocr_result.cgpa) > 0.05:
-                    result['cgpa_warning'] = {
-                        'message': 'CGPA mismatch detected',
-                        'pdf_value': ocr_result.cgpa,
-                        'calculated_value': calculated_cgpa,
-                        'difference': round(abs(calculated_cgpa - ocr_result.cgpa), 2)
-                    }
+            # Note: CGPA and total_credits are NOT extracted from PDF
+            # They are calculated by the analysis engine based on extracted courses
 
         # Save to history if user is authenticated
         scan_id = None

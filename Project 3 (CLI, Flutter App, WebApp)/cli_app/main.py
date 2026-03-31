@@ -350,20 +350,10 @@ def scan_transcript(file_path):
         'raw_text_count': len(ocr_result.raw_text),
         'student_name': ocr_result.student_name or 'N/A',
         'student_id': ocr_result.student_id or 'N/A',
-        'cgpa_from_pdf': ocr_result.cgpa,
-        'total_credits_from_pdf': getattr(ocr_result, 'total_credits', 0),
     }
 
-    # CGPA verification (same as website)
-    if ocr_result.cgpa > 0 and result.get('level2'):
-        calculated_cgpa = result['level2']['cgpa']
-        if abs(calculated_cgpa - ocr_result.cgpa) > 0.05:
-            result['cgpa_warning'] = {
-                'message': 'CGPA mismatch detected',
-                'pdf_value': ocr_result.cgpa,
-                'calculated_value': calculated_cgpa,
-                'difference': round(abs(calculated_cgpa - ocr_result.cgpa), 2)
-            }
+    # Note: CGPA and total_credits are NOT extracted from PDF
+    # They are calculated by the analysis engine based on extracted courses
 
     result['ocr_info'] = ocr_info
     return result, None

@@ -818,15 +818,21 @@ class TranscriptOCR:
         return result
 
     def _parse_transcript(self, raw_text: list) -> OCRResult:
-        """Parse raw OCR text into structured course data."""
+        """Parse raw OCR text into structured course data.
+        
+        OCR extracts ONLY:
+        - Course codes, credits, grades, semesters
+        - Student name and ID
+        
+        CGPA and total credits are NOT extracted from PDF.
+        They will be calculated by the analysis engine based on extracted courses.
+        """
         courses = []
         current_semester = ""
 
-        # Extract metadata
+        # Extract metadata - ONLY name and ID
         student_name = ""
         student_id = ""
-        cgpa = 0.0
-        total_credits = 0.0
 
         # Track which courses we've already added (avoid duplicates)
         seen_courses = set()
@@ -837,47 +843,31 @@ class TranscriptOCR:
         for i, text in enumerate(corrected_text):
             text = text.strip()
 
-            # Extract student info
-            if "Student Name" in text or "Name :" in text:
-                if i + 1 < len(corrected_text):
-                    name_candidate = corrected_text[i + 1].strip()
-                    if not any(kw in name_candidate for kw in ['Student', 'ID', 'Date', ':']):
-                        student_name = name_candidate
+            # Extract student info with better patterns
+            if "NAME" in text.upper() and "STUDENT" in text.upper():
+                # Look ahead for the actual name
+                for j in range(i + 1, min(i + 3, len(corrected_text))):
+                    name_candidate = corrected_text[j].strip()
+ters
+                    if not any(kw in name_candidate.upper() for kw in ['STUDENT', 'ID', 'DATE', 'CGPA', 'CREDIT', 'COURSE']):
+                        if len(name_candidate) > 3 and not re.match(r'^\d+$', name_candidate):
+                            student_name = name_candidate
+                            _log_debug(f"Student name extracted: {student_name}")
+                            break
 
-            if "Student ID" in text or text.startswith("ID :"):
-                id_match = re.search(r'(\d{10,})', text)
+            if "STUDENT" in text.upper() and "ID" in text.upper():
+                # Try to find ID in same line or next lines
+                id_match = re.search(r'(\d{9,12})', text)
                 if id_match:
                     student_id = id_match.group(1)
-                elif i + 1 < len(corrected_text):
-                    id_match = re.search(r'(\d{10,})', corrected_text[i + 1])
-                    if id_match:
-                        student_id = id_match.group(1)
-
-            # Extract CGPA with validation (0.0 - 4.0 range)
-            if "CGPA" in text.upper() or "Cumulative" in text:
-                cgpa_match = re.search(r'(\d+\.\d+)', text)
-                if cgpa_match:
-                    try:
-                        val = float(cgpa_match.group(1))
-                        if 0.0 <= val <= 4.0:  # Valid CGPA range
-                            cgpa = val
-                        else:
-                            _log_warning(f"Invalid CGPA value ignored: {val}")
-                    except ValueError as e:
-                        _log_warning(f"Failed to parse CGPA: {e}")
-
-            # Extract total credits with validation
-            if "Total Credits" in text:
-                credits_match = re.search(r'(\d+\.?\d*)', text)
-                if credits_match:
-                    try:
-                        val = float(credits_match.group(1))
-                        if 0.0 <= val <= 200:  # Reasonable total credits range
-                            total_credits = val
-                        else:
-                            _log_warning(f"Invalid total credits value ignored: {val}")
-                    except ValueError as e:
-                        _log_warning(f"Failed to parse total credits: {e}")
+                    _log_debug(f"Student ID extracted: {student_id}")
+                else:
+                    for j in range(i + 1, min(i + 3, len(corrected_text))):
+                        id_match = re.search(r'(\d{9,12})', corrected_text[j])
+                        if id_match:
+                            student_id = id_match.group(1)
+                            _log_debug(f"Student ID e
+                            break
 
             # Detect semester
             sem_match = SEMESTER_PATTERN.search(text)
@@ -959,8 +949,8 @@ class TranscriptOCR:
             raw_text=raw_text,
             student_name=student_name,
             student_id=student_id,
-            cgpa=cgpa,
-            total_credits=total_credits,
+            cgpa=0.0,  # NOT extracted - will be calculated by analysis engine
+            total_credits=0.0,  # NOT extracted - will be calculated by analysis engine
             engine_used="Multi-Engine"
         )
 
