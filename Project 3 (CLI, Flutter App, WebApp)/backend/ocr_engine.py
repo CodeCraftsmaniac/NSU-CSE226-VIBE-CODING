@@ -81,7 +81,7 @@ NSU_COURSE_PREFIXES = {
     'ENV', 'ECO', 'BUS', 'ACT', 'FIN', 'MKT', 'MGT', 'MIS', 'HRM',
     'SOC', 'POL', 'HIS', 'PHI', 'ANT', 'PSY', 'ARC', 'LAW', 'ESL',
     'GEN', 'COM', 'MED', 'PHA', 'PUB', 'MPH', 'STA', 'IST', 'LIN',
-    'JMS', 'CIS', 'MSC', 'NST'
+    'JMS', 'CIS', 'MSC', 'NST', 'CHN', 'ARB', 'BNG', 'FRN', 'JPN'
 }
 
 # Common OCR misreadings and corrections
@@ -98,7 +98,7 @@ OCR_CORRECTIONS = {
     'MATI': 'MAT1', 'MAT1I6': 'MAT116',
     'EEEIII': 'EEE111', 'EEE14I': 'EEE141',
     'PHYI07': 'PHY107', 'PHYI08': 'PHY108',
-    'CHEI01': 'CHE101',
+    'CHEI01': 'CHE101', 'CHNI01': 'CHN101',
     # Common letter substitutions in course codes
     'CSEII5': 'CSE115', 'CSEII5L': 'CSE115L',
     'ENGI02': 'ENG102', 'ENGI03': 'ENG103',
