@@ -169,10 +169,14 @@ async function handleFile(file) {
     currentUploadController = new AbortController();
 
     try {
+        // Get auth headers if user is signed in
+        const headers = await getAuthHeaders();
+        
         // --- Run stage 1 & 2 (init + preprocess) immediately while fetch is in flight ---
         const fetchPromise = fetch(`${API_BASE_URL}/upload`, { 
             method: 'POST', 
             body: formData,
+            headers: headers,
             signal: currentUploadController.signal
         });
         await runEarlyStages();                     // init + preprocess (~2.5s)
