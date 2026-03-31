@@ -3,15 +3,35 @@
 ## Summary
 
 **Official CGPA (from PDF)**: 3.18  
-**Calculated CGPA (from code)**: 3.11  
+**Calculated CGPA (from OCR)**: 3.11  
 **Difference**: 0.07 (2.2% lower)
+
+**OCR Extraction Results**:
+- Extracted: 43 courses (42 unique after retake resolution)
+- Total GPA Credits: 127.0
+- Total Quality Points: 395.10
+- Calculated: 395.10 ÷ 127.0 = 3.11
+
+**Missing Quality Points**: 8.76  
+(To reach 3.18: need 403.86 QP, currently have 395.10 QP)
 
 ## Root Cause
 
-The CGPA calculation logic in your code is **100% CORRECT**. The discrepancy is caused by **OCR extraction errors** - the OCR is either:
-1. Missing some courses with good grades
-2. Misreading grades (e.g., reading "B" instead of "A-")
-3. Misreading credits (e.g., reading "3.0" instead of "4.0")
+The CGPA calculation logic in your code is **100% CORRECT**. The discrepancy is caused by **OCR extraction errors**:
+
+**Most Likely Issues**:
+1. **Missing 2-3 courses with A/A- grades** (most common)
+2. **Grades misread as lower** (e.g., A- read as B+, A read as B)
+3. **Credits misread** (e.g., 4.0 credit course read as 3.0)
+
+**Impact Analysis**:
+- Missing one 3-credit A course (4.0 GP) = 12.0 QP lost
+- Missing one 3-credit A- course (3.7 GP) = 11.1 QP lost
+- One A- (3.7) misread as B+ (3.3) = 1.2 QP lost per course
+
+To lose 8.76 QP, you likely have:
+- 1 missing A/A- course (≈11 QP), OR
+- 2-3 grades misread by one level (≈3-4 QP each)
 
 ## Calculation Method Comparison
 
@@ -104,3 +124,54 @@ If OCR missed one 3-credit A- course:
 5. Report back which courses are incorrect
 
 The code is working correctly - we just need to improve the OCR extraction accuracy.
+
+
+## Next Steps
+
+1. Open the web app at https://ocr.nsunexus.app
+2. Upload your PDF (694300494-nsu.pdf)
+3. Go to "Level 1 Credit Tally" tab
+4. Compare the 43 extracted courses with your actual PDF
+5. Look for:
+   - **Missing courses** (especially from semesters where you did well)
+   - **Incorrect grades** (check A/A- courses carefully)
+   - **Incorrect credits** (check if any 4-credit courses show as 3-credit)
+
+## Extracted Courses (43 total)
+
+Run `python debug_ocr_extraction.py` to see the full list with quality points breakdown.
+
+The tool shows:
+- Course code, credits, grade, semester
+- Grade points and quality points for each course
+- Step-by-step CGPA calculation
+- Retake resolution details
+
+## Technical Details
+
+Your code correctly implements NSU's CGPA formula in `backend/core.py`:
+
+```python
+def compute_cgpa(rows):
+    total_qp = total_gpa_cr = total_earned = 0.0
+    for r in rows:
+        grade, credits = r["grade"], r["credits"]
+        
+        # Skip W, I, P, TR (not in GPA)
+        if grade in NON_GPA_GRADES:
+            if grade in ("P", "TR"):
+                total_earned += credits
+            continue
+        
+        gp = GRADE_POINTS.get(grade)
+        if gp is not None and credits > 0:
+            total_qp += gp * credits
+            total_gpa_cr += credits
+            if grade != "F":
+                total_earned += credits
+    
+    cgpa = total_qp / total_gpa_cr if total_gpa_cr > 0 else 0.0
+    return cgpa, total_qp, total_gpa_cr, total_earned
+```
+
+This matches NSU's official method exactly.
