@@ -848,7 +848,6 @@ class TranscriptOCR:
                 # Look ahead for the actual name
                 for j in range(i + 1, min(i + 3, len(corrected_text))):
                     name_candidate = corrected_text[j].strip()
-ters
                     if not any(kw in name_candidate.upper() for kw in ['STUDENT', 'ID', 'DATE', 'CGPA', 'CREDIT', 'COURSE']):
                         if len(name_candidate) > 3 and not re.match(r'^\d+$', name_candidate):
                             student_name = name_candidate
@@ -866,7 +865,7 @@ ters
                         id_match = re.search(r'(\d{9,12})', corrected_text[j])
                         if id_match:
                             student_id = id_match.group(1)
-                            _log_debug(f"Student ID e
+                            _log_debug(f"Student ID extracted: {student_id}")
                             break
 
             # Detect semester
