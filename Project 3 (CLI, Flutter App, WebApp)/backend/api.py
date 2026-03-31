@@ -355,7 +355,7 @@ def health():
     return jsonify({
         'status': 'healthy',
         'service': 'NSU Degree Audit API',
-        'version': '2.0.0',
+        'version': '2.3.1',
         'uptime': uptime_info,
         'ocr_engines': ocr_info,
         'server': server_info,
