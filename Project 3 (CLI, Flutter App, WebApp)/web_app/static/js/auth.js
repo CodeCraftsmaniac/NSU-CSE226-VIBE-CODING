@@ -53,10 +53,11 @@ async function initAuth() {
         // Register auth state listener FIRST (before checking session)
         if (!authStateListenerRegistered) {
             supabaseClient.auth.onAuthStateChange(async (event, session) => {
-                console.log('Auth state change:', event);
+                console.log('Auth state change:', event, 'currentUser:', currentUser);
                 
+                // CRITICAL: Only show loading animation for INITIAL_SESSION or TOKEN_REFRESHED when currentUser is null
+                // This prevents showing loading on every page refresh
                 if (event === 'SIGNED_IN' && session && !currentUser) {
-                    // Only handle if this is a NEW sign-in (currentUser was null)
                     currentUser = session.user;
                     isGuestMode = false;
                     sessionStorage.removeItem('nsu_guest_mode');
@@ -87,6 +88,9 @@ async function initAuth() {
                     if (window.location.hash) {
                         history.replaceState(null, '', window.location.pathname);
                     }
+                } else if (event === 'INITIAL_SESSION' && session && currentUser) {
+                    // Session already loaded, just update UI (no loading animation)
+                    console.log('Initial session detected, user already set');
                 } else if (event === 'SIGNED_OUT') {
                     currentUser = null;
                     updateAuthUI(false);
@@ -103,8 +107,8 @@ async function initAuth() {
         const hashParams = new URLSearchParams(window.location.hash.substring(1));
         const isOAuthCallback = hashParams.has('access_token');
         
-        if (session) {
-            // User already has a session - go straight to main content
+        if (session && !isOAuthCallback) {
+            // User already has a session AND not in OAuth callback - go straight to main content
             currentUser = session.user;
             hideInitialLoading();
             updateAuthUI(true);
@@ -113,7 +117,7 @@ async function initAuth() {
             // Sync silently in background
             syncUserToBackend().catch(err => console.warn('Background sync failed:', err));
         } else if (isOAuthCallback) {
-            // OAuth callback in progress - show loading and wait for session
+            // OAuth callback in progress - show loading and wait for listener to handle it
             hideInitialLoading();
             showAuthLoading();
         } else {
