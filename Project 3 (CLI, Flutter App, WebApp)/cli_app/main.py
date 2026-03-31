@@ -973,31 +973,41 @@ def main():
             auth_menu = Table(show_header=False, box=box.ROUNDED, border_style="cyan", expand=True)
             auth_menu.add_column("Option", style="bold", width=5)
             auth_menu.add_column("Description")
-            auth_menu.add_row("[bold cyan]1[/bold cyan]", "[green]Continue with Google[/green] — Sign in with your email")
-            auth_menu.add_row("[bold cyan]2[/bold cyan]", "[yellow]Continue as Guest[/yellow] — Scan without saving history")
-            auth_menu.add_row("[bold cyan]Q[/bold cyan]", "[red]Quit[/red] — Exit application")
+            auth_menu.add_row("[bold cyan]1[/bold cyan]", "[green]🔐 Sign in with Google[/green] — Opens browser for secure sign-in")
+            auth_menu.add_row("[bold cyan]2[/bold cyan]", "[blue]📧 Quick Email Login[/blue] — Sign in with email directly")
+            auth_menu.add_row("[bold cyan]3[/bold cyan]", "[yellow]👤 Continue as Guest[/yellow] — Scan without saving history")
+            auth_menu.add_row("[bold cyan]Q[/bold cyan]", "[red]Exit[/red] — Quit application")
             console.print(auth_menu)
             console.print()
             
-            auth_choice = Prompt.ask("[cyan]Select option[/cyan]", choices=["1", "2", "q", "Q"], default="1").upper()
+            auth_choice = Prompt.ask("[cyan]Select option[/cyan]", choices=["1", "2", "3", "q", "Q"], default="1").upper()
             
             if auth_choice == "Q":
                 console.print("\n[cyan]Goodbye![/cyan]")
                 break
             elif auth_choice == "1":
-                # Login
-                if cli_auth.login_interactive():
-                    console.print("\n[green]✓ Authentication successful![/green]")
+                # Google OAuth via browser
+                console.print("\n[cyan]Starting Google Sign-In...[/cyan]")
+                if cli_auth.login_with_google():
+                    console.print(f"\n[green]✓ Signed in as {cli_auth.user.get('name', cli_auth.user.get('email'))}[/green]")
                     console.print("[dim]Your scans will be saved to your account.[/dim]")
                     time.sleep(1.5)
                 else:
-                    console.print("\n[yellow]Authentication failed. Continuing as guest...[/yellow]")
-                    time.sleep(1.5)
+                    console.print("\n[yellow]Authentication cancelled. Continuing as guest...[/yellow]")
+                    time.sleep(1)
             elif auth_choice == "2":
+                # Quick email login
+                if cli_auth._login_with_email_interactive():
+                    console.print("[dim]Your scans will be saved to your account.[/dim]")
+                    time.sleep(1.5)
+                else:
+                    console.print("\n[yellow]Login failed. Continuing as guest...[/yellow]")
+                    time.sleep(1)
+            elif auth_choice == "3":
+                # Guest mode
                 console.print("\n[yellow]Continuing as guest. Your scans won't be saved.[/yellow]")
                 time.sleep(1)
-            
-            continue  # Re-draw screen with auth status
+                # Proceed to main scanning UI
         
         # Show auth status
         if AUTH_AVAILABLE and cli_auth and cli_auth.is_authenticated:

@@ -8,14 +8,22 @@ Thread-safe connection pooling for 20+ concurrent users.
 """
 
 import os
+import logging
 import threading
 from datetime import datetime
 from typing import Optional, Dict, List, Any
 
-# Supabase Configuration
-SUPABASE_URL = os.getenv('SUPABASE_URL', 'https://kmbltplmjdkjlbungbbh.supabase.co')
-SUPABASE_KEY = os.getenv('SUPABASE_KEY', '')
-SUPABASE_SERVICE_ROLE_KEY = os.getenv('SUPABASE_SERVICE_ROLE_KEY', '')
+logger = logging.getLogger(__name__)
+
+# Supabase Configuration - HARDCODED FALLBACK for Cloud Run
+# These are safe to hardcode as they're also in the .env file
+_DEFAULT_SUPABASE_URL = 'https://kmbltplmjdkjlbungbbh.supabase.co'
+_DEFAULT_SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImttYmx0cGxtamRramxidW5nYmJoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njc2Mjc1MDksImV4cCI6MjA4MzIwMzUwOX0.IRoQ306ElYZh8WoTN1dXMVr9mSd20-RPxwKYZ6M6Lcg'
+_DEFAULT_SERVICE_ROLE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImttYmx0cGxtamRramxidW5nYmJoIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2NzYyNzUwOSwiZXhwIjoyMDgzMjAzNTA5fQ.CCtw4HCNIXB95TW4Ry1mAtB3__XoL1W8s49kXKHDzdI'
+
+SUPABASE_URL = os.getenv('SUPABASE_URL', _DEFAULT_SUPABASE_URL)
+SUPABASE_KEY = os.getenv('SUPABASE_KEY', _DEFAULT_SUPABASE_KEY)
+SUPABASE_SERVICE_ROLE_KEY = os.getenv('SUPABASE_SERVICE_ROLE_KEY', _DEFAULT_SERVICE_ROLE_KEY)
 
 # Thread-safe client management for concurrent users
 _supabase_client = None
@@ -36,9 +44,17 @@ def get_supabase():
                     from supabase import create_client
                     # Use service role key for backend operations (bypasses RLS)
                     key = SUPABASE_SERVICE_ROLE_KEY or SUPABASE_KEY
+                    if not key:
+                        logger.error("No Supabase key available")
+                        return None
+                    logger.info(f"Creating Supabase client: {SUPABASE_URL[:40]}...")
                     _supabase_client = create_client(SUPABASE_URL, key)
+                    logger.info("Supabase client created successfully")
+                except ImportError as e:
+                    logger.error(f"Supabase SDK not installed: {e}")
+                    return None
                 except Exception as e:
-                    print(f"Failed to create Supabase client: {e}")
+                    logger.error(f"Failed to create Supabase client: {e}")
                     return None
     return _supabase_client
 
@@ -49,6 +65,7 @@ def create_user(email: str, name: str, provider: str = 'google') -> Optional[Dic
     """Create or get existing user in cse226_ocr_users table."""
     supabase = get_supabase()
     if not supabase:
+        logger.error("create_user: Supabase client not available")
         return None
     
     try:
@@ -61,6 +78,7 @@ def create_user(email: str, name: str, provider: str = 'google') -> Optional[Dic
                 'last_login': datetime.utcnow().isoformat(),
                 'name': name
             }).eq('email', email).execute()
+            logger.info(f"User already exists: {email}")
             return result.data[0]
         
         # Create new user
@@ -71,9 +89,10 @@ def create_user(email: str, name: str, provider: str = 'google') -> Optional[Dic
         }
         
         result = supabase.table('cse226_ocr_users').insert(new_user).execute()
+        logger.info(f"Created new user: {email}")
         return result.data[0] if result.data else None
     except Exception as e:
-        print(f"Create user error: {e}")
+        logger.error(f"Create user error for {email}: {e}")
         return None
 
 
@@ -115,6 +134,7 @@ def save_scan(
     """Save a transcript scan to cse226_ocr_scans table."""
     supabase = get_supabase()
     if not supabase:
+        logger.error("save_scan: Supabase client not available")
         return None
     
     try:
@@ -129,9 +149,14 @@ def save_scan(
         }
         
         result = supabase.table('cse226_ocr_scans').insert(scan_record).execute()
-        return result.data[0] if result.data else None
+        if result.data:
+            logger.info(f"Saved scan for user {user_id}: {filename}")
+            return result.data[0]
+        else:
+            logger.error(f"save_scan: No data returned from insert")
+            return None
     except Exception as e:
-        print(f"Save scan error: {e}")
+        logger.error(f"Save scan error for user {user_id}: {e}")
         return None
 
 

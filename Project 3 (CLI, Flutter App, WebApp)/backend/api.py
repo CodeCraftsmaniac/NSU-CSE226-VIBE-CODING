@@ -578,28 +578,38 @@ def auth_config():
 
 @app.route('/auth/google', methods=['POST'])
 def auth_google():
-    """Handle Google OAuth sign-in from mobile apps.
+    """Handle Google OAuth sign-in from mobile apps and CLI.
     
     Mobile apps use Google Sign-In SDK, then send user info here.
     We create/get user in our database and return a session token.
     """
     if not DB_AVAILABLE:
-        return jsonify({'error': 'Database not available'}), 503
+        logger.error("auth_google: DB_AVAILABLE is False")
+        return jsonify({'error': 'Database module not available', 'code': 'DB_MODULE_MISSING'}), 503
     
     data = request.get_json() or {}
     email = data.get('email')
     name = data.get('name', '')
     avatar_url = data.get('avatar_url', '')
+    provider = data.get('provider', 'google')  # 'cli' for CLI app
     
     if not email:
         return jsonify({'error': 'Email is required'}), 400
     
+    logger.info(f"auth_google: Processing login for {email} (provider: {provider})")
+    
     try:
         # Create or get user
-        db_user = create_user(email=email, name=name, provider='google')
+        db_user = create_user(email=email, name=name, provider=provider)
         
         if not db_user:
-            return jsonify({'error': 'Failed to create user'}), 500
+            logger.error(f"auth_google: create_user returned None for {email}")
+            return jsonify({
+                'error': 'Failed to create user - database connection issue',
+                'code': 'USER_CREATE_FAILED'
+            }), 500
+        
+        logger.info(f"auth_google: User created/found: {db_user['id']}")
         
         # Update avatar if provided
         if avatar_url and DB_AVAILABLE:
@@ -626,13 +636,13 @@ def auth_google():
                 'email': db_user['email'],
                 'name': db_user.get('name', name),
                 'avatar_url': avatar_url or db_user.get('avatar_url', ''),
-                'provider': 'google'
+                'provider': provider
             },
             'token': token
         })
     except Exception as e:
-        logger.error(f"Google auth error: {e}")
-        return jsonify({'error': str(e)}), 500
+        logger.exception(f"Google auth error for {email}: {e}")
+        return jsonify({'error': str(e), 'code': 'AUTH_ERROR'}), 500
 
 
 @app.route('/auth/user')

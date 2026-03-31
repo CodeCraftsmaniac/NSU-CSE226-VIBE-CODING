@@ -5,15 +5,22 @@ Handles Supabase Auth integration with Google OAuth.
 """
 
 import os
+import logging
 from functools import wraps
 from typing import Optional, Dict, Any
 
 from flask import request, jsonify, g
 
-# Supabase configuration
-SUPABASE_URL = os.getenv('SUPABASE_URL', 'https://kmbltplmjdkjlbungbbh.supabase.co')
-SUPABASE_KEY = os.getenv('SUPABASE_KEY', 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImttYmx0cGxtamRramxidW5nYmJoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njc2Mjc1MDksImV4cCI6MjA4MzIwMzUwOX0.IRoQ306ElYZh8WoTN1dXMVr9mSd20-RPxwKYZ6M6Lcg')  # Anon key for frontend
-SUPABASE_SERVICE_ROLE_KEY = os.getenv('SUPABASE_SERVICE_ROLE_KEY', 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImttYmx0cGxtamRramxidW5nYmJoIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2NzYyNzUwOSwiZXhwIjoyMDgzMjAzNTA5fQ.CCtw4HCNIXB95TW4Ry1mAtB3__XoL1W8s49kXKHDzdI')  # Service role for backend
+logger = logging.getLogger(__name__)
+
+# Supabase configuration - HARDCODED FALLBACK for Cloud Run
+_DEFAULT_SUPABASE_URL = 'https://kmbltplmjdkjlbungbbh.supabase.co'
+_DEFAULT_SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImttYmx0cGxtamRramxidW5nYmJoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njc2Mjc1MDksImV4cCI6MjA4MzIwMzUwOX0.IRoQ306ElYZh8WoTN1dXMVr9mSd20-RPxwKYZ6M6Lcg'
+_DEFAULT_SERVICE_ROLE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImttYmx0cGxtamRramxidW5nYmJoIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2NzYyNzUwOSwiZXhwIjoyMDgzMjAzNTA5fQ.CCtw4HCNIXB95TW4Ry1mAtB3__XoL1W8s49kXKHDzdI'
+
+SUPABASE_URL = os.getenv('SUPABASE_URL', _DEFAULT_SUPABASE_URL)
+SUPABASE_KEY = os.getenv('SUPABASE_KEY', _DEFAULT_SUPABASE_KEY)
+SUPABASE_SERVICE_ROLE_KEY = os.getenv('SUPABASE_SERVICE_ROLE_KEY', _DEFAULT_SERVICE_ROLE_KEY)
 
 _supabase_client = None
 
@@ -26,9 +33,13 @@ def get_supabase():
             from supabase import create_client
             # Use service role key for backend operations (bypasses RLS)
             key = SUPABASE_SERVICE_ROLE_KEY or SUPABASE_KEY
+            if not key:
+                logger.error("No Supabase key available in auth module")
+                return None
             _supabase_client = create_client(SUPABASE_URL, key)
+            logger.info("Auth module: Supabase client created")
         except Exception as e:
-            print(f"Supabase client error: {e}")
+            logger.error(f"Supabase client error: {e}")
             return None
     return _supabase_client
 
@@ -37,6 +48,7 @@ def verify_supabase_token(access_token: str) -> Optional[Dict[str, Any]]:
     """Verify Supabase access token and return user data."""
     supabase = get_supabase()
     if not supabase:
+        logger.error("verify_supabase_token: Supabase client not available")
         return None
     
     try:
@@ -53,7 +65,7 @@ def verify_supabase_token(access_token: str) -> Optional[Dict[str, Any]]:
                 'created_at': str(user.created_at) if user.created_at else None
             }
     except Exception as e:
-        print(f"Token verification error: {e}")
+        logger.error(f"Token verification error: {e}")
     
     return None
 
@@ -88,9 +100,12 @@ def sync_user_to_db(user: Dict[str, Any]) -> Optional[Dict]:
         )
         if db_user:
             user['db_id'] = db_user['id']
+            logger.info(f"User synced to DB: {user['email']} -> {db_user['id']}")
+        else:
+            logger.warning(f"Failed to sync user to DB: {user['email']}")
         return db_user
     except Exception as e:
-        print(f"User sync error: {e}")
+        logger.error(f"User sync error: {e}")
         return None
 
 

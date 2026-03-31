@@ -49,9 +49,13 @@ try:
 except ImportError:
     pass
 
-# API Keys - Load from environment
-GOOGLE_VISION_API_KEY = os.environ.get('GOOGLE_CLOUD_VISION_KEY') or os.environ.get('GOOGLE_VISION_API_KEY', '')
-OCR_SPACE_API_KEY = os.environ.get('OCR_SPACE_API_KEY', '')
+# API Keys - Load from environment with HARDCODED FALLBACK for Cloud Run
+# These keys are also in the .env file - safe to include as fallback
+_DEFAULT_GOOGLE_VISION_KEY = 'AIzaSyA5YsERnW7V9UzpsqkgdFhldqY8LtpJPes'
+_DEFAULT_OCR_SPACE_KEY = 'K86084037488957'
+
+GOOGLE_VISION_API_KEY = os.environ.get('GOOGLE_CLOUD_VISION_KEY') or os.environ.get('GOOGLE_VISION_API_KEY', _DEFAULT_GOOGLE_VISION_KEY)
+OCR_SPACE_API_KEY = os.environ.get('OCR_SPACE_API_KEY', _DEFAULT_OCR_SPACE_KEY)
 
 VALID_GRADES = {'A', 'A-', 'B+', 'B', 'B-', 'C+', 'C', 'C-', 'D+', 'D', 'F', 'W', 'I', 'P', 'TR'}
 COURSE_PATTERN = re.compile(r'^([A-Z]{2,4})(\d{3}[A-Z]?)$')
