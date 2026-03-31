@@ -610,13 +610,20 @@ def auth_google():
 @app.route('/auth/user')
 @require_auth
 def get_user():
-    """Get current user info."""
+    """Get current user info and create user in database if doesn't exist."""
     user = g.user
     
-    # Get db_id for history queries
+    # Get or create db_id for history queries
     db_user_id = user.get('db_id')
     if not db_user_id and DB_AVAILABLE:
         db_user = get_user_by_email(user['email'])
+        if not db_user:
+            # Create user in database if doesn't exist
+            db_user = create_user(
+                email=user['email'],
+                name=user.get('name', ''),
+                provider=user.get('provider', 'google')
+            )
         if db_user:
             db_user_id = db_user['id']
     

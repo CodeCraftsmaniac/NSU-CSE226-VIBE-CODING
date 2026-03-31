@@ -57,7 +57,7 @@ async function initAuth() {
             // Check URL hash for OAuth callback
             const hashParams = new URLSearchParams(window.location.hash.substring(1));
             if (hashParams.has('access_token')) {
-                // OAuth callback in progress, show loading instead of auth landing
+                // OAuth callback in progress, show loading immediately
                 showAuthLoading();
             } else {
                 showAuthLanding();
@@ -71,11 +71,19 @@ async function initAuth() {
                 isGuestMode = false;
                 sessionStorage.removeItem('nsu_guest_mode');
                 
-                // Show loading overlay
+                // Show loading overlay immediately
                 showAuthLoading();
                 
-                // Sync user to backend
-                await syncUserToBackend();
+                // Sync user to backend with timeout
+                try {
+                    await Promise.race([
+                        syncUserToBackend(),
+                        new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 5000))
+                    ]);
+                } catch (error) {
+                    console.warn('User sync timeout or error:', error);
+                    // Continue anyway - sync is not critical
+                }
                 
                 // Show success animation
                 await showAuthSuccess();
@@ -185,19 +193,27 @@ async function syncUserToBackend() {
     
     try {
         const headers = await getAuthHeaders();
-        await fetch(`${API_BASE_URL}/auth/user`, { headers });
+        const response = await fetch(`${API_BASE_URL}/auth/user`, { headers });
+        const data = await response.json();
+        
+        if (!data.success) {
+            console.error('User sync failed:', data);
+            throw new Error('Failed to sync user');
+        }
+        
+        console.log('User synced successfully:', data.user);
+        return data.user;
     } catch (error) {
         console.error('Sync user error:', error);
+        throw error;
     }
 }
 
 // ─── Sign In with Google ───────────────────────────────────────────────────────
 
 async function signInWithGoogle() {
-    // If supabaseClient is not initialized, try to initialize it now
     if (!supabaseClient) {
         try {
-            // Get auth config from backend
             const response = await fetch(`${API_BASE_URL}/auth/config`);
             const data = await response.json();
             
@@ -209,7 +225,6 @@ async function signInWithGoogle() {
             
             authConfig = data.config;
             
-            // Initialize Supabase client
             if (typeof supabase === 'undefined') {
                 console.error('Supabase library not loaded');
                 showToast('Authentication library not loaded. Please refresh the page.', 'error');
@@ -219,7 +234,6 @@ async function signInWithGoogle() {
             const { createClient } = supabase;
             supabaseClient = createClient(authConfig.supabase_url, authConfig.supabase_key);
             
-            // Setup auth state listener
             supabaseClient.auth.onAuthStateChange(async (event, session) => {
                 if (event === 'SIGNED_IN' && session) {
                     currentUser = session.user;
@@ -229,8 +243,16 @@ async function signInWithGoogle() {
                     // Show loading overlay
                     showAuthLoading();
                     
-                    // Sync user to backend
-                    await syncUserToBackend();
+                    // Sync user to backend with timeout
+                    try {
+                        await Promise.race([
+                            syncUserToBackend(),
+                            new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 5000))
+                        ]);
+                    } catch (error) {
+                        console.warn('User sync timeout or error:', error);
+                        // Continue anyway - sync is not critical
+                    }
                     
                     // Show success animation
                     await showAuthSuccess();
@@ -252,7 +274,7 @@ async function signInWithGoogle() {
     }
     
     try {
-        const { data, error } = await supabaseClient.auth.signInWithOAuth({
+        const { error } = await supabaseClient.auth.signInWithOAuth({
             provider: 'google',
             options: {
                 redirectTo: window.location.origin,
@@ -266,7 +288,6 @@ async function signInWithGoogle() {
         if (error) {
             console.error('OAuth error:', error);
             
-            // Show user-friendly error messages
             if (error.message.includes('unexpected_failure')) {
                 showToast('Google OAuth not configured in Supabase. Please contact administrator.', 'error');
             } else if (error.message.includes('redirect_uri_mismatch')) {
@@ -381,6 +402,161 @@ function closeUserMenu() {
     if (menu) {
         menu.classList.remove('show');
     }
+}
+
+// ─── Sync User to Backend ──────────────────────────────────────────────────────
+
+async function syncUserToBackend() {
+    if (!currentUser) return;
+    
+    try {
+        const headers = await getAuthHeaders();
+        const response = await fetch(`${API_BASE_URL}/auth/user`, { headers });
+        const data = await response.json();
+        
+        if (!data.success) {
+            console.error('User sync failed:', data);
+            throw new Error('Failed to sync user');
+        }
+        
+        console.log('User synced successfully:', data.user);
+        return data.user;
+    } catch (error) {
+        console.error('Sync user error:', error);
+        throw error;
+    }
+}
+
+// ─── Sign In with Google ───────────────────────────────────────────────────────
+
+async function signInWithGoogle() {
+    if (!supabaseClient) {
+        try {
+            const response = await fetch(`${API_BASE_URL}/auth/config`);
+            const data = await response.json();
+            
+            if (!data.success || !data.config || !data.config.supabase_url || !data.config.supabase_key) {
+                console.error('Auth config unavailable');
+                showToast('Authentication service unavailable. Please try again later.', 'error');
+                return;
+            }
+            
+            authConfig = data.config;
+            
+            if (typeof supabase === 'undefined') {
+                console.error('Supabase library not loaded');
+                showToast('Authentication library not loaded. Please refresh the page.', 'error');
+                return;
+            }
+            
+            const { createClient } = supabase;
+            supabaseClient = createClient(authConfig.supabase_url, authConfig.supabase_key);
+            
+            supabaseClient.auth.onAuthStateChange(async (event, session) => {
+                if (event === 'SIGNED_IN' && session) {
+                    currentUser = session.user;
+                    isGuestMode = false;
+                    sessionStorage.removeItem('nsu_guest_mode');
+                    
+                    // Show loading overlay
+                    showAuthLoading();
+                    
+                    // Sync user to backend with timeout
+                    try {
+                        await Promise.race([
+                            syncUserToBackend(),
+                            new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 5000))
+                        ]);
+                    } catch (error) {
+                        console.warn('User sync timeout or error:', error);
+                        // Continue anyway - sync is not critical
+                    }
+                    
+                    // Show success animation
+                    await showAuthSuccess();
+                    
+                    // Update UI and show main content
+                    updateAuthUI(true);
+                    hideAuthLoading();
+                    showMainContent();
+                } else if (event === 'SIGNED_OUT') {
+                    currentUser = null;
+                    updateAuthUI(false);
+                }
+            });
+        } catch (error) {
+            console.error('Failed to initialize auth:', error);
+            showToast('Failed to initialize authentication. Please try again.', 'error');
+            return;
+        }
+    }
+    
+    try {
+        const { error } = await supabaseClient.auth.signInWithOAuth({
+            provider: 'google',
+            options: {
+                redirectTo: window.location.origin,
+                queryParams: {
+                    access_type: 'offline',
+                    prompt: 'consent',
+                }
+            }
+        });
+        
+        if (error) {
+            console.error('OAuth error:', error);
+            
+            if (error.message.includes('unexpected_failure')) {
+                showToast('Google OAuth not configured in Supabase. Please contact administrator.', 'error');
+            } else if (error.message.includes('redirect_uri_mismatch')) {
+                showToast('OAuth redirect URL mismatch. Please contact administrator.', 'error');
+            } else {
+                showToast('Sign in failed: ' + error.message, 'error');
+            }
+            throw error;
+        }
+        
+    } catch (error) {
+        console.error('Sign in error:', error);
+    }
+}
+
+// ─── Sign Out ──────────────────────────────────────────────────────────────────
+
+async function signOut() {
+    if (!supabaseClient) return;
+    
+    try {
+        await supabaseClient.auth.signOut();
+        currentUser = null;
+        isGuestMode = false;
+        sessionStorage.removeItem('nsu_guest_mode');
+        updateAuthUI(false);
+        closeUserMenu();
+        showAuthLanding();
+        showToast('Signed out successfully', 'success');
+    } catch (error) {
+        console.error('Sign out error:', error);
+    }
+}
+
+// ─── Get Access Token ──────────────────────────────────────────────────────────
+
+async function getAccessToken() {
+    if (!supabaseClient) return null;
+    
+    const { data: { session } } = await supabaseClient.auth.getSession();
+    return session?.access_token || null;
+}
+
+// ─── Get Auth Headers ──────────────────────────────────────────────────────────
+
+async function getAuthHeaders() {
+    const token = await getAccessToken();
+    if (token) {
+        return { 'Authorization': `Bearer ${token}` };
+    }
+    return {};
 }
 
 // ─── Load Scan History ─────────────────────────────────────────────────────────
@@ -503,81 +679,6 @@ async function deleteHistoryItem(id) {
     } catch (error) {
         console.error('Delete history error:', error);
         showToast('Failed to delete scan', 'error');
-    }
-}
-
-// ─── Sign In with Google ───────────────────────────────────────────────────────
-
-async function signInWithGoogle() {
-    if (!supabaseClient) {
-        try {
-            const response = await fetch(`${API_BASE_URL}/auth/config`);
-            const data = await response.json();
-            
-            if (!data.success || !data.config || !data.config.supabase_url || !data.config.supabase_key) {
-                console.error('Auth config unavailable');
-                showToast('Authentication service unavailable. Please try again later.', 'error');
-                return;
-            }
-            
-            authConfig = data.config;
-            
-            if (typeof supabase === 'undefined') {
-                console.error('Supabase library not loaded');
-                showToast('Authentication library not loaded. Please refresh the page.', 'error');
-                return;
-            }
-            
-            const { createClient } = supabase;
-            supabaseClient = createClient(authConfig.supabase_url, authConfig.supabase_key);
-            
-            supabaseClient.auth.onAuthStateChange(async (event, session) => {
-                if (event === 'SIGNED_IN' && session) {
-                    currentUser = session.user;
-                    isGuestMode = false;
-                    sessionStorage.removeItem('nsu_guest_mode');
-                    await syncUserToBackend();
-                    updateAuthUI(true);
-                    showMainContent();
-                } else if (event === 'SIGNED_OUT') {
-                    currentUser = null;
-                    updateAuthUI(false);
-                }
-            });
-        } catch (error) {
-            console.error('Failed to initialize auth:', error);
-            showToast('Failed to initialize authentication. Please try again.', 'error');
-            return;
-        }
-    }
-    
-    try {
-        const { data, error } = await supabaseClient.auth.signInWithOAuth({
-            provider: 'google',
-            options: {
-                redirectTo: window.location.origin,
-                queryParams: {
-                    access_type: 'offline',
-                    prompt: 'consent',
-                }
-            }
-        });
-        
-        if (error) {
-            console.error('OAuth error:', error);
-            
-            if (error.message.includes('unexpected_failure')) {
-                showToast('Google OAuth not configured in Supabase. Please contact administrator.', 'error');
-            } else if (error.message.includes('redirect_uri_mismatch')) {
-                showToast('OAuth redirect URL mismatch. Please contact administrator.', 'error');
-            } else {
-                showToast('Sign in failed: ' + error.message, 'error');
-            }
-            throw error;
-        }
-        
-    } catch (error) {
-        console.error('Sign in error:', error);
     }
 }
 
