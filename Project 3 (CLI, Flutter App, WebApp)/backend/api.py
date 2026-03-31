@@ -118,13 +118,12 @@ def create_app():
         format='%(asctime)s [%(levelname)s] %(message)s',
         handlers=[logging.StreamHandler()]
     )
-    
-    logger.info("NSU Degree Audit API initialized")
 
     return app
 
 app = create_app()
 logger = logging.getLogger(__name__)
+logger.info("NSU Degree Audit API initialized")
 
 # Knowledge base path
 KB_PATH = Path(__file__).parent.parent / 'knowledge_base.md'
