@@ -399,6 +399,12 @@ def health():
 def upload():
     """Process transcript upload via OCR and return analysis."""
     
+    # Log auth status
+    if g.user:
+        logger.info(f"Upload request from authenticated user: {g.user.get('email')}")
+    else:
+        logger.info("Upload request from unauthenticated user (guest mode)")
+    
     if 'file' not in request.files:
         return jsonify({'success': False, 'error': 'No file provided'}), 400
 
@@ -491,13 +497,16 @@ def upload():
         # Save to history if user is authenticated
         scan_id = None
         if g.user and DB_AVAILABLE:
+            logger.info(f"Attempting to save scan for user: {g.user.get('email')}")
             try:
                 # Get db_id for database operations
                 db_user_id = g.user.get('db_id')
                 if not db_user_id:
+                    logger.info(f"No db_id in g.user, fetching from database by email: {g.user['email']}")
                     # Try to get from database by email
                     db_user = get_user_by_email(g.user['email'])
                     if not db_user:
+                        logger.info(f"User not found in database, creating: {g.user['email']}")
                         # Create user if doesn't exist
                         db_user = create_user(
                             email=g.user['email'],
@@ -506,9 +515,11 @@ def upload():
                         )
                     if db_user:
                         db_user_id = db_user['id']
+                        logger.info(f"Got db_user_id: {db_user_id}")
                 
                 if db_user_id:
                     level2 = result.get('level2', {})
+                    logger.info(f"Saving scan: {file.filename}, courses: {len(courses)}, cgpa: {level2.get('cgpa', 0)}")
                     scan_record = save_scan(
                         user_id=db_user_id,
                         filename=file.filename,
@@ -521,9 +532,17 @@ def upload():
                     if scan_record:
                         scan_id = scan_record['id']
                         result['scan_id'] = scan_id
-                        logger.info(f"Scan saved to history: {scan_id}")
+                        logger.info(f"✓ Scan saved to history: {scan_id}")
+                    else:
+                        logger.error("save_scan returned None")
+                else:
+                    logger.error("Could not get db_user_id")
             except Exception as e:
-                logger.warning(f"Failed to save to history: {e}")
+                logger.exception(f"Failed to save to history: {e}")
+        elif not g.user:
+            logger.info("No user in g.user, skipping history save")
+        elif not DB_AVAILABLE:
+            logger.warning("Database not available, skipping history save")
 
         logger.info(f"Analysis complete: {len(courses)} courses processed")
         return jsonify({'success': True, 'data': result})
