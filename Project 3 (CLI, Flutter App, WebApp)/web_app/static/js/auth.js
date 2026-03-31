@@ -139,16 +139,48 @@ async function syncUserToBackend() {
 // ─── Sign In with Google ───────────────────────────────────────────────────────
 
 async function signInWithGoogle() {
+    // If supabaseClient is not initialized, try to initialize it now
     if (!supabaseClient) {
-        // If in guest mode or auth not initialized, go back to auth landing
-        if (isGuestMode || !authInitialized) {
-            isGuestMode = false;
-            sessionStorage.removeItem('nsu_guest_mode');
-            showAuthLanding();
+        try {
+            // Get auth config from backend
+            const response = await fetch(`${API_BASE_URL}/auth/config`);
+            const data = await response.json();
+            
+            if (!data.success || !data.config.supabase_url || !data.config.supabase_key) {
+                showToast('Authentication service not configured. Please contact administrator.', 'error');
+                return;
+            }
+            
+            authConfig = data.config;
+            
+            // Initialize Supabase client
+            if (typeof supabase === 'undefined') {
+                showToast('Authentication library not loaded. Please refresh the page.', 'error');
+                return;
+            }
+            
+            const { createClient } = supabase;
+            supabaseClient = createClient(authConfig.supabase_url, authConfig.supabase_key);
+            
+            // Setup auth state listener
+            supabaseClient.auth.onAuthStateChange(async (event, session) => {
+                if (event === 'SIGNED_IN' && session) {
+                    currentUser = session.user;
+                    isGuestMode = false;
+                    sessionStorage.removeItem('nsu_guest_mode');
+                    await syncUserToBackend();
+                    updateAuthUI(true);
+                    showMainContent();
+                } else if (event === 'SIGNED_OUT') {
+                    currentUser = null;
+                    updateAuthUI(false);
+                }
+            });
+        } catch (error) {
+            console.error('Failed to initialize auth:', error);
+            showToast('Failed to initialize authentication. Please try again.', 'error');
             return;
         }
-        showToast('Authentication not available', 'error');
-        return;
     }
     
     try {
