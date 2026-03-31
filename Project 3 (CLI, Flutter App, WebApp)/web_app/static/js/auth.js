@@ -10,6 +10,7 @@ let currentUser = null;
 let authConfig = null;
 let isGuestMode = false;
 let authInitialized = false;
+let authStateListenerRegistered = false;
 
 // ─── Initialize Auth ───────────────────────────────────────────────────────────
 
@@ -46,11 +47,55 @@ async function initAuth() {
         const { createClient } = supabase;
         supabaseClient = createClient(authConfig.supabase_url, authConfig.supabase_key);
         
+        // Register auth state listener ONCE
+        if (!authStateListenerRegistered) {
+            supabaseClient.auth.onAuthStateChange(async (event, session) => {
+                console.log('Auth state change:', event);
+                
+                if (event === 'SIGNED_IN' && session) {
+                    currentUser = session.user;
+                    isGuestMode = false;
+                    sessionStorage.removeItem('nsu_guest_mode');
+                    
+                    // Show loading overlay immediately
+                    showAuthLoading();
+                    
+                    // Sync user to backend with timeout
+                    try {
+                        await Promise.race([
+                            syncUserToBackend(),
+                            new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 5000))
+                        ]);
+                    } catch (error) {
+                        console.warn('User sync timeout or error:', error);
+                        // Continue anyway - sync is not critical
+                    }
+                    
+                    // Show success animation
+                    await showAuthSuccess();
+                    
+                    // Update UI and show main content
+                    updateAuthUI(true);
+                    hideAuthLoading();
+                    showMainContent();
+                } else if (event === 'SIGNED_OUT') {
+                    currentUser = null;
+                    updateAuthUI(false);
+                }
+            });
+            authStateListenerRegistered = true;
+        }
+        
         // Check for existing session
         const { data: { session } } = await supabaseClient.auth.getSession();
         if (session) {
             currentUser = session.user;
-            await syncUserToBackend();
+            // Don't show loading for existing session, just sync silently
+            try {
+                await syncUserToBackend();
+            } catch (error) {
+                console.warn('Silent sync failed:', error);
+            }
             updateAuthUI(true);
             showMainContent();
         } else {
@@ -59,44 +104,11 @@ async function initAuth() {
             if (hashParams.has('access_token')) {
                 // OAuth callback in progress, show loading immediately
                 showAuthLoading();
+                // The auth state listener will handle the rest
             } else {
                 showAuthLanding();
             }
         }
-        
-        // Listen for auth changes
-        supabaseClient.auth.onAuthStateChange(async (event, session) => {
-            if (event === 'SIGNED_IN' && session) {
-                currentUser = session.user;
-                isGuestMode = false;
-                sessionStorage.removeItem('nsu_guest_mode');
-                
-                // Show loading overlay immediately
-                showAuthLoading();
-                
-                // Sync user to backend with timeout
-                try {
-                    await Promise.race([
-                        syncUserToBackend(),
-                        new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 5000))
-                    ]);
-                } catch (error) {
-                    console.warn('User sync timeout or error:', error);
-                    // Continue anyway - sync is not critical
-                }
-                
-                // Show success animation
-                await showAuthSuccess();
-                
-                // Update UI and show main content
-                updateAuthUI(true);
-                hideAuthLoading();
-                showMainContent();
-            } else if (event === 'SIGNED_OUT') {
-                currentUser = null;
-                updateAuthUI(false);
-            }
-        });
         
         // Setup click outside to close user menu
         document.addEventListener('click', (e) => {
@@ -148,11 +160,17 @@ function showAuthLoading() {
     const loadingOverlay = document.getElementById('auth-loading-overlay');
     const title = document.getElementById('auth-loading-title');
     const subtitle = document.getElementById('auth-loading-subtitle');
+    const spinner = document.querySelector('.auth-loading-spinner svg:first-child');
+    const checkmark = document.querySelector('.checkmark');
     
     if (landing) landing.style.display = 'none';
     if (loadingOverlay) loadingOverlay.style.display = 'flex';
     if (title) title.textContent = 'Creating your account...';
     if (subtitle) subtitle.textContent = 'Setting up your profile';
+    
+    // Reset spinner/checkmark state
+    if (spinner) spinner.style.display = 'block';
+    if (checkmark) checkmark.style.display = 'none';
 }
 
 async function showAuthSuccess() {
@@ -162,7 +180,7 @@ async function showAuthSuccess() {
     const checkmark = document.querySelector('.checkmark');
     
     // Wait a moment for sync to complete
-    await new Promise(resolve => setTimeout(resolve, 800));
+    await new Promise(resolve => setTimeout(resolve, 500));
     
     // Show success state
     if (spinner) spinner.style.display = 'none';
@@ -171,7 +189,7 @@ async function showAuthSuccess() {
     if (subtitle) subtitle.textContent = 'Redirecting to dashboard...';
     
     // Wait for animation
-    await new Promise(resolve => setTimeout(resolve, 1200));
+    await new Promise(resolve => setTimeout(resolve, 1000));
 }
 
 function hideAuthLoading() {
@@ -212,6 +230,7 @@ async function syncUserToBackend() {
 // ─── Sign In with Google ───────────────────────────────────────────────────────
 
 async function signInWithGoogle() {
+    // Initialize Supabase client if not already done
     if (!supabaseClient) {
         try {
             const response = await fetch(`${API_BASE_URL}/auth/config`);
@@ -234,38 +253,44 @@ async function signInWithGoogle() {
             const { createClient } = supabase;
             supabaseClient = createClient(authConfig.supabase_url, authConfig.supabase_key);
             
-            supabaseClient.auth.onAuthStateChange(async (event, session) => {
-                if (event === 'SIGNED_IN' && session) {
-                    currentUser = session.user;
-                    isGuestMode = false;
-                    sessionStorage.removeItem('nsu_guest_mode');
+            // Register auth state listener ONCE
+            if (!authStateListenerRegistered) {
+                supabaseClient.auth.onAuthStateChange(async (event, session) => {
+                    console.log('Auth state change:', event);
                     
-                    // Show loading overlay
-                    showAuthLoading();
-                    
-                    // Sync user to backend with timeout
-                    try {
-                        await Promise.race([
-                            syncUserToBackend(),
-                            new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 5000))
-                        ]);
-                    } catch (error) {
-                        console.warn('User sync timeout or error:', error);
-                        // Continue anyway - sync is not critical
+                    if (event === 'SIGNED_IN' && session) {
+                        currentUser = session.user;
+                        isGuestMode = false;
+                        sessionStorage.removeItem('nsu_guest_mode');
+                        
+                        // Show loading overlay
+                        showAuthLoading();
+                        
+                        // Sync user to backend with timeout
+                        try {
+                            await Promise.race([
+                                syncUserToBackend(),
+                                new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 5000))
+                            ]);
+                        } catch (error) {
+                            console.warn('User sync timeout or error:', error);
+                            // Continue anyway - sync is not critical
+                        }
+                        
+                        // Show success animation
+                        await showAuthSuccess();
+                        
+                        // Update UI and show main content
+                        updateAuthUI(true);
+                        hideAuthLoading();
+                        showMainContent();
+                    } else if (event === 'SIGNED_OUT') {
+                        currentUser = null;
+                        updateAuthUI(false);
                     }
-                    
-                    // Show success animation
-                    await showAuthSuccess();
-                    
-                    // Update UI and show main content
-                    updateAuthUI(true);
-                    hideAuthLoading();
-                    showMainContent();
-                } else if (event === 'SIGNED_OUT') {
-                    currentUser = null;
-                    updateAuthUI(false);
-                }
-            });
+                });
+                authStateListenerRegistered = true;
+            }
         } catch (error) {
             console.error('Failed to initialize auth:', error);
             showToast('Failed to initialize authentication. Please try again.', 'error');
@@ -430,63 +455,11 @@ async function syncUserToBackend() {
 // ─── Sign In with Google ───────────────────────────────────────────────────────
 
 async function signInWithGoogle() {
+    // Initialize Supabase client if not already done
     if (!supabaseClient) {
-        try {
-            const response = await fetch(`${API_BASE_URL}/auth/config`);
-            const data = await response.json();
-            
-            if (!data.success || !data.config || !data.config.supabase_url || !data.config.supabase_key) {
-                console.error('Auth config unavailable');
-                showToast('Authentication service unavailable. Please try again later.', 'error');
-                return;
-            }
-            
-            authConfig = data.config;
-            
-            if (typeof supabase === 'undefined') {
-                console.error('Supabase library not loaded');
-                showToast('Authentication library not loaded. Please refresh the page.', 'error');
-                return;
-            }
-            
-            const { createClient } = supabase;
-            supabaseClient = createClient(authConfig.supabase_url, authConfig.supabase_key);
-            
-            supabaseClient.auth.onAuthStateChange(async (event, session) => {
-                if (event === 'SIGNED_IN' && session) {
-                    currentUser = session.user;
-                    isGuestMode = false;
-                    sessionStorage.removeItem('nsu_guest_mode');
-                    
-                    // Show loading overlay
-                    showAuthLoading();
-                    
-                    // Sync user to backend with timeout
-                    try {
-                        await Promise.race([
-                            syncUserToBackend(),
-                            new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 5000))
-                        ]);
-                    } catch (error) {
-                        console.warn('User sync timeout or error:', error);
-                        // Continue anyway - sync is not critical
-                    }
-                    
-                    // Show success animation
-                    await showAuthSuccess();
-                    
-                    // Update UI and show main content
-                    updateAuthUI(true);
-                    hideAuthLoading();
-                    showMainContent();
-                } else if (event === 'SIGNED_OUT') {
-                    currentUser = null;
-                    updateAuthUI(false);
-                }
-            });
-        } catch (error) {
-            console.error('Failed to initialize auth:', error);
-            showToast('Failed to initialize authentication. Please try again.', 'error');
+        await initAuth();
+        if (!supabaseClient) {
+            showToast('Failed to initialize authentication', 'error');
             return;
         }
     }
@@ -685,16 +658,5 @@ async function deleteHistoryItem(id) {
 // ─── Initialize on DOM Ready ───────────────────────────────────────────────────
 
 document.addEventListener('DOMContentLoaded', () => {
-    const authButton = document.getElementById('auth-button');
-    if (authButton) {
-        authButton.addEventListener('click', () => {
-            if (currentUser) {
-                toggleUserMenu();
-            } else {
-                signInWithGoogle();
-            }
-        });
-    }
-    
     initAuth();
 });
