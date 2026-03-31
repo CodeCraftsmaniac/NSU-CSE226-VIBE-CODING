@@ -54,7 +54,14 @@ async function initAuth() {
             updateAuthUI(true);
             showMainContent();
         } else {
-            showAuthLanding();
+            // Check URL hash for OAuth callback
+            const hashParams = new URLSearchParams(window.location.hash.substring(1));
+            if (hashParams.has('access_token')) {
+                // OAuth callback in progress, wait for auth state change
+                console.log('OAuth callback detected, waiting for session...');
+            } else {
+                showAuthLanding();
+            }
         }
         
         // Listen for auth changes
