@@ -623,15 +623,26 @@ def auth_google():
             except Exception:
                 pass  # Avatar update is not critical
         
-        # Generate a simple session token (user ID + timestamp hash)
+        # Generate a verifiable session token (JWT-like but simpler)
         import hashlib
-        import time
-        token_data = f"{db_user['id']}:{time.time()}:{os.urandom(16).hex()}"
-        token = hashlib.sha256(token_data.encode()).hexdigest()
+        import hmac
+        import base64
+        import json as token_json
         
-        # Save token to database for later validation
-        if DB_AVAILABLE:
-            save_user_token(db_user['id'], token)
+        # Secret key for signing (uses service role key for security)
+        SECRET_KEY = os.getenv('SUPABASE_SERVICE_ROLE_KEY', 'fallback-secret-key')[:32]
+        
+        # Token payload
+        payload = {
+            'user_id': db_user['id'],
+            'email': db_user['email'],
+            'exp': int(time.time()) + (30 * 24 * 60 * 60)  # 30 days expiry
+        }
+        payload_b64 = base64.urlsafe_b64encode(token_json.dumps(payload).encode()).decode()
+        
+        # Sign the payload
+        signature = hmac.new(SECRET_KEY.encode(), payload_b64.encode(), hashlib.sha256).hexdigest()
+        token = f"{payload_b64}.{signature}"
         
         return jsonify({
             'success': True,

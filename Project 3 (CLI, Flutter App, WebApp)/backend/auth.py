@@ -100,20 +100,68 @@ def get_current_user() -> Optional[Dict[str, Any]]:
 
 
 def verify_cli_token(token: str) -> Optional[Dict[str, Any]]:
-    """Verify CLI token by looking up in database."""
+    """Verify CLI token (self-contained JWT-like token)."""
+    import hashlib
+    import hmac
+    import base64
+    import json
+    import time
+    
     try:
-        from database import get_user_by_token
-        db_user = get_user_by_token(token)
-        if db_user:
-            return {
-                'id': db_user['id'],
-                'db_id': db_user['id'],
-                'email': db_user['email'],
-                'name': db_user.get('name', ''),
-                'avatar_url': db_user.get('avatar_url', ''),
-                'provider': db_user.get('provider', 'cli'),
-                'created_at': db_user.get('created_at')
-            }
+        # Token format: base64_payload.signature
+        if '.' not in token:
+            return None
+        
+        parts = token.split('.', 1)
+        if len(parts) != 2:
+            return None
+        
+        payload_b64, signature = parts
+        
+        # Verify signature
+        SECRET_KEY = SUPABASE_SERVICE_ROLE_KEY[:32] if SUPABASE_SERVICE_ROLE_KEY else 'fallback-secret-key'
+        expected_sig = hmac.new(SECRET_KEY.encode(), payload_b64.encode(), hashlib.sha256).hexdigest()
+        
+        if not hmac.compare_digest(signature, expected_sig):
+            logger.debug("CLI token: signature mismatch")
+            return None
+        
+        # Decode payload
+        payload = json.loads(base64.urlsafe_b64decode(payload_b64.encode()).decode())
+        
+        # Check expiry
+        if payload.get('exp', 0) < time.time():
+            logger.debug("CLI token: expired")
+            return None
+        
+        # Get user from database to get full info
+        try:
+            from database import get_user_by_id
+            db_user = get_user_by_id(payload['user_id'])
+            if db_user:
+                return {
+                    'id': db_user['id'],
+                    'db_id': db_user['id'],
+                    'email': db_user['email'],
+                    'name': db_user.get('name', ''),
+                    'avatar_url': db_user.get('avatar_url', ''),
+                    'provider': db_user.get('provider', 'cli'),
+                    'created_at': db_user.get('created_at')
+                }
+        except Exception as e:
+            logger.debug(f"CLI token: db lookup failed: {e}")
+        
+        # Fallback: return info from token payload
+        return {
+            'id': payload['user_id'],
+            'db_id': payload['user_id'],
+            'email': payload['email'],
+            'name': '',
+            'avatar_url': '',
+            'provider': 'cli',
+            'created_at': None
+        }
+        
     except Exception as e:
         logger.debug(f"CLI token verification error: {e}")
     return None
