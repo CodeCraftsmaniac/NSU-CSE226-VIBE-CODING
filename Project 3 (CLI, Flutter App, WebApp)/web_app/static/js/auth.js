@@ -47,17 +47,18 @@ async function initAuth() {
         const { createClient } = supabase;
         supabaseClient = createClient(authConfig.supabase_url, authConfig.supabase_key);
         
-        // Register auth state listener ONCE
+        // Register auth state listener FIRST (before checking session)
         if (!authStateListenerRegistered) {
             supabaseClient.auth.onAuthStateChange(async (event, session) => {
                 console.log('Auth state change:', event);
                 
-                if (event === 'SIGNED_IN' && session) {
+                if (event === 'SIGNED_IN' && session && !currentUser) {
+                    // Only handle if this is a NEW sign-in (currentUser was null)
                     currentUser = session.user;
                     isGuestMode = false;
                     sessionStorage.removeItem('nsu_guest_mode');
                     
-                    // Show loading overlay immediately
+                    // Show loading overlay
                     showAuthLoading();
                     
                     // Sync user to backend with timeout
@@ -68,7 +69,6 @@ async function initAuth() {
                         ]);
                     } catch (error) {
                         console.warn('User sync timeout or error:', error);
-                        // Continue anyway - sync is not critical
                     }
                     
                     // Show success animation
@@ -78,36 +78,41 @@ async function initAuth() {
                     updateAuthUI(true);
                     hideAuthLoading();
                     showMainContent();
+                    
+                    // Clear URL hash
+                    if (window.location.hash) {
+                        history.replaceState(null, '', window.location.pathname);
+                    }
                 } else if (event === 'SIGNED_OUT') {
                     currentUser = null;
                     updateAuthUI(false);
+                    showAuthLanding();
                 }
             });
             authStateListenerRegistered = true;
         }
         
-        // Check for existing session
+        // Check for existing session AFTER listener is registered
         const { data: { session } } = await supabaseClient.auth.getSession();
+        
+        // Check URL hash for OAuth callback
+        const hashParams = new URLSearchParams(window.location.hash.substring(1));
+        const isOAuthCallback = hashParams.has('access_token');
+        
         if (session) {
+            // User already has a session - go straight to main content
             currentUser = session.user;
-            // Don't show loading for existing session, just sync silently
-            try {
-                await syncUserToBackend();
-            } catch (error) {
-                console.warn('Silent sync failed:', error);
-            }
             updateAuthUI(true);
             showMainContent();
+            
+            // Sync silently in background
+            syncUserToBackend().catch(err => console.warn('Background sync failed:', err));
+        } else if (isOAuthCallback) {
+            // OAuth callback in progress - show loading and wait for session
+            showAuthLoading();
         } else {
-            // Check URL hash for OAuth callback
-            const hashParams = new URLSearchParams(window.location.hash.substring(1));
-            if (hashParams.has('access_token')) {
-                // OAuth callback in progress, show loading immediately
-                showAuthLoading();
-                // The auth state listener will handle the rest
-            } else {
-                showAuthLanding();
-            }
+            // No session, no callback - show auth landing
+            showAuthLanding();
         }
         
         // Setup click outside to close user menu
@@ -157,6 +162,8 @@ function showMainContent() {
 
 function showAuthLoading() {
     const landing = document.getElementById('auth-landing');
+    const main = document.getElementById('main-content');
+    const header = document.querySelector('header');
     const loadingOverlay = document.getElementById('auth-loading-overlay');
     const title = document.getElementById('auth-loading-title');
     const subtitle = document.getElementById('auth-loading-subtitle');
@@ -164,6 +171,8 @@ function showAuthLoading() {
     const checkmark = document.querySelector('.checkmark');
     
     if (landing) landing.style.display = 'none';
+    if (main) main.style.display = 'none';
+    if (header) header.style.display = 'none';
     if (loadingOverlay) loadingOverlay.style.display = 'flex';
     if (title) title.textContent = 'Creating your account...';
     if (subtitle) subtitle.textContent = 'Setting up your profile';
@@ -180,7 +189,7 @@ async function showAuthSuccess() {
     const checkmark = document.querySelector('.checkmark');
     
     // Wait a moment for sync to complete
-    await new Promise(resolve => setTimeout(resolve, 500));
+    await new Promise(resolve => setTimeout(resolve, 300));
     
     // Show success state
     if (spinner) spinner.style.display = 'none';
@@ -189,7 +198,7 @@ async function showAuthSuccess() {
     if (subtitle) subtitle.textContent = 'Redirecting to dashboard...';
     
     // Wait for animation
-    await new Promise(resolve => setTimeout(resolve, 1000));
+    await new Promise(resolve => setTimeout(resolve, 800));
 }
 
 function hideAuthLoading() {
@@ -398,6 +407,8 @@ function showMainContent() {
 
 function showAuthLoading() {
     const landing = document.getElementById('auth-landing');
+    const main = document.getElementById('main-content');
+    const header = document.querySelector('header');
     const loadingOverlay = document.getElementById('auth-loading-overlay');
     const title = document.getElementById('auth-loading-title');
     const subtitle = document.getElementById('auth-loading-subtitle');
@@ -405,6 +416,8 @@ function showAuthLoading() {
     const checkmark = document.querySelector('.checkmark');
     
     if (landing) landing.style.display = 'none';
+    if (main) main.style.display = 'none';
+    if (header) header.style.display = 'none';
     if (loadingOverlay) loadingOverlay.style.display = 'flex';
     if (title) title.textContent = 'Creating your account...';
     if (subtitle) subtitle.textContent = 'Setting up your profile';
@@ -421,7 +434,7 @@ async function showAuthSuccess() {
     const checkmark = document.querySelector('.checkmark');
     
     // Wait a moment for sync to complete
-    await new Promise(resolve => setTimeout(resolve, 500));
+    await new Promise(resolve => setTimeout(resolve, 300));
     
     // Show success state
     if (spinner) spinner.style.display = 'none';
@@ -430,7 +443,7 @@ async function showAuthSuccess() {
     if (subtitle) subtitle.textContent = 'Redirecting to dashboard...';
     
     // Wait for animation
-    await new Promise(resolve => setTimeout(resolve, 1000));
+    await new Promise(resolve => setTimeout(resolve, 800));
 }
 
 function hideAuthLoading() {
