@@ -118,6 +118,8 @@ def create_app():
         format='%(asctime)s [%(levelname)s] %(message)s',
         handlers=[logging.StreamHandler()]
     )
+    
+    logger.info("NSU Degree Audit API initialized")
 
     return app
 
