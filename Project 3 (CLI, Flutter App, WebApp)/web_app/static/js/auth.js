@@ -28,7 +28,6 @@ async function initAuth() {
         
         if (!data.success || !data.config || !data.config.supabase_url || !data.config.supabase_key) {
             console.warn('Auth config not available or incomplete');
-            // Show auth landing anyway - user can use guest mode
             showAuthLanding();
             authInitialized = true;
             return false;
@@ -53,9 +52,8 @@ async function initAuth() {
             currentUser = session.user;
             await syncUserToBackend();
             updateAuthUI(true);
-            showMainContent(); // Already signed in, skip landing
+            showMainContent();
         } else {
-            // Show auth landing for new users
             showAuthLanding();
         }
         
@@ -87,7 +85,6 @@ async function initAuth() {
         return true;
     } catch (error) {
         console.error('Auth init error:', error);
-        // Show auth landing on error - user can still use guest mode
         showAuthLanding();
         authInitialized = true;
         return false;
@@ -213,7 +210,6 @@ async function signInWithGoogle() {
         
     } catch (error) {
         console.error('Sign in error:', error);
-        // Error already shown via toast above
     }
 }
 
@@ -229,7 +225,7 @@ async function signOut() {
         sessionStorage.removeItem('nsu_guest_mode');
         updateAuthUI(false);
         closeUserMenu();
-        showAuthLanding(); // Show auth landing after sign out
+        showAuthLanding();
         showToast('Signed out successfully', 'success');
     } catch (error) {
         console.error('Sign out error:', error);
@@ -262,7 +258,6 @@ function updateAuthUI(isSignedIn) {
     const userMenu = document.getElementById('user-menu');
     
     if (isSignedIn && currentUser) {
-        // Update auth button to show user avatar
         if (authButton) {
             const avatarUrl = currentUser.user_metadata?.avatar_url || currentUser.user_metadata?.picture;
             const name = currentUser.user_metadata?.full_name || currentUser.user_metadata?.name || currentUser.email;
@@ -278,12 +273,10 @@ function updateAuthUI(isSignedIn) {
             authButton.classList.add('signed-in');
         }
         
-        // Show user menu
         if (userMenu) {
             userMenu.style.display = 'block';
         }
     } else {
-        // Show sign in button
         if (authButton) {
             authButton.innerHTML = `
                 <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
@@ -298,7 +291,6 @@ function updateAuthUI(isSignedIn) {
             authButton.classList.remove('signed-in');
         }
         
-        // Hide user menu
         if (userMenu) {
             userMenu.style.display = 'none';
             userMenu.classList.remove('show');
@@ -335,7 +327,6 @@ async function loadHistory() {
     
     closeUserMenu();
     
-    // Show modal
     if (historyModal) {
         historyModal.classList.add('show');
     }
@@ -413,7 +404,6 @@ async function viewHistoryItem(id) {
         
         if (data.success && data.scan && data.scan.analysis_data) {
             closeHistoryModal();
-            // Display the saved analysis
             if (typeof displayResults === 'function') {
                 displayResults(data.scan.analysis_data);
             }
@@ -437,7 +427,7 @@ async function deleteHistoryItem(id) {
         
         if (data.success) {
             showToast('Scan deleted successfully', 'success');
-            loadHistory(); // Reload history
+            loadHistory();
         } else {
             showToast('Failed to delete scan', 'error');
         }
@@ -447,10 +437,84 @@ async function deleteHistoryItem(id) {
     }
 }
 
+// ─── Sign In with Google ───────────────────────────────────────────────────────
+
+async function signInWithGoogle() {
+    if (!supabaseClient) {
+        try {
+            const response = await fetch(`${API_BASE_URL}/auth/config`);
+            const data = await response.json();
+            
+            if (!data.success || !data.config || !data.config.supabase_url || !data.config.supabase_key) {
+                console.error('Auth config unavailable');
+                showToast('Authentication service unavailable. Please try again later.', 'error');
+                return;
+            }
+            
+            authConfig = data.config;
+            
+            if (typeof supabase === 'undefined') {
+                console.error('Supabase library not loaded');
+                showToast('Authentication library not loaded. Please refresh the page.', 'error');
+                return;
+            }
+            
+            const { createClient } = supabase;
+            supabaseClient = createClient(authConfig.supabase_url, authConfig.supabase_key);
+            
+            supabaseClient.auth.onAuthStateChange(async (event, session) => {
+                if (event === 'SIGNED_IN' && session) {
+                    currentUser = session.user;
+                    isGuestMode = false;
+                    sessionStorage.removeItem('nsu_guest_mode');
+                    await syncUserToBackend();
+                    updateAuthUI(true);
+                    showMainContent();
+                } else if (event === 'SIGNED_OUT') {
+                    currentUser = null;
+                    updateAuthUI(false);
+                }
+            });
+        } catch (error) {
+            console.error('Failed to initialize auth:', error);
+            showToast('Failed to initialize authentication. Please try again.', 'error');
+            return;
+        }
+    }
+    
+    try {
+        const { data, error } = await supabaseClient.auth.signInWithOAuth({
+            provider: 'google',
+            options: {
+                redirectTo: window.location.origin,
+                queryParams: {
+                    access_type: 'offline',
+                    prompt: 'consent',
+                }
+            }
+        });
+        
+        if (error) {
+            console.error('OAuth error:', error);
+            
+            if (error.message.includes('unexpected_failure')) {
+                showToast('Google OAuth not configured in Supabase. Please contact administrator.', 'error');
+            } else if (error.message.includes('redirect_uri_mismatch')) {
+                showToast('OAuth redirect URL mismatch. Please contact administrator.', 'error');
+            } else {
+                showToast('Sign in failed: ' + error.message, 'error');
+            }
+            throw error;
+        }
+        
+    } catch (error) {
+        console.error('Sign in error:', error);
+    }
+}
+
 // ─── Initialize on DOM Ready ───────────────────────────────────────────────────
 
 document.addEventListener('DOMContentLoaded', () => {
-    // Set up auth button click handler immediately
     const authButton = document.getElementById('auth-button');
     if (authButton) {
         authButton.addEventListener('click', () => {
@@ -462,6 +526,5 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
     
-    // Initialize auth system
     initAuth();
 });
