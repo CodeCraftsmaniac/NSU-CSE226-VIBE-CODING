@@ -12,8 +12,8 @@ from flask import request, jsonify, g
 
 # Supabase configuration
 SUPABASE_URL = os.getenv('SUPABASE_URL', 'https://kmbltplmjdkjlbungbbh.supabase.co')
-SUPABASE_KEY = os.getenv('SUPABASE_KEY', '')  # Anon key for frontend
-SUPABASE_SERVICE_ROLE_KEY = os.getenv('SUPABASE_SERVICE_ROLE_KEY', '')  # Service role for backend
+SUPABASE_KEY = os.getenv('SUPABASE_KEY', 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImttYmx0cGxtamRramxidW5nYmJoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njc2Mjc1MDksImV4cCI6MjA4MzIwMzUwOX0.IRoQ306ElYZh8WoTN1dXMVr9mSd20-RPxwKYZ6M6Lcg')  # Anon key for frontend
+SUPABASE_SERVICE_ROLE_KEY = os.getenv('SUPABASE_SERVICE_ROLE_KEY', 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImttYmx0cGxtamRramxidW5nYmJoIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2NzYyNzUwOSwiZXhwIjoyMDgzMjAzNTA5fQ.CCtw4HCNIXB95TW4Ry1mAtB3__XoL1W8s49kXKHDzdI')  # Service role for backend
 
 _supabase_client = None
 
@@ -120,6 +120,6 @@ def get_auth_config() -> Dict[str, Any]:
     return {
         'supabase_url': SUPABASE_URL,
         'supabase_key': SUPABASE_KEY,  # Send anon key to frontend
-        'google_client_id': os.getenv('GOOGLE_CLIENT_ID', ''),
+        'google_client_id': os.getenv('GOOGLE_CLIENT_ID', '656129640010-k1f9dl8cbadngqdm8dnribi9doon67ko.apps.googleusercontent.com'),
         'callback_url': f"{SUPABASE_URL}/auth/v1/callback"
     }
