@@ -23,22 +23,11 @@ async function initAuth() {
     
     try {
         // Get auth config from backend
-        console.log('Fetching auth config from:', `${API_BASE_URL}/auth/config`);
         const response = await fetch(`${API_BASE_URL}/auth/config`);
         const data = await response.json();
         
-        console.log('Auth config response:', data);
-        console.log('Config object:', data.config);
-        console.log('Has supabase_url?', data.config?.supabase_url);
-        console.log('Has supabase_key?', data.config?.supabase_key);
-        
         if (!data.success || !data.config || !data.config.supabase_url || !data.config.supabase_key) {
-            console.warn('Auth config not available or incomplete', {
-                success: data.success,
-                hasConfig: !!data.config,
-                hasUrl: !!data.config?.supabase_url,
-                hasKey: !!data.config?.supabase_key
-            });
+            console.warn('Auth config not available or incomplete');
             // Show auth landing anyway - user can use guest mode
             showAuthLanding();
             authInitialized = true;
@@ -154,32 +143,16 @@ async function signInWithGoogle() {
     if (!supabaseClient) {
         try {
             // Get auth config from backend
-            console.log('Fetching auth config for sign in from:', `${API_BASE_URL}/auth/config`);
             const response = await fetch(`${API_BASE_URL}/auth/config`);
             const data = await response.json();
             
-            console.log('Auth config for sign in:', data);
-            console.log('Config object:', data.config);
-            console.log('Has supabase_url?', data.config?.supabase_url);
-            console.log('Has supabase_key?', data.config?.supabase_key);
-            
             if (!data.success || !data.config || !data.config.supabase_url || !data.config.supabase_key) {
-                console.error('Auth config invalid:', {
-                    success: data.success,
-                    hasConfig: !!data.config,
-                    hasUrl: !!data.config?.supabase_url,
-                    hasKey: !!data.config?.supabase_key
-                });
+                console.error('Auth config unavailable');
                 showToast('Authentication service unavailable. Please try again later.', 'error');
                 return;
             }
             
             authConfig = data.config;
-            console.log('Auth config loaded:', {
-                hasUrl: !!authConfig.supabase_url,
-                hasKey: !!authConfig.supabase_key,
-                url: authConfig.supabase_url
-            });
             
             // Initialize Supabase client
             if (typeof supabase === 'undefined') {
@@ -190,11 +163,9 @@ async function signInWithGoogle() {
             
             const { createClient } = supabase;
             supabaseClient = createClient(authConfig.supabase_url, authConfig.supabase_key);
-            console.log('Supabase client created successfully');
             
             // Setup auth state listener
             supabaseClient.auth.onAuthStateChange(async (event, session) => {
-                console.log('Auth state changed:', event);
                 if (event === 'SIGNED_IN' && session) {
                     currentUser = session.user;
                     isGuestMode = false;
@@ -215,7 +186,6 @@ async function signInWithGoogle() {
     }
     
     try {
-        console.log('Starting OAuth sign-in...');
         const { data, error } = await supabaseClient.auth.signInWithOAuth({
             provider: 'google',
             options: {
@@ -226,8 +196,6 @@ async function signInWithGoogle() {
                 }
             }
         });
-        
-        console.log('OAuth response:', { data, error });
         
         if (error) {
             console.error('OAuth error:', error);

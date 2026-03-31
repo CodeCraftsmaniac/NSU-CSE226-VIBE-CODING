@@ -15,8 +15,8 @@ on:
       - '.github/workflows/deploy-backend.yml'
 
 env:
-  PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
-  SERVICE_NAME: nsu-audit-api
+  PROJECT_ID: galvanic-deck-478816-u9
+  SERVICE_NAME: cse226-ocr-p2-nsunexus-backend-cli-web-app
   REGION: us-central1
 
 jobs:

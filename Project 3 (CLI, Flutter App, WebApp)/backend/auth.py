@@ -117,9 +117,15 @@ def optional_auth(f):
 
 def get_auth_config() -> Dict[str, Any]:
     """Get auth configuration for frontend."""
+    # Get Google Client ID and clean it (remove any accidentally concatenated secret)
+    google_client_id = os.getenv('GOOGLE_CLIENT_ID', '656129640010-k1f9dl8cbadngqdm8dnribi9doon67ko.apps.googleusercontent.com')
+    # Clean up if secret was accidentally concatenated
+    if ' ' in google_client_id:
+        google_client_id = google_client_id.split(' ')[0]
+    
     return {
         'supabase_url': SUPABASE_URL,
         'supabase_key': SUPABASE_KEY,  # Send anon key to frontend
-        'google_client_id': os.getenv('GOOGLE_CLIENT_ID', '656129640010-k1f9dl8cbadngqdm8dnribi9doon67ko.apps.googleusercontent.com'),
+        'google_client_id': google_client_id,
         'callback_url': f"{SUPABASE_URL}/auth/v1/callback"
     }
