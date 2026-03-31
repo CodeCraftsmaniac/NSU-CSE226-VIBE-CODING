@@ -184,8 +184,11 @@ async function signOut() {
     try {
         await supabaseClient.auth.signOut();
         currentUser = null;
+        isGuestMode = false;
+        sessionStorage.removeItem('nsu_guest_mode');
         updateAuthUI(false);
         closeUserMenu();
+        showAuthLanding(); // Show auth landing after sign out
         showToast('Signed out successfully', 'success');
     } catch (error) {
         console.error('Sign out error:', error);
