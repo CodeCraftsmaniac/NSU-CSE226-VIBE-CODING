@@ -6,7 +6,9 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 
+import '../services/supabase_service.dart';
 import '../widgets/glass_widgets.dart';
+import 'history_screen.dart';
 
 // Cloud Run backend API with custom domain
 const defaultApiBaseUrl = String.fromEnvironment(
@@ -34,7 +36,10 @@ List<dynamic> asList(dynamic value) => value is List ? value : <dynamic>[];
 enum UploadStage { idle, uploading, ready, failure }
 
 class HomeScreen extends StatefulWidget {
-  const HomeScreen({super.key});
+  const HomeScreen({super.key, this.initialData});
+  
+  /// Optional initial data from history screen
+  final Map<String, dynamic>? initialData;
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -61,11 +66,19 @@ class _HomeScreenState extends State<HomeScreen> {
   double progress = 0;
   int selectedLevel = 1;
   int progressIndex = 0;
+  bool _isSigningIn = false;
 
   @override
   void initState() {
     super.initState();
     endpointController = TextEditingController(text: apiBaseUrl);
+    
+    // Load initial data from history if provided
+    if (widget.initialData != null) {
+      data = widget.initialData;
+      stage = UploadStage.ready;
+      statusMessage = 'Loaded from history. Explore Level 1, 2, and 3 below.';
+    }
   }
 
   @override
@@ -75,10 +88,54 @@ class _HomeScreenState extends State<HomeScreen> {
     super.dispose();
   }
 
+  Future<void> _handleGoogleSignIn() async {
+    if (_isSigningIn) return;
+    
+    setState(() => _isSigningIn = true);
+    
+    try {
+      final user = await authService.signInWithGoogle();
+      if (user != null && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Welcome, ${user['name'] ?? user['email']}!'),
+            backgroundColor: const Color(0xFF0066CC),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Sign in failed: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isSigningIn = false);
+      }
+    }
+  }
+
+  Future<void> _handleSignOut() async {
+    await authService.signOut();
+    if (mounted) {
+      setState(() {});
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Signed out successfully'),
+          backgroundColor: Color(0xFF64748B),
+        ),
+      );
+    }
+  }
+
   Future<void> pickTranscript() async {
     final selection = await FilePicker.platform.pickFiles(
       type: FileType.custom,
-      allowedExtensions: const ['pdf', 'png', 'jpg', 'jpeg'],
+      allowedExtensions: const ['pdf', 'png', 'jpg', 'jpeg', 'csv'],
       withData: kIsWeb, // Load bytes on web, path on native
     );
     if (selection == null || selection.files.isEmpty) return;
@@ -259,6 +316,99 @@ class _HomeScreenState extends State<HomeScreen> {
                       ],
                     ),
                   ),
+                  // Auth button - Google Sign In or User Avatar
+                  if (authService.isAuthenticated)
+                    PopupMenuButton<String>(
+                      offset: const Offset(0, 40),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          CircleAvatar(
+                            radius: 16,
+                            backgroundImage: authService.currentUser?['avatar_url'] != null
+                                ? NetworkImage(authService.currentUser!['avatar_url'])
+                                : null,
+                            backgroundColor: const Color(0xFF0066CC),
+                            child: authService.currentUser?['avatar_url'] == null
+                                ? const Icon(Icons.person, size: 18, color: Colors.white)
+                                : null,
+                          ),
+                          const SizedBox(width: 4),
+                          const Icon(Icons.arrow_drop_down, color: Color(0xFF64748B)),
+                        ],
+                      ),
+                      itemBuilder: (context) => [
+                        PopupMenuItem(
+                          value: 'history',
+                          child: Row(
+                            children: const [
+                              Icon(Icons.history, size: 20),
+                              SizedBox(width: 12),
+                              Text('Scan History'),
+                            ],
+                          ),
+                        ),
+                        PopupMenuItem(
+                          value: 'signout',
+                          child: Row(
+                            children: const [
+                              Icon(Icons.logout, size: 20),
+                              SizedBox(width: 12),
+                              Text('Sign Out'),
+                            ],
+                          ),
+                        ),
+                      ],
+                      onSelected: (value) {
+                        if (value == 'history') {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(builder: (context) => const HistoryScreen()),
+                          );
+                        } else if (value == 'signout') {
+                          _handleSignOut();
+                        }
+                      },
+                    )
+                  else
+                    InkWell(
+                      onTap: _isSigningIn ? null : _handleGoogleSignIn,
+                      borderRadius: BorderRadius.circular(20),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        decoration: BoxDecoration(
+                          gradient: const LinearGradient(
+                            colors: [Color(0xFF4285F4), Color(0xFF1a73e8)],
+                          ),
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: _isSigningIn
+                            ? const SizedBox(
+                                width: 16,
+                                height: 16,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: Colors.white,
+                                ),
+                              )
+                            : Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: const [
+                                  Icon(Icons.login, size: 16, color: Colors.white),
+                                  SizedBox(width: 6),
+                                  Text(
+                                    'Sign in',
+                                    style: TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                      ),
+                    ),
                   IconButton(
                     onPressed: editEndpoint,
                     icon: const Icon(Icons.settings_outlined, color: Color(0xFF64748B)),

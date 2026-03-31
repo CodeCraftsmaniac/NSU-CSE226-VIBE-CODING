@@ -23,6 +23,9 @@ python-jose>=3.3.0     # JWT token handling
 gunicorn>=21.0.0       # Production WSGI server (Linux/Mac/Cloud Run)
 waitress>=2.1.0        # Production WSGI server (Windows compatible)
 
+# Load Testing (for 20 concurrent users verification)
+locust>=2.20.0         # Load testing framework
+
 # Optional: Rate limiting
 # flask-limiter>=3.0.0 # Rate limiting
 

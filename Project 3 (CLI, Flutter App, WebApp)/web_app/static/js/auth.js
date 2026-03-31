@@ -8,17 +8,29 @@
 let supabaseClient = null;
 let currentUser = null;
 let authConfig = null;
+let isGuestMode = false;
+let authInitialized = false;
 
 // ─── Initialize Auth ───────────────────────────────────────────────────────────
 
 async function initAuth() {
+    // Check guest mode first (before any API calls)
+    isGuestMode = sessionStorage.getItem('nsu_guest_mode') === 'true';
+    if (isGuestMode) {
+        showMainContent();
+        return true;
+    }
+    
     try {
         // Get auth config from backend
         const response = await fetch(`${API_BASE_URL}/auth/config`);
         const data = await response.json();
         
-        if (!data.success || !data.config.supabase_url) {
-            console.warn('Auth config not available');
+        if (!data.success || !data.config.supabase_url || !data.config.supabase_key) {
+            console.warn('Auth config not available or incomplete');
+            // Show auth landing anyway - user can use guest mode
+            showAuthLanding();
+            authInitialized = true;
             return false;
         }
         
@@ -27,6 +39,8 @@ async function initAuth() {
         // Initialize Supabase client (library loaded via CDN in HTML)
         if (typeof supabase === 'undefined') {
             console.warn('Supabase library not loaded');
+            showAuthLanding();
+            authInitialized = true;
             return false;
         }
         
@@ -39,14 +53,21 @@ async function initAuth() {
             currentUser = session.user;
             await syncUserToBackend();
             updateAuthUI(true);
+            showMainContent(); // Already signed in, skip landing
+        } else {
+            // Show auth landing for new users
+            showAuthLanding();
         }
         
         // Listen for auth changes
         supabaseClient.auth.onAuthStateChange(async (event, session) => {
             if (event === 'SIGNED_IN' && session) {
                 currentUser = session.user;
+                isGuestMode = false;
+                sessionStorage.removeItem('nsu_guest_mode');
                 await syncUserToBackend();
                 updateAuthUI(true);
+                showMainContent();
             } else if (event === 'SIGNED_OUT') {
                 currentUser = null;
                 updateAuthUI(false);
@@ -62,11 +83,44 @@ async function initAuth() {
             }
         });
         
+        authInitialized = true;
         return true;
     } catch (error) {
         console.error('Auth init error:', error);
+        // Show auth landing on error - user can still use guest mode
+        showAuthLanding();
+        authInitialized = true;
         return false;
     }
+}
+
+// ─── Auth Landing Control ──────────────────────────────────────────────────────
+
+function showAuthLanding() {
+    const landing = document.getElementById('auth-landing');
+    const main = document.getElementById('main-content');
+    const header = document.querySelector('header');
+    
+    if (landing) landing.style.display = 'flex';
+    if (main) main.style.display = 'none';
+    if (header) header.style.display = 'none';
+}
+
+function showMainContent() {
+    const landing = document.getElementById('auth-landing');
+    const main = document.getElementById('main-content');
+    const header = document.querySelector('header');
+    
+    if (landing) landing.style.display = 'none';
+    if (main) main.style.display = 'block';
+    if (header) header.style.display = 'block';
+}
+
+function continueAsGuest() {
+    isGuestMode = true;
+    sessionStorage.setItem('nsu_guest_mode', 'true');
+    showMainContent();
+    showToast('Continuing as guest. Your scans won\'t be saved.', 'info');
 }
 
 // ─── Sync User to Backend ──────────────────────────────────────────────────────
@@ -336,5 +390,18 @@ async function deleteHistoryItem(id) {
 // ─── Initialize on DOM Ready ───────────────────────────────────────────────────
 
 document.addEventListener('DOMContentLoaded', () => {
+    // Set up auth button click handler immediately
+    const authButton = document.getElementById('auth-button');
+    if (authButton) {
+        authButton.addEventListener('click', () => {
+            if (currentUser) {
+                toggleUserMenu();
+            } else {
+                signInWithGoogle();
+            }
+        });
+    }
+    
+    // Initialize auth system
     initAuth();
 });

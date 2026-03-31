@@ -1,0 +1,7 @@
+# NSU Degree Audit - Load Test Reports
+# =====================================
+# Generated HTML and CSV reports are stored here.
+# These files are gitignored.
+
+*.html
+*.csv

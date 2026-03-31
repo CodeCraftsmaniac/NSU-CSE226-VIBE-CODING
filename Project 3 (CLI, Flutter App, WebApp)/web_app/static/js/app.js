@@ -142,11 +142,11 @@ function initTabs() {
 
 // ─── File Handling ─────────────────────────────────────────────────────────────
 async function handleFile(file) {
-    const allowedExtensions = ['.pdf', '.png', '.jpg', '.jpeg'];
+    const allowedExtensions = ['.pdf', '.png', '.jpg', '.jpeg', '.csv'];
     const ext = '.' + (file.name.split('.').pop()?.toLowerCase() || '');
 
     if (!allowedExtensions.includes(ext)) {
-        showToast('Invalid file type. Only PDF, PNG, JPG allowed.');
+        showToast('Invalid file type. Allowed: PDF, PNG, JPG, CSV');
         return;
     }
 

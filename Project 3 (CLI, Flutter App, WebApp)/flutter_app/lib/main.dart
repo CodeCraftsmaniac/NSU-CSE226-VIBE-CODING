@@ -4,9 +4,13 @@ import 'package:device_preview/device_preview.dart';
 
 import 'widgets/glass_widgets.dart';
 import 'screens/splash_screen.dart';
+import 'services/supabase_service.dart';
 
-void main() {
+void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  
+  // Initialize auth service
+  await authService.initialize();
   
   runApp(
     DevicePreview(

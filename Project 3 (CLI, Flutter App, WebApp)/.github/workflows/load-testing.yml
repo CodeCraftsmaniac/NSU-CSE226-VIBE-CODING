@@ -1,0 +1,145 @@
+# NSU Degree Audit - Load Testing CI
+# ===================================
+# Automated load testing workflow for verifying 20 concurrent user support.
+#
+# Triggers:
+#   - Manual (workflow_dispatch)
+#   - Weekly schedule (Sunday at 2 AM UTC)
+#   - On push to main affecting backend code
+
+name: Load Testing
+
+on:
+  workflow_dispatch:
+    inputs:
+      test_preset:
+        description: 'Test preset to run'
+        required: true
+        default: 'default'
+        type: choice
+        options:
+          - quick
+          - default
+          - concurrent20
+          - stress
+      target_host:
+        description: 'Target host URL'
+        required: true
+        default: 'https://ocrapi.nsunexus.app'
+        type: string
+  
+  schedule:
+    # Run weekly on Sunday at 2 AM UTC
+    - cron: '0 2 * * 0'
+  
+  push:
+    branches: [main]
+    paths:
+      - 'backend/**'
+      - 'tests/**'
+      - 'Dockerfile'
+
+jobs:
+  load-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      
+      - name: Install dependencies
+        run: |
+          pip install locust requests
+      
+      - name: Determine test configuration
+        id: config
+        run: |
+          # Set defaults
+          PRESET="${{ github.event.inputs.test_preset || 'default' }}"
+          HOST="${{ github.event.inputs.target_host || 'https://ocrapi.nsunexus.app' }}"
+          
+          echo "preset=$PRESET" >> $GITHUB_OUTPUT
+          echo "host=$HOST" >> $GITHUB_OUTPUT
+          echo "Running $PRESET test against $HOST"
+      
+      - name: Run Load Test
+        id: loadtest
+        run: |
+          python tests/run_load_test.py \
+            --${{ steps.config.outputs.preset }} \
+            --host=${{ steps.config.outputs.host }}
+        continue-on-error: true
+      
+      - name: Upload Test Reports
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: load-test-reports-${{ github.run_id }}
+          path: |
+            tests/reports/*.html
+            tests/reports/*.csv
+          retention-days: 30
+      
+      - name: Parse Results and Create Summary
+        if: always()
+        run: |
+          echo "## 🔥 Load Test Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Preset:** ${{ steps.config.outputs.preset }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Target:** ${{ steps.config.outputs.host }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          # Find the latest stats CSV
+          STATS_FILE=$(ls -t tests/reports/*_stats.csv 2>/dev/null | head -1)
+          
+          if [ -f "$STATS_FILE" ]; then
+            echo "### Endpoint Statistics" >> $GITHUB_STEP_SUMMARY
+            echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+            cat "$STATS_FILE" >> $GITHUB_STEP_SUMMARY
+            echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          # Check if test passed
+          if [ "${{ steps.loadtest.outcome }}" == "success" ]; then
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "### ✅ Test PASSED" >> $GITHUB_STEP_SUMMARY
+            echo "System handled the load successfully!" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "### ❌ Test FAILED" >> $GITHUB_STEP_SUMMARY
+            echo "Check the detailed reports in artifacts." >> $GITHUB_STEP_SUMMARY
+          fi
+      
+      - name: Check Test Outcome
+        if: steps.loadtest.outcome == 'failure'
+        run: |
+          echo "Load test failed - check reports for details"
+          exit 1
+
+  # Quick smoke test on every push
+  quick-test:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      
+      - name: Install dependencies
+        run: pip install locust requests
+      
+      - name: Run Quick Smoke Test
+        run: |
+          python tests/run_load_test.py --quick --no-report

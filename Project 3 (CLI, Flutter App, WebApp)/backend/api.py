@@ -139,6 +139,118 @@ from core import run_full_analysis
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
+# CSV Parser for Direct Course Import
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def parse_csv_transcript(filepath: str):
+    """
+    Parse CSV file with course data.
+    
+    Expected CSV format (header optional):
+    Course_Code,Credits,Grade,Semester
+    CSE115,3,A,Fall 2022
+    MAT120,3,B+,Fall 2022
+    
+    Also supports variations:
+    - course_code,credit,grade,semester
+    - Code,Credits,Grade,Term
+    
+    Returns:
+        tuple: (list of course dicts, error message or None)
+    """
+    import csv
+    
+    courses = []
+    
+    try:
+        with open(filepath, 'r', encoding='utf-8-sig') as f:
+            # Try to detect dialect
+            sample = f.read(2048)
+            f.seek(0)
+            
+            try:
+                dialect = csv.Sniffer().sniff(sample)
+            except csv.Error:
+                dialect = csv.excel
+            
+            # Check if has header
+            has_header = csv.Sniffer().has_header(sample)
+            f.seek(0)
+            
+            reader = csv.reader(f, dialect)
+            
+            # Column mapping
+            col_map = {'code': 0, 'credits': 1, 'grade': 2, 'semester': 3}
+            
+            for i, row in enumerate(reader):
+                if not row or all(not cell.strip() for cell in row):
+                    continue
+                
+                # Handle header row
+                if i == 0 and has_header:
+                    # Try to map columns from header
+                    header_lower = [h.lower().strip() for h in row]
+                    for j, h in enumerate(header_lower):
+                        if 'code' in h or 'course' in h:
+                            col_map['code'] = j
+                        elif 'credit' in h:
+                            col_map['credits'] = j
+                        elif 'grade' in h:
+                            col_map['grade'] = j
+                        elif 'sem' in h or 'term' in h:
+                            col_map['semester'] = j
+                    continue
+                
+                # Parse data row
+                if len(row) < 4:
+                    continue
+                
+                try:
+                    course_code = row[col_map['code']].strip().upper()
+                    credits_str = row[col_map['credits']].strip()
+                    grade = row[col_map['grade']].strip().upper()
+                    semester = row[col_map['semester']].strip()
+                    
+                    # Validate course code (2-4 letters + 3 digits)
+                    if not (len(course_code) >= 5 and course_code[:2].isalpha()):
+                        continue
+                    
+                    # Parse credits
+                    try:
+                        credits = float(credits_str)
+                        if credits <= 0 or credits > 6:
+                            continue
+                    except ValueError:
+                        continue
+                    
+                    # Validate grade
+                    valid_grades = {'A', 'A-', 'B+', 'B', 'B-', 'C+', 'C', 'C-', 
+                                   'D+', 'D', 'F', 'W', 'I', 'P', 'TR', 'S', 'U'}
+                    if grade not in valid_grades:
+                        continue
+                    
+                    courses.append({
+                        'course_code': course_code,
+                        'credits': credits,
+                        'grade': grade,
+                        'semester': semester
+                    })
+                except (IndexError, ValueError):
+                    continue
+        
+        if not courses:
+            return None, "No valid course data found in CSV. Expected format: Course_Code,Credits,Grade,Semester"
+        
+        logger.info(f"CSV parsed: {len(courses)} courses found")
+        return courses, None
+        
+    except UnicodeDecodeError:
+        return None, "Could not read CSV file. Please ensure it's UTF-8 encoded."
+    except Exception as e:
+        return None, f"Error parsing CSV: {str(e)}"
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
 # API Endpoints
 # ═══════════════════════════════════════════════════════════════════════════════
 
@@ -147,15 +259,16 @@ def index():
     """API root - service info."""
     return jsonify({
         'service': 'NSU Degree Audit API',
-        'version': '2.2.0',
+        'version': '2.3.0',
         'project': 'CSE226 Project 3',
         'endpoints': {
             'GET /': 'This info',
             'GET /health': 'Health check with OCR limits and system info',
-            'POST /upload': 'Upload transcript for OCR + analysis',
+            'POST /upload': 'Upload transcript (PDF, PNG, JPG, CSV) for analysis',
             'POST /auth/google': 'Google OAuth sign-in',
             'GET /auth/user': 'Get current user info',
             'GET /history': 'Get scan history (requires auth)',
+            'GET /history/<id>': 'Get specific scan (requires auth)',
             'DELETE /history/<id>': 'Delete scan (requires auth)'
         },
         'docs': 'https://github.com/your-repo/nsu-degree-audit',
@@ -292,7 +405,7 @@ def upload():
         return jsonify({'success': False, 'error': 'No file selected'}), 400
 
     # Validate extension
-    allowed = {'pdf', 'png', 'jpg', 'jpeg'}
+    allowed = {'pdf', 'png', 'jpg', 'jpeg', 'csv'}
     ext = file.filename.rsplit('.', 1)[-1].lower() if '.' in file.filename else ''
     if ext not in allowed:
         return jsonify({'success': False, 'error': f'Invalid file type. Allowed: {", ".join(allowed)}'}), 400
@@ -308,55 +421,80 @@ def upload():
         
         logger.info(f"File uploaded: {file.filename}, size: {file_size} bytes")
 
-        # OCR Processing
-        ocr = TranscriptOCR()
-        ocr_result = ocr.extract(str(filepath))
-
-        # Cleanup
-        filepath.unlink(missing_ok=True)
-
-        if not ocr_result.success:
-            logger.error(f"OCR failed: {ocr_result.error}")
-            return jsonify({'success': False, 'error': ocr_result.error or 'OCR extraction failed'}), 500
-
-        if ocr_result.course_count == 0:
-            return jsonify({'success': False, 'error': 'No courses found in document'}), 400
-
-        # Prepare courses data
-        courses = [
-            {
-                'course_code': c.course_code,
-                'credits': c.credits,
-                'grade': c.grade,
-                'semester': c.semester
+        # Handle CSV files directly (no OCR needed)
+        if ext == 'csv':
+            courses, csv_error = parse_csv_transcript(str(filepath))
+            filepath.unlink(missing_ok=True)
+            
+            if csv_error:
+                return jsonify({'success': False, 'error': csv_error}), 400
+            
+            if not courses:
+                return jsonify({'success': False, 'error': 'No valid courses found in CSV'}), 400
+            
+            # Run analysis on parsed courses
+            result = run_full_analysis(courses, kb_path=str(KB_PATH))
+            
+            # Add CSV info (similar to OCR info)
+            result['ocr_info'] = {
+                'engine': 'CSV Parser (Direct Import)',
+                'confidence': 100.0,
+                'raw_text_count': len(courses),
+                'student_name': None,
+                'student_id': None,
+                'cgpa_from_pdf': 0,
+                'total_credits_from_pdf': sum(c.get('credits', 0) for c in courses)
             }
-            for c in ocr_result.courses
-        ]
+        else:
+            # OCR Processing for PDF/images
+            ocr = TranscriptOCR()
+            ocr_result = ocr.extract(str(filepath))
 
-        # Run analysis
-        result = run_full_analysis(courses, kb_path=str(KB_PATH))
+            # Cleanup
+            filepath.unlink(missing_ok=True)
 
-        # Add OCR info
-        result['ocr_info'] = {
-            'engine': ocr_result.engine_used,
-            'confidence': round(ocr_result.confidence_score * 100, 1),
-            'raw_text_count': len(ocr_result.raw_text),
-            'student_name': ocr_result.student_name,
-            'student_id': ocr_result.student_id,
-            'cgpa_from_pdf': ocr_result.cgpa,
-            'total_credits_from_pdf': getattr(ocr_result, 'total_credits', 0)
-        }
+            if not ocr_result.success:
+                logger.error(f"OCR failed: {ocr_result.error}")
+                return jsonify({'success': False, 'error': ocr_result.error or 'OCR extraction failed'}), 500
 
-        # CGPA verification
-        if ocr_result.cgpa > 0 and result.get('level2'):
-            calculated_cgpa = result['level2']['cgpa']
-            if abs(calculated_cgpa - ocr_result.cgpa) > 0.05:
-                result['cgpa_warning'] = {
-                    'message': 'CGPA mismatch detected',
-                    'pdf_value': ocr_result.cgpa,
-                    'calculated_value': calculated_cgpa,
-                    'difference': round(abs(calculated_cgpa - ocr_result.cgpa), 2)
+            if ocr_result.course_count == 0:
+                return jsonify({'success': False, 'error': 'No courses found in document'}), 400
+
+            # Prepare courses data
+            courses = [
+                {
+                    'course_code': c.course_code,
+                    'credits': c.credits,
+                    'grade': c.grade,
+                    'semester': c.semester
                 }
+                for c in ocr_result.courses
+            ]
+
+            # Run analysis
+            result = run_full_analysis(courses, kb_path=str(KB_PATH))
+
+            # Add OCR info
+            result['ocr_info'] = {
+                'engine': ocr_result.engine_used,
+                'confidence': round(ocr_result.confidence_score * 100, 1),
+                'raw_text_count': len(ocr_result.raw_text),
+                'student_name': ocr_result.student_name,
+                'student_id': ocr_result.student_id,
+                'cgpa_from_pdf': ocr_result.cgpa,
+                'total_credits_from_pdf': getattr(ocr_result, 'total_credits', 0)
+            }
+
+            # CGPA verification
+            if ocr_result.cgpa > 0 and result.get('level2'):
+                calculated_cgpa = result['level2']['cgpa']
+                if abs(calculated_cgpa - ocr_result.cgpa) > 0.05:
+                    result['cgpa_warning'] = {
+                        'message': 'CGPA mismatch detected',
+                        'pdf_value': ocr_result.cgpa,
+                        'calculated_value': calculated_cgpa,
+                        'difference': round(abs(calculated_cgpa - ocr_result.cgpa), 2)
+                    }
 
         # Save to history if user is authenticated
         scan_id = None
@@ -408,6 +546,65 @@ def auth_config():
         'auth_available': AUTH_AVAILABLE,
         'db_available': DB_AVAILABLE
     })
+
+
+@app.route('/auth/google', methods=['POST'])
+def auth_google():
+    """Handle Google OAuth sign-in from mobile apps.
+    
+    Mobile apps use Google Sign-In SDK, then send user info here.
+    We create/get user in our database and return a session token.
+    """
+    if not DB_AVAILABLE:
+        return jsonify({'error': 'Database not available'}), 503
+    
+    data = request.get_json() or {}
+    email = data.get('email')
+    name = data.get('name', '')
+    avatar_url = data.get('avatar_url', '')
+    
+    if not email:
+        return jsonify({'error': 'Email is required'}), 400
+    
+    try:
+        # Create or get user
+        db_user = create_user(email=email, name=name, provider='google')
+        
+        if not db_user:
+            return jsonify({'error': 'Failed to create user'}), 500
+        
+        # Update avatar if provided
+        if avatar_url and DB_AVAILABLE:
+            try:
+                from database import get_supabase
+                supabase = get_supabase()
+                if supabase:
+                    supabase.table('cse226_ocr_users').update({
+                        'avatar_url': avatar_url
+                    }).eq('id', db_user['id']).execute()
+            except Exception:
+                pass  # Avatar update is not critical
+        
+        # Generate a simple session token (user ID + timestamp hash)
+        import hashlib
+        import time
+        token_data = f"{db_user['id']}:{time.time()}:{os.urandom(16).hex()}"
+        token = hashlib.sha256(token_data.encode()).hexdigest()
+        
+        return jsonify({
+            'success': True,
+            'user': {
+                'id': db_user['id'],
+                'email': db_user['email'],
+                'name': db_user.get('name', name),
+                'avatar_url': avatar_url or db_user.get('avatar_url', ''),
+                'provider': 'google'
+            },
+            'token': token
+        })
+    except Exception as e:
+        logger.error(f"Google auth error: {e}")
+        return jsonify({'error': str(e)}), 500
 
 
 @app.route('/auth/user')

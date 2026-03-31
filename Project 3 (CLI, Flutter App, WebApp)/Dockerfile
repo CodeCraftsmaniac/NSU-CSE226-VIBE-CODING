@@ -1,6 +1,7 @@
 # NSU Degree Audit Engine - Backend API Dockerfile
 # =================================================
 # Pure API backend - NO UI, only JSON endpoints
+# Optimized for 20+ concurrent users
 
 FROM python:3.11-slim
 
@@ -26,7 +27,27 @@ RUN mkdir -p uploads && chmod 777 uploads
 ENV PYTHONUNBUFFERED=1
 ENV PORT=8080
 
+# Concurrency settings for 20+ users
+# WEB_CONCURRENCY can be overridden at runtime
+ENV WEB_CONCURRENCY=4
+ENV GUNICORN_WORKERS=4
+ENV GUNICORN_THREADS=4
+
 EXPOSE 8080
 
-# Production server - backend API only
-CMD exec gunicorn --bind :$PORT --workers 1 --threads 8 --timeout 120 backend.api:app
+# Production server - Optimized for 20+ concurrent users
+# Formula: workers = (2 * CPU cores) + 1, with 4 threads each
+# This supports: 4 workers * 4 threads = 16 concurrent requests + queueing
+# Cloud Run will scale instances for additional load
+CMD exec gunicorn \
+    --bind :$PORT \
+    --workers ${GUNICORN_WORKERS:-4} \
+    --threads ${GUNICORN_THREADS:-4} \
+    --timeout 120 \
+    --keep-alive 5 \
+    --max-requests 1000 \
+    --max-requests-jitter 50 \
+    --graceful-timeout 30 \
+    --access-logfile - \
+    --error-logfile - \
+    backend.api:app

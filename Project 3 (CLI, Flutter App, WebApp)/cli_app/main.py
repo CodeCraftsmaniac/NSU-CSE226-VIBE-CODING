@@ -11,6 +11,10 @@ Usage:
   python cli_app/main.py                    # Cloud mode (default)
   python cli_app/main.py <transcript.pdf>   # Direct scan mode
   python cli_app/main.py --local            # Use local OCR instead
+  python cli_app/main.py --login            # Login with Google
+  python cli_app/main.py --logout           # Logout
+  python cli_app/main.py --history          # View scan history
+  python cli_app/main.py --history-detail <id>  # View specific scan
 
 Environment:
   USE_CLOUD_API=false                         # Force local OCR
@@ -43,6 +47,17 @@ if sys.platform == 'win32':
 
 # Initialize console
 console = Console(force_terminal=True)
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+#  CLI AUTH MODULE
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+try:
+    from cli_auth import cli_auth, CLIAuth
+    AUTH_AVAILABLE = True
+except ImportError:
+    AUTH_AVAILABLE = False
+    cli_auth = None
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 #  CLOUD API CONFIGURATION
@@ -615,17 +630,301 @@ def get_file_path():
     return str(full_path)
 
 
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+#  HISTORY FUNCTIONS
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+def format_date(date_str):
+    """Format ISO date string to readable format."""
+    if not date_str:
+        return "Unknown"
+    try:
+        from datetime import datetime
+        dt = datetime.fromisoformat(date_str.replace('Z', '+00:00'))
+        now = datetime.now(dt.tzinfo) if dt.tzinfo else datetime.now()
+        diff = now - dt
+        
+        if diff.days == 0:
+            return f"Today at {dt.strftime('%H:%M')}"
+        elif diff.days == 1:
+            return "Yesterday"
+        elif diff.days < 7:
+            return f"{diff.days} days ago"
+        else:
+            return dt.strftime("%d/%m/%Y")
+    except Exception:
+        return date_str[:10] if len(date_str) > 10 else date_str
+
+
+def show_history():
+    """Display scan history table."""
+    if not AUTH_AVAILABLE or not cli_auth:
+        console.print("[red]Authentication module not available[/red]")
+        return
+    
+    if not cli_auth.is_authenticated:
+        console.print("\n[yellow]You need to login to view history.[/yellow]")
+        console.print("[dim]Use: python cli_app/main.py --login[/dim]\n")
+        return
+    
+    console.print("\n[cyan]Loading scan history...[/cyan]")
+    history = cli_auth.get_history(limit=50)
+    
+    if not history:
+        console.print("\n[yellow]No scans found in your history.[/yellow]")
+        console.print("[dim]Upload a transcript to see it here.[/dim]\n")
+        return
+    
+    # Create history table
+    table = Table(
+        title=f"[bold cyan]Scan History[/bold cyan] ({len(history)} scans)",
+        box=box.ROUNDED,
+        border_style="cyan",
+        header_style="bold white"
+    )
+    table.add_column("#", style="dim", width=3)
+    table.add_column("ID", style="dim cyan", width=8)
+    table.add_column("Filename", style="white", max_width=30)
+    table.add_column("CGPA", style="bold", justify="center")
+    table.add_column("Courses", justify="center")
+    table.add_column("Credits", justify="center")
+    table.add_column("Date", style="dim")
+    table.add_column("Source", style="dim")
+    
+    for i, scan in enumerate(history, 1):
+        cgpa = scan.get('cgpa', 0)
+        cgpa_color = "green" if cgpa >= 3.5 else "cyan" if cgpa >= 3.0 else "yellow" if cgpa >= 2.5 else "red"
+        
+        table.add_row(
+            str(i),
+            scan.get('id', '')[:8],
+            scan.get('filename', 'Unknown')[:30],
+            f"[{cgpa_color}]{cgpa:.2f}[/{cgpa_color}]",
+            str(scan.get('total_courses', 0)),
+            str(scan.get('total_credits', 0)),
+            format_date(scan.get('created_at')),
+            scan.get('source', 'web')
+        )
+    
+    console.print()
+    console.print(table)
+    console.print()
+    
+    # Interactive history menu
+    while True:
+        console.print("[cyan]Options:[/cyan]")
+        console.print("  [bold]V <#>[/bold] - View scan details (e.g., V 1)")
+        console.print("  [bold]D <#>[/bold] - Delete scan (e.g., D 1)")
+        console.print("  [bold]Q[/bold]     - Back to main menu")
+        console.print()
+        
+        choice = Prompt.ask("[cyan]Enter option[/cyan]", default="Q").upper().strip()
+        
+        if choice == 'Q':
+            break
+        
+        # Parse V # or D # commands
+        parts = choice.split()
+        if len(parts) == 2 and parts[0] in ['V', 'D']:
+            try:
+                idx = int(parts[1]) - 1
+                if 0 <= idx < len(history):
+                    scan = history[idx]
+                    scan_id = scan.get('id')
+                    
+                    if parts[0] == 'V':
+                        show_history_detail(scan_id)
+                    elif parts[0] == 'D':
+                        if Confirm.ask(f"[red]Delete scan '{scan.get('filename', 'Unknown')}'?[/red]", default=False):
+                            if cli_auth.delete_scan(scan_id):
+                                console.print("[green]✓ Scan deleted successfully[/green]")
+                                history.pop(idx)
+                            else:
+                                console.print("[red]Failed to delete scan[/red]")
+                else:
+                    console.print(f"[red]Invalid number. Enter 1-{len(history)}[/red]")
+            except ValueError:
+                console.print("[red]Invalid format. Use V # or D #[/red]")
+        else:
+            console.print("[red]Invalid option. Use V #, D #, or Q[/red]")
+        
+        console.print()
+
+
+def show_history_detail(scan_id):
+    """Show detailed view of a specific scan from history."""
+    if not AUTH_AVAILABLE or not cli_auth:
+        console.print("[red]Authentication module not available[/red]")
+        return
+    
+    console.print("\n[cyan]Loading scan details...[/cyan]")
+    scan = cli_auth.get_scan_details(scan_id)
+    
+    if not scan:
+        console.print("[red]Could not load scan details[/red]")
+        return
+    
+    analysis_data = scan.get('analysis_data', {})
+    if not analysis_data:
+        console.print("[yellow]No analysis data found for this scan[/yellow]")
+        return
+    
+    # Convert to the format expected by show_level functions
+    result = analysis_data
+    
+    console.print()
+    console.print(Panel(
+        f"[bold]Filename:[/bold] {scan.get('filename', 'Unknown')}\n"
+        f"[bold]Scanned:[/bold] {format_date(scan.get('created_at'))}\n"
+        f"[bold]Source:[/bold] {scan.get('source', 'unknown')}",
+        title="[bold cyan]Scan Details[/bold cyan]",
+        border_style="cyan"
+    ))
+    
+    # Show OCR summary if available
+    if 'ocr_info' in result:
+        show_ocr_summary(result['ocr_info'], len(result.get('courses', [])))
+    
+    # Show level menu
+    while True:
+        console.print()
+        console.print("[cyan]View Level:[/cyan]")
+        console.print("  [bold]1[/bold] - Credit Tally")
+        console.print("  [bold]2[/bold] - CGPA Analysis")
+        console.print("  [bold]3[/bold] - Degree Audit")
+        console.print("  [bold]Q[/bold] - Back to history")
+        console.print()
+        
+        choice = Prompt.ask("[cyan]Select[/cyan]", choices=["1", "2", "3", "q", "Q"], default="1").upper()
+        
+        if choice == "1":
+            show_level1(result)
+        elif choice == "2":
+            show_level2(result)
+        elif choice == "3":
+            show_level3(result)
+        elif choice == "Q":
+            break
+        
+        console.print()
+        Prompt.ask("[dim]Press Enter to continue[/dim]")
+
+
+def show_auth_status():
+    """Show current authentication status."""
+    if not AUTH_AVAILABLE or not cli_auth:
+        console.print("[yellow]Authentication module not available[/yellow]")
+        return
+    
+    if cli_auth.is_authenticated:
+        user = cli_auth.user or {}
+        console.print(Panel(
+            f"[green]✓ Logged in[/green]\n\n"
+            f"[bold]Name:[/bold] {user.get('name', 'Unknown')}\n"
+            f"[bold]Email:[/bold] {user.get('email', 'Unknown')}\n"
+            f"[bold]Provider:[/bold] {user.get('provider', 'google')}",
+            title="[bold cyan]Authentication Status[/bold cyan]",
+            border_style="green"
+        ))
+        
+        # Show stats
+        stats = cli_auth.get_user_stats()
+        if stats:
+            console.print(f"\n[bold]Stats:[/bold]")
+            console.print(f"  Total Scans: {stats.get('total_scans', 0)}")
+            console.print(f"  Avg CGPA: {stats.get('avg_cgpa', 0):.2f}")
+    else:
+        console.print(Panel(
+            "[yellow]Not logged in[/yellow]\n\n"
+            "Use [bold]--login[/bold] to authenticate",
+            title="[bold cyan]Authentication Status[/bold cyan]",
+            border_style="yellow"
+        ))
+
+
 def main():
-    # Handle --cloud flag (remove it from argv for file path processing)
-    args = [arg for arg in sys.argv[1:] if arg != '--cloud']
+    # Handle flags
+    args = [arg for arg in sys.argv[1:] if not arg.startswith('--')]
+    flags = [arg for arg in sys.argv[1:] if arg.startswith('--')]
+    
+    # Auth commands
+    if '--login' in flags:
+        clear_screen()
+        console.print(create_header())
+        if AUTH_AVAILABLE and cli_auth:
+            cli_auth.login_interactive()
+        else:
+            console.print("[red]Authentication module not available[/red]")
+        return
+    
+    if '--logout' in flags:
+        clear_screen()
+        console.print(create_header())
+        if AUTH_AVAILABLE and cli_auth:
+            cli_auth.logout()
+        else:
+            console.print("[red]Authentication module not available[/red]")
+        return
+    
+    if '--status' in flags:
+        clear_screen()
+        console.print(create_header())
+        show_auth_status()
+        return
+    
+    if '--history' in flags:
+        clear_screen()
+        console.print(create_header())
+        show_history()
+        return
+    
+    if '--history-detail' in flags:
+        clear_screen()
+        console.print(create_header())
+        # Get scan ID from next argument
+        try:
+            idx = sys.argv.index('--history-detail')
+            if idx + 1 < len(sys.argv):
+                scan_id = sys.argv[idx + 1]
+                show_history_detail(scan_id)
+            else:
+                console.print("[red]Please provide a scan ID: --history-detail <id>[/red]")
+        except ValueError:
+            console.print("[red]Invalid command[/red]")
+        return
+    
+    if '--help' in flags or '-h' in flags:
+        console.print(Panel(
+            "[bold cyan]NSU Degree Audit Engine - CLI[/bold cyan]\n\n"
+            "[bold]Usage:[/bold]\n"
+            "  python cli_app/main.py                    # Interactive mode\n"
+            "  python cli_app/main.py <file.pdf>         # Direct scan\n"
+            "  python cli_app/main.py --local            # Use local OCR\n\n"
+            "[bold]Authentication:[/bold]\n"
+            "  --login                    Login with email\n"
+            "  --logout                   Logout\n"
+            "  --status                   Show auth status\n\n"
+            "[bold]History:[/bold]\n"
+            "  --history                  View scan history\n"
+            "  --history-detail <id>      View specific scan\n\n"
+            "[bold]Other:[/bold]\n"
+            "  --help, -h                 Show this help\n",
+            title="[bold bright_cyan]Help[/bold bright_cyan]",
+            border_style="cyan"
+        ))
+        return
     
     # Direct mode: python cli_app/main.py <file.pdf>
-    if len(args) > 0:
+    if len(args) > 0 and not args[0].startswith('--'):
         file_path = args[0]
         if not Path(file_path).is_absolute():
             file_path = str(PROJECT_ROOT / file_path)
         clear_screen()
         console.print(create_header())
+        
+        # Show auth status briefly
+        if AUTH_AVAILABLE and cli_auth and cli_auth.is_authenticated:
+            console.print(f"[dim green]✓ Logged in as {cli_auth.user.get('email', 'Unknown')}[/dim green]")
         
         # Use cloud API or local OCR based on configuration
         if USE_CLOUD_API:
@@ -656,6 +955,57 @@ def main():
     while True:
         clear_screen()
         console.print(create_header())
+        
+        # ═══════════════════════════════════════════════════════════════════
+        # AUTH GATE: Show login screen first if not authenticated
+        # ═══════════════════════════════════════════════════════════════════
+        if AUTH_AVAILABLE and cli_auth and not cli_auth.is_authenticated:
+            # Show auth welcome screen
+            console.print()
+            console.print(Panel(
+                "[bold white]Welcome to NSU Degree Audit Engine![/bold white]\n\n"
+                "[dim]Sign in to save your scan history across CLI, Web, and Mobile apps.[/dim]\n"
+                "[dim]Your scans are synced to a single cloud database.[/dim]",
+                title="[bold bright_cyan]  Authentication  [/bold bright_cyan]",
+                border_style="cyan",
+                box=box.DOUBLE_EDGE,
+            ))
+            console.print()
+            
+            auth_menu = Table(show_header=False, box=box.ROUNDED, border_style="cyan", expand=True)
+            auth_menu.add_column("Option", style="bold", width=5)
+            auth_menu.add_column("Description")
+            auth_menu.add_row("[bold cyan]1[/bold cyan]", "[green]Continue with Google[/green] — Sign in with your email")
+            auth_menu.add_row("[bold cyan]2[/bold cyan]", "[yellow]Continue as Guest[/yellow] — Scan without saving history")
+            auth_menu.add_row("[bold cyan]Q[/bold cyan]", "[red]Quit[/red] — Exit application")
+            console.print(auth_menu)
+            console.print()
+            
+            auth_choice = Prompt.ask("[cyan]Select option[/cyan]", choices=["1", "2", "q", "Q"], default="1").upper()
+            
+            if auth_choice == "Q":
+                console.print("\n[cyan]Goodbye![/cyan]")
+                break
+            elif auth_choice == "1":
+                # Login
+                if cli_auth.login_interactive():
+                    console.print("\n[green]✓ Authentication successful![/green]")
+                    console.print("[dim]Your scans will be saved to your account.[/dim]")
+                    time.sleep(1.5)
+                else:
+                    console.print("\n[yellow]Authentication failed. Continuing as guest...[/yellow]")
+                    time.sleep(1.5)
+            elif auth_choice == "2":
+                console.print("\n[yellow]Continuing as guest. Your scans won't be saved.[/yellow]")
+                time.sleep(1)
+            
+            continue  # Re-draw screen with auth status
+        
+        # Show auth status
+        if AUTH_AVAILABLE and cli_auth and cli_auth.is_authenticated:
+            console.print(f"[dim green]✓ Logged in as {cli_auth.user.get('email', 'Unknown')}[/dim green]")
+        else:
+            console.print("[dim yellow]Guest mode — scans won't be saved to history[/dim yellow]")
         
         # Show mode indicator
         if USE_CLOUD_API:

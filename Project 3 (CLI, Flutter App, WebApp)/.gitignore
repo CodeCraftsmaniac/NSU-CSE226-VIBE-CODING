@@ -67,3 +67,10 @@ flutter_app/android/local.properties
 cleanup.bat
 .vercel
 .env*.local
+
+# Load test reports (generated)
+tests/reports/*.html
+tests/reports/*.csv
+
+# CLI auth tokens (local)
+.nsu_audit_cli_token.json

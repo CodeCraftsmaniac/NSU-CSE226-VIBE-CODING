@@ -3,7 +3,9 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../widgets/glass_widgets.dart';
+import '../services/supabase_service.dart';
 import 'onboarding_screen.dart';
+import 'auth_screen.dart';
 import 'home_screen.dart';
 
 class SplashScreen extends StatefulWidget {
@@ -29,10 +31,21 @@ class _SplashScreenState extends State<SplashScreen> {
 
     if (!mounted) return;
 
+    // Determine next screen based on auth state
+    Widget nextScreen;
+    if (!hasCompletedOnboarding) {
+      nextScreen = const OnboardingScreen();
+    } else if (authService.hasSession) {
+      // User is authenticated or chose guest mode previously
+      nextScreen = const HomeScreen();
+    } else {
+      // Show auth screen
+      nextScreen = const AuthScreen();
+    }
+
     Navigator.of(context).pushReplacement(
       PageRouteBuilder(
-        pageBuilder: (context, animation, secondaryAnimation) =>
-            hasCompletedOnboarding ? const HomeScreen() : const OnboardingScreen(),
+        pageBuilder: (context, animation, secondaryAnimation) => nextScreen,
         transitionsBuilder: (context, animation, secondaryAnimation, child) {
           return FadeTransition(opacity: animation, child: child);
         },
