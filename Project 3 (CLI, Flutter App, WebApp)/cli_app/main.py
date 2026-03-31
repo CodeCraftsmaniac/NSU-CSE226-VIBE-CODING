@@ -808,6 +808,11 @@ def show_history_detail(scan_id):
         Prompt.ask("[dim]Press Enter to continue[/dim]")
 
 
+def show_scan_history(auth):
+    """Wrapper to display scan history from main menu."""
+    show_history()
+
+
 def show_auth_status():
     """Show current authentication status."""
     if not AUTH_AVAILABLE or not cli_auth:
@@ -1022,6 +1027,39 @@ def main():
             console.print(f"\n[bold cyan]💻 Local Mode[/bold cyan] [dim](Use --cloud for cloud API)[/dim]")
         
         console.print()
+        
+        # ═══════════════════════════════════════════════════════════════════
+        # MAIN MENU - Same options as website
+        # ═══════════════════════════════════════════════════════════════════
+        if AUTH_AVAILABLE and cli_auth and cli_auth.is_authenticated:
+            # Authenticated menu - matches website nav
+            main_menu = Table(show_header=False, box=box.ROUNDED, border_style="cyan", expand=True)
+            main_menu.add_column("Option", style="bold", width=5)
+            main_menu.add_column("Description")
+            main_menu.add_row("[bold cyan]1[/bold cyan]", "[green]📄 New Scan[/green] — Upload and analyze transcript")
+            main_menu.add_row("[bold cyan]2[/bold cyan]", "[blue]📜 View History[/blue] — See your past scans")
+            main_menu.add_row("[bold cyan]3[/bold cyan]", "[yellow]🚪 Logout[/yellow] — Sign out of your account")
+            main_menu.add_row("[bold cyan]Q[/bold cyan]", "[red]Exit[/red] — Quit application")
+            console.print(main_menu)
+            console.print()
+            
+            menu_choice = Prompt.ask("[cyan]Select option[/cyan]", choices=["1", "2", "3", "q", "Q"], default="1").upper()
+            
+            if menu_choice == "Q":
+                console.print("\n[cyan]Goodbye![/cyan]")
+                break
+            elif menu_choice == "2":
+                # View History
+                show_scan_history(cli_auth)
+                continue
+            elif menu_choice == "3":
+                # Logout
+                cli_auth.logout()
+                console.print("\n[green]✓ Logged out successfully[/green]")
+                time.sleep(1)
+                continue
+            # If "1", fall through to file selection
+        
         file_path = get_file_path()
 
         if not Path(file_path).exists():

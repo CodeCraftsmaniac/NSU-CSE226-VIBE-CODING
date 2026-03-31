@@ -300,7 +300,14 @@ class CLIAuth:
         return False
     
     def _get_headers(self) -> Dict[str, str]:
-        """Get authorization headers."""
+        """Get authorization headers (without Content-Type for multipart uploads)."""
+        headers = {}
+        if self.token:
+            headers['Authorization'] = f'Bearer {self.token}'
+        return headers
+    
+    def _get_json_headers(self) -> Dict[str, str]:
+        """Get headers for JSON requests."""
         headers = {'Content-Type': 'application/json'}
         if self.token:
             headers['Authorization'] = f'Bearer {self.token}'

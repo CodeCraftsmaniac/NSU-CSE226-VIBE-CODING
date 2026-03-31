@@ -353,9 +353,15 @@ async function viewHistoryItem(id) {
         
         if (data.success && data.scan && data.scan.analysis_data) {
             closeHistoryModal();
-            if (typeof displayResults === 'function') {
-                displayResults(data.scan.analysis_data);
+            // Use showResults from app.js
+            if (typeof showResults === 'function') {
+                showResults(data.scan.analysis_data);
+            } else {
+                console.error('showResults function not found');
+                showToast('Unable to display results', 'error');
             }
+        } else {
+            showToast('No analysis data found for this scan', 'warning');
         }
     } catch (error) {
         console.error('View history error:', error);
