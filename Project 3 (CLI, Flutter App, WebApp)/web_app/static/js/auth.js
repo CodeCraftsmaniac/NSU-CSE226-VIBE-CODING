@@ -4,6 +4,9 @@
  * Handles Supabase Auth with Google OAuth
  */
 
+// API Configuration
+const API_BASE_URL = window.API_BASE_URL || 'https://ocrapi.nsunexus.app';
+
 // Supabase configuration - will be loaded from backend
 let supabaseClient = null;
 let currentUser = null;
