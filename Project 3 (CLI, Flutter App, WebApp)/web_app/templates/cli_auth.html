@@ -210,14 +210,18 @@
             
             showStep('step-auth');
             
+            // Sign out first to force account selection (prevents auto-login)
+            await supabaseClient.auth.signOut();
+            
             const { error } = await supabaseClient.auth.signInWithOAuth({
                 provider: 'google',
                 options: {
                     redirectTo: window.location.href,
                     queryParams: {
                         access_type: 'offline',
-                        prompt: 'select_account consent'
-                    }
+                        prompt: 'select_account'
+                    },
+                    skipBrowserRedirect: false
                 }
             });
             
