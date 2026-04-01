@@ -105,6 +105,7 @@ jobs:
             --platform managed \
             --region ${{ env.REGION }} \
             --allow-unauthenticated \
+            --clear-base-image \
             --set-env-vars "GOOGLE_CLOUD_VISION_KEY=${{ secrets.GOOGLE_CLOUD_VISION_KEY }},OCR_SPACE_API_KEY=${{ secrets.OCR_SPACE_API_KEY }},FLASK_ENV=production"
 
   # ═══════════════════════════════════════════════════════════════
