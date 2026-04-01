@@ -4,11 +4,17 @@ NSU Degree Audit API - FastAPI Application
 High-performance async backend for OCR-based degree auditing.
 """
 import os
+import sys
+import logging
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-# Create app with minimal config
+# Configure logging
+logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
+logger = logging.getLogger(__name__)
+
+# Create app
 app = FastAPI(
     title="NSU Degree Audit API",
     version="2.4.0",
@@ -41,7 +47,7 @@ def health():
     return {"status": "healthy"}
 
 
-# Load additional routes only if dependencies are available
+# Load rate limiting
 try:
     from slowapi import Limiter
     from slowapi.util import get_remote_address
@@ -57,37 +63,28 @@ try:
 except ImportError:
     pass
 
-import logging
-import sys
-
-# Configure logging to show at startup
-logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
-logger = logging.getLogger(__name__)
-
-# Track router loading status
+# Track router loading status (for debugging)
 _router_loaded = False
 _router_error = None
 
+# Load API router
 try:
     from app.api.router import api_router
     app.include_router(api_router)
     _router_loaded = True
     logger.info("✅ API router loaded successfully")
-    print("✅ API router loaded successfully", file=sys.stderr)
 except Exception as e:
     _router_error = str(e)
     logger.error(f"❌ Failed to load API router: {e}")
-    print(f"❌ Failed to load API router: {e}", file=sys.stderr)
     import traceback
     traceback.print_exc()
 
 
-@app.get("/debug/status")
+@app.get("/debug/status", include_in_schema=False)
 def debug_status():
-    """Debug endpoint to check router loading status."""
+    """Debug endpoint to check router loading status (hidden from docs)."""
     return {
         "router_loaded": _router_loaded,
         "router_error": _router_error,
         "python_version": sys.version,
-        "python_path": sys.path[:5]  # First 5 entries
     }
