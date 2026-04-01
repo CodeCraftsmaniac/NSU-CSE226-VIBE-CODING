@@ -34,3 +34,4 @@ locust>=2.20.0         # Load testing framework
 # paddleocr>=2.7.0     # Uncomment for heavy local OCR
 # easyocr>=1.7.0       # Uncomment for fallback local OCR
 # opencv-python>=4.8.0 # Uncomment for image preprocessing
+
