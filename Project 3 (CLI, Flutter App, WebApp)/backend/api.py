@@ -469,6 +469,21 @@ def upload():
             if ocr_result.course_count == 0:
                 return jsonify({'success': False, 'error': 'No courses found in document'}), 400
 
+            # Check for valid department from student ID
+            if ocr_result.student_id and not ocr_result.department_valid:
+                # Try to detect department one more time (in case OCR result didn't do it)
+                from ocr_web import detect_department_from_id
+                dept_check = detect_department_from_id(ocr_result.student_id)
+                if not dept_check.get('valid', False):
+                    error_msg = (
+                        "This transcript is not from a supported NSU department. "
+                        "Only CSE (42), EEE (43), and BBA (30) transcripts are accepted."
+                    )
+                    if dept_check.get('department_code'):
+                        error_msg += f" (Detected code: {dept_check.get('department_code')})"
+                    logger.warning(f"Invalid department detected: {ocr_result.student_id}")
+                    return jsonify({'success': False, 'error': error_msg}), 400
+
             # Prepare courses data
             courses = [
                 {
@@ -483,13 +498,20 @@ def upload():
             # Run analysis
             result = run_full_analysis(courses, kb_path=str(KB_PATH))
 
-            # Add OCR info
+            # Add OCR info with department and validation data
             result['ocr_info'] = {
                 'engine': ocr_result.engine_used,
                 'confidence': round(ocr_result.confidence_score * 100, 1),
                 'raw_text_count': len(ocr_result.raw_text),
                 'student_name': ocr_result.student_name,
                 'student_id': ocr_result.student_id,
+                # Department detection
+                'department_code': ocr_result.department_code,
+                'department_name': ocr_result.department_name,
+                'department_full_name': ocr_result.department_full_name,
+                'department_valid': ocr_result.department_valid,
+                # Course validation
+                'unknown_courses': ocr_result.unknown_courses,
             }
 
             # Note: CGPA and total_credits are NOT extracted from PDF

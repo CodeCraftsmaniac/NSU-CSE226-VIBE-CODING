@@ -1,16 +1,18 @@
 """
 ocr_web.py  —  Web-based OCR for NSU Transcript Extraction
 =====================================================================
-VERSION: 2.1.0 - Production Release
+VERSION: 2.2.0 - Production Release with Department Detection
 
 Features:
 1. Google Cloud Vision API (1000 free/month) - Most accurate
 2. OCR.space API (500 free/month) - Good fallback
 3. Native PDF text extraction - For digital PDFs
 4. Improved table parsing logic
+5. Department detection from NSU ID
+6. Course validation against official catalog
 """
 
-__version__ = "2.1.0"
+__version__ = "2.2.0"
 
 import os
 import re
@@ -49,6 +51,16 @@ try:
 except ImportError:
     pass
 
+# Import course catalog for validation
+try:
+    from nsu_courses import COURSE_LOOKUP, get_course_info
+    COURSE_CATALOG_AVAILABLE = True
+except ImportError:
+    COURSE_LOOKUP = {}
+    COURSE_CATALOG_AVAILABLE = False
+    def get_course_info(code):
+        return None
+
 # API Keys - Load from environment with HARDCODED FALLBACK for Cloud Run
 # These keys are also in the .env file - safe to include as fallback
 _DEFAULT_GOOGLE_VISION_KEY = 'AIzaSyA5YsERnW7V9UzpsqkgdFhldqY8LtpJPes'
@@ -86,6 +98,113 @@ ALL_COURSE_PREFIXES = {
 }
 
 # OCR corrections for common misreads (extended list)
+# ═══════════════════════════════════════════════════════════════════════════════
+# DEPARTMENT DETECTION FROM NSU ID
+# ═══════════════════════════════════════════════════════════════════════════════
+
+VALID_DEPARTMENTS = {
+    42: "CSE",  # Computer Science & Engineering
+    43: "EEE",  # Electrical & Electronic Engineering
+    30: "BBA",  # Bachelor of Business Administration
+}
+
+DEPARTMENT_FULL_NAMES = {
+    42: "Computer Science & Engineering",
+    43: "Electrical & Electronic Engineering",
+    30: "Bachelor of Business Administration",
+}
+
+
+def detect_department_from_id(student_id: str) -> dict:
+    """
+    Detect department from NSU student ID.
+    
+    NSU ID format: 10 digits where department code is encoded in the middle
+    - Typical format: YYYYSS DD NN (Year, Semester, Dept, Seq)
+    - Department code at positions 5-6 (0-indexed) = 2 digits
+    - Example: 0920 4 42 543 -> "42" at positions 5-6 -> CSE
+    - Example: 0920 4 43 543 -> "43" at positions 5-6 -> EEE
+    - Example: 0920 4 30 543 -> "30" at positions 5-6 -> BBA
+    
+    Args:
+        student_id: The 10-digit NSU student ID
+        
+    Returns:
+        dict with keys:
+        - valid: bool - whether department was detected successfully
+        - department_code: int - the numeric department code (42, 43, 30)
+        - department_name: str - short name (CSE, EEE, BBA)
+        - department_full_name: str - full name
+        - error: str - error message if invalid
+    """
+    if not student_id:
+        return {
+            "valid": False, 
+            "error": "No student ID provided"
+        }
+    
+    # Clean the ID - remove spaces and non-digits
+    clean_id = ''.join(c for c in str(student_id) if c.isdigit())
+    
+    if len(clean_id) < 10:
+        return {
+            "valid": False, 
+            "error": f"Invalid NSU ID format (expected 10 digits, got {len(clean_id)})"
+        }
+    
+    try:
+        # Extract department code from positions 5-6 (0-indexed)
+        # Format: YYYY S DD NNN where DD is department code
+        dept_code = int(clean_id[5:7])
+        
+        if dept_code in VALID_DEPARTMENTS:
+            return {
+                "valid": True,
+                "department_code": dept_code,
+                "department_name": VALID_DEPARTMENTS[dept_code],
+                "department_full_name": DEPARTMENT_FULL_NAMES[dept_code]
+            }
+        else:
+            return {
+                "valid": False,
+                "department_code": dept_code,
+                "error": f"Department code {dept_code} is not supported. Only CSE (42), EEE (43), and BBA (30) are supported."
+            }
+    except (ValueError, IndexError) as e:
+        return {
+            "valid": False, 
+            "error": f"Could not parse department from ID: {str(e)}"
+        }
+
+
+def validate_courses_against_catalog(courses: list) -> list:
+    """
+    Validate extracted courses against the official NSU course catalog.
+    
+    Args:
+        courses: List of CourseRecord objects
+        
+    Returns:
+        List of unknown course codes not found in the catalog
+    """
+    if not COURSE_CATALOG_AVAILABLE:
+        return []
+    
+    unknown_courses = []
+    for course in courses:
+        code = course.course_code.upper().strip()
+        # Remove 'L' suffix for lab courses when checking (labs might not be separate entries)
+        base_code = code.rstrip('L') if code.endswith('L') else code
+        
+        if get_course_info(code) is None and get_course_info(base_code) is None:
+            # Check if it's at least a valid course prefix
+            prefix_match = re.match(r'^([A-Z]{2,4})\d{3}[A-Z]?$', code)
+            if prefix_match:
+                unknown_courses.append(code)
+    
+    return unknown_courses
+
+
 OCR_CORRECTIONS = {
     # Number/letter confusion
     '8+': 'B+', '8-': 'B-', '8': 'B',
@@ -132,6 +251,13 @@ class OCRResult:
     total_credits: float = 0.0
     engine_used: str = ""
     confidence_score: float = 0.0
+    # Department detection fields
+    department_code: int = 0
+    department_name: str = ""
+    department_full_name: str = ""
+    department_valid: bool = False
+    # Course validation fields
+    unknown_courses: list = field(default_factory=list)
 
     @property
     def csv_data(self) -> str:
@@ -552,14 +678,54 @@ class WebOCR:
                 if id_match2:
                     student_id = id_match2.group(1) + id_match2.group(2) + id_match2.group(3)
             
-            # Student Name
-            if 'Student Name' in line_clean:
-                for j in range(i + 1, min(i + 10, len(lines))):
-                    potential_name = lines[j].strip()
-                    if potential_name and len(potential_name) >= 8:
-                        if re.match(r'^[A-Za-z\s]{8,}$', potential_name):
-                            if potential_name not in ['Student ID', 'Date of Birth', 'Degree Conferred', 
-                                                      'Official Transcript', 'Course Title']:
+            # Student Name - improved extraction to avoid institutional labels
+            if not student_name and ('Student Name' in line_clean or 'Name:' in line_clean):
+                # Institutional labels to skip (case-insensitive check)
+                skip_labels = [
+                    'student id', 'date of birth', 'degree conferred', 'official transcript',
+                    'course title', 'school', 'engineering', 'university', 'department',
+                    'college', 'faculty', 'sciences', 'physical sciences', 'arts', 'business',
+                    'unofficial transcript', 'transcript', 'north south', 'nsu'
+                ]
+                
+                # First try to extract name from the same line (e.g., "Name: John Doe")
+                same_line_match = re.search(r'(?:Student\s*)?Name\s*:\s*([A-Za-z][A-Za-z\s\.]+)', line_clean, re.IGNORECASE)
+                if same_line_match:
+                    candidate = same_line_match.group(1).strip()
+                    candidate_lower = candidate.lower()
+                    # Validate: at least 2 words, doesn't contain institutional labels
+                    if (len(candidate.split()) >= 2 and 
+                        not any(label in candidate_lower for label in skip_labels)):
+                        student_name = candidate
+                
+                # If not found on same line, look ahead for the actual name
+                # NSU transcripts often have format where values start with ":"
+                if not student_name:
+                    for j in range(i + 1, min(i + 15, len(lines))):
+                        potential_name = lines[j].strip()
+                        if not potential_name:
+                            continue
+                        
+                        # Handle NSU format where name is on a line starting with ":"
+                        # e.g., ": Komol Arafat Gani"
+                        if potential_name.startswith(':'):
+                            potential_name = potential_name[1:].strip()
+                        
+                        # Skip if it's another header or empty after stripping
+                        if not potential_name or len(potential_name) < 5:
+                            continue
+                        
+                        potential_lower = potential_name.lower()
+                        
+                        # Skip headers like "Student ID", "Date of Birth", etc.
+                        if any(label in potential_lower for label in skip_labels):
+                            continue
+                        
+                        # Must be letters, spaces, and periods only (for initials)
+                        if re.match(r'^[A-Za-z][A-Za-z\s\.]+$', potential_name):
+                            # Validate: typical names have 2-5 words
+                            word_count = len(potential_name.split())
+                            if 2 <= word_count <= 5:
                                 student_name = potential_name
                                 break
             
@@ -967,6 +1133,23 @@ class WebOCR:
 
         raw_text = [w for w in text.split() if w.strip()][:100]
 
+        # ===== DEPARTMENT DETECTION =====
+        dept_info = detect_department_from_id(student_id)
+        department_code = dept_info.get('department_code', 0)
+        department_name = dept_info.get('department_name', '')
+        department_full_name = dept_info.get('department_full_name', '')
+        department_valid = dept_info.get('valid', False)
+        
+        if department_valid:
+            _logger.info(f"Detected department: {department_name} ({department_code}) from ID {student_id}")
+        elif student_id:
+            _logger.warning(f"Could not detect valid department from ID {student_id}: {dept_info.get('error', 'Unknown error')}")
+        
+        # ===== COURSE VALIDATION =====
+        unknown_courses = validate_courses_against_catalog(courses)
+        if unknown_courses:
+            _logger.info(f"Found {len(unknown_courses)} courses not in catalog: {unknown_courses[:5]}...")
+
         return OCRResult(
             success=True,
             courses=courses,
@@ -974,7 +1157,12 @@ class WebOCR:
             student_name=student_name,
             student_id=student_id,
             cgpa=cgpa,
-            total_credits=total_credits_from_pdf
+            total_credits=total_credits_from_pdf,
+            department_code=department_code,
+            department_name=department_name,
+            department_full_name=department_full_name,
+            department_valid=department_valid,
+            unknown_courses=unknown_courses
         )
     
     def _is_watermark_only(self, line: str) -> bool:

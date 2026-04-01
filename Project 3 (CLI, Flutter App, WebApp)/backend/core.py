@@ -765,17 +765,22 @@ def detect_program(courses):
     if not prefix_counts:
         return None
 
-    # CSE detection
-    cse_count = prefix_counts.get('CSE', 0) + prefix_counts.get('EEE', 0)
-    if cse_count >= 3:
+    # CSE detection - CSE courses dominant
+    cse_count = prefix_counts.get('CSE', 0)
+    if cse_count >= 4:
         return 'CSE'
 
-    # LLB detection
-    if prefix_counts.get('LAW', 0) >= 2:
-        return 'LLB'
+    # EEE detection - EEE courses dominant
+    eee_count = prefix_counts.get('EEE', 0)
+    if eee_count >= 4:
+        return 'EEE'
+    
+    # CSE with some EEE (common for CSE majors)
+    if cse_count >= 3 and eee_count >= 1:
+        return 'CSE'
 
     # BBA/Business detection
-    bba_count = sum(prefix_counts.get(p, 0) for p in ['BUS', 'ACT', 'FIN', 'MKT', 'MGT'])
+    bba_count = sum(prefix_counts.get(p, 0) for p in ['BUS', 'ACT', 'FIN', 'MKT', 'MGT', 'HRM', 'MIS', 'SCM', 'ETR', 'INB'])
     if bba_count >= 3:
         return 'BBA'
 

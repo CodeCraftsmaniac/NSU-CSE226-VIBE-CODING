@@ -285,8 +285,52 @@ def scan_transcript(file_path):
         _log("[ERR]", "No courses found in document", "red", "bold red")
         return None, "No courses found. Please upload a clear transcript PDF/image."
 
+    # Check for valid department from student ID
+    if ocr_result.student_id and not getattr(ocr_result, 'department_valid', False):
+        from ocr_web import detect_department_from_id
+        dept_check = detect_department_from_id(ocr_result.student_id)
+        if not dept_check.get('valid', False):
+            error_msg = (
+                "This transcript is not from a supported NSU department. "
+                "Only CSE (42), EEE (43), and BBA (30) transcripts are accepted."
+            )
+            if dept_check.get('department_code'):
+                error_msg += f" (Detected code: {dept_check.get('department_code')})"
+            _log("[ERR]", "Invalid department detected", "red", "bold red")
+            console.print(Panel(
+                f"[bold red]⛔ {error_msg}[/bold red]",
+                border_style="red",
+                box=box.DOUBLE_EDGE,
+            ))
+            return None, error_msg
+
     _log("[OK]", f"Text extraction complete — {ocr_result.course_count} courses found ✓", "green", "bold green")
     console.print()
+
+    # Show department badge if valid
+    dept_name = getattr(ocr_result, 'department_name', '')
+    dept_valid = getattr(ocr_result, 'department_valid', False)
+    if dept_valid and dept_name:
+        dept_full = getattr(ocr_result, 'department_full_name', '')
+        dept_colors = {'CSE': 'blue', 'EEE': 'magenta', 'BBA': 'green'}
+        color = dept_colors.get(dept_name, 'cyan')
+        console.print(Panel(
+            f"[bold {color}]🎓 Department: {dept_name}[/bold {color}] — [dim]{dept_full}[/dim]",
+            border_style=color, box=box.ROUNDED, padding=(0, 1),
+        ))
+
+    # Show unknown courses warning if any
+    unknown_courses = getattr(ocr_result, 'unknown_courses', [])
+    if unknown_courses:
+        display_courses = unknown_courses[:5]
+        remaining = len(unknown_courses) - len(display_courses)
+        course_list = ", ".join(display_courses)
+        if remaining > 0:
+            course_list += f" +{remaining} more"
+        console.print(Panel(
+            f"[bold yellow]⚠️ {len(unknown_courses)} Unknown Course(s):[/bold yellow] [yellow]{course_list}[/yellow]",
+            border_style="yellow", box=box.ROUNDED, padding=(0, 1),
+        ))
 
     # ── Show extracted courses table (same as website review table) ─────
     course_table = Table(
@@ -358,6 +402,13 @@ def scan_transcript(file_path):
         'raw_text_count': len(ocr_result.raw_text),
         'student_name': ocr_result.student_name or 'N/A',
         'student_id': ocr_result.student_id or 'N/A',
+        # Department detection
+        'department_code': getattr(ocr_result, 'department_code', 0),
+        'department_name': getattr(ocr_result, 'department_name', ''),
+        'department_full_name': getattr(ocr_result, 'department_full_name', ''),
+        'department_valid': getattr(ocr_result, 'department_valid', False),
+        # Course validation
+        'unknown_courses': getattr(ocr_result, 'unknown_courses', []),
     }
 
     # Note: CGPA and total_credits are NOT extracted from PDF
@@ -383,12 +434,56 @@ def show_ocr_summary(ocr_info, course_count):
         f"[dim]Courses:[/dim] [bold green]{course_count}[/bold green]",
         f"[dim]Confidence:[/dim] [bold cyan]{ocr_info['confidence']}%[/bold cyan]",
     )
+    
+    # Build subtitle with department info
+    subtitle_parts = [f"OCR Engine: {ocr_info['engine']}"]
+    
+    # Add department badge if detected
+    dept_name = ocr_info.get('department_name', '')
+    dept_valid = ocr_info.get('department_valid', False)
+    if dept_valid and dept_name:
+        subtitle_parts.append(f"Department: {dept_name}")
+    
     console.print(Panel(
         summary,
         title="[bold green]  ✓ Extraction Complete  [/bold green]",
-        subtitle=f"[dim]OCR Engine: {ocr_info['engine']}[/dim]",
+        subtitle=f"[dim]{' | '.join(subtitle_parts)}[/dim]",
         border_style="green", box=box.DOUBLE_EDGE, padding=(1, 2),
     ))
+    
+    # Show department badge
+    if dept_valid and dept_name:
+        dept_full = ocr_info.get('department_full_name', '')
+        dept_colors = {
+            'CSE': 'blue',
+            'EEE': 'magenta',
+            'BBA': 'green'
+        }
+        color = dept_colors.get(dept_name, 'cyan')
+        console.print(Panel(
+            f"[bold {color}]🎓 {dept_name}[/bold {color}] — [dim]{dept_full}[/dim]",
+            border_style=color,
+            box=box.ROUNDED,
+            padding=(0, 1),
+        ))
+    
+    # Show unknown courses warning
+    unknown_courses = ocr_info.get('unknown_courses', [])
+    if unknown_courses:
+        display_courses = unknown_courses[:5]
+        remaining = len(unknown_courses) - len(display_courses)
+        course_list = ", ".join(display_courses)
+        if remaining > 0:
+            course_list += f" +{remaining} more"
+        
+        console.print(Panel(
+            f"[bold red]⚠️ {len(unknown_courses)} Unknown Course(s) Detected[/bold red]\n"
+            f"[yellow]{course_list}[/yellow]\n"
+            f"[dim]These courses are not in the official NSU catalog.[/dim]",
+            border_style="red",
+            box=box.ROUNDED,
+            padding=(0, 1),
+        ))
 
 
 def show_level1(data):
@@ -614,8 +709,11 @@ def get_file_path():
         console.print(file_table)
         console.print()
 
-    path = Prompt.ask("[cyan]Enter file path or number[/cyan]",
-                      default="Transcript PDF.pdf" if default_pdf.exists() else "")
+    try:
+        path = Prompt.ask("[cyan]Enter file path or number[/cyan]",
+                          default="Transcript PDF.pdf" if default_pdf.exists() else "")
+    except (EOFError, KeyboardInterrupt):
+        return ""  # Return empty to signal cancellation
 
     if path.isdigit() and pdfs:
         idx = int(path) - 1
@@ -716,7 +814,10 @@ def show_history():
         console.print("  [bold]Q[/bold]     - Back to main menu")
         console.print()
         
-        choice = Prompt.ask("[cyan]Enter option[/cyan]", default="Q").upper().strip()
+        try:
+            choice = Prompt.ask("[cyan]Enter option[/cyan]", default="Q").upper().strip()
+        except (EOFError, KeyboardInterrupt):
+            break
         
         if choice == 'Q':
             break
@@ -793,7 +894,10 @@ def show_history_detail(scan_id):
         console.print("  [bold]Q[/bold] - Back to history")
         console.print()
         
-        choice = Prompt.ask("[cyan]Select[/cyan]", choices=["1", "2", "3", "q", "Q"], default="1").upper()
+        try:
+            choice = Prompt.ask("[cyan]Select[/cyan]", choices=["1", "2", "3", "q", "Q"], default="1").upper()
+        except (EOFError, KeyboardInterrupt):
+            break
         
         if choice == "1":
             show_level1(result)
@@ -805,7 +909,10 @@ def show_history_detail(scan_id):
             break
         
         console.print()
-        Prompt.ask("[dim]Press Enter to continue[/dim]")
+        try:
+            Prompt.ask("[dim]Press Enter to continue[/dim]")
+        except (EOFError, KeyboardInterrupt):
+            break
 
 
 def show_scan_history(auth):
@@ -942,16 +1049,28 @@ def main():
             return
         show_ocr_summary(result['ocr_info'], len(result['courses']))
         console.print()
-        Prompt.ask("[dim]Press Enter to view Level 1[/dim]")
+        try:
+            Prompt.ask("[dim]Press Enter to view Level 1[/dim]")
+        except (EOFError, KeyboardInterrupt):
+            return
         show_level1(result)
         console.print()
-        Prompt.ask("[dim]Press Enter to view Level 2[/dim]")
+        try:
+            Prompt.ask("[dim]Press Enter to view Level 2[/dim]")
+        except (EOFError, KeyboardInterrupt):
+            return
         show_level2(result)
         console.print()
-        Prompt.ask("[dim]Press Enter to view Level 3[/dim]")
+        try:
+            Prompt.ask("[dim]Press Enter to view Level 3[/dim]")
+        except (EOFError, KeyboardInterrupt):
+            return
         show_level3(result)
         console.print()
-        Prompt.ask("[dim]Press Enter to exit[/dim]")
+        try:
+            Prompt.ask("[dim]Press Enter to exit[/dim]")
+        except (EOFError, KeyboardInterrupt):
+            pass
         return
 
     # Interactive mode
@@ -985,7 +1104,11 @@ def main():
             console.print(auth_menu)
             console.print()
             
-            auth_choice = Prompt.ask("[cyan]Select option[/cyan]", choices=["1", "2", "3", "0"], default="1")
+            try:
+                auth_choice = Prompt.ask("[cyan]Select option[/cyan]", choices=["1", "2", "3", "0"], default="1")
+            except (EOFError, KeyboardInterrupt):
+                console.print("\n[cyan]Goodbye![/cyan]")
+                break
             
             if auth_choice == "0":
                 console.print("\n[cyan]Goodbye![/cyan]")
@@ -1043,7 +1166,11 @@ def main():
             console.print(main_menu)
             console.print()
             
-            menu_choice = Prompt.ask("[cyan]Select option[/cyan]", choices=["1", "2", "3", "0"], default="1")
+            try:
+                menu_choice = Prompt.ask("[cyan]Select option[/cyan]", choices=["1", "2", "3", "0"], default="1")
+            except (EOFError, KeyboardInterrupt):
+                console.print("\n[cyan]Goodbye![/cyan]")
+                break
             
             if menu_choice == "0":
                 console.print("\n[cyan]Goodbye![/cyan]")
@@ -1094,21 +1221,33 @@ def main():
             console.print()
             console.print(show_results_menu())
             console.print()
-            choice = Prompt.ask("[bold cyan]Select option[/bold cyan]",
-                                choices=["1", "2", "3", "4", "0"], default="1")
+            try:
+                choice = Prompt.ask("[bold cyan]Select option[/bold cyan]",
+                                    choices=["1", "2", "3", "4", "0"], default="1")
+            except (EOFError, KeyboardInterrupt):
+                break
 
             if choice == "1":
                 show_level1(result)
                 console.print()
-                Prompt.ask("[dim]Press Enter to go back[/dim]")
+                try:
+                    Prompt.ask("[dim]Press Enter to go back[/dim]")
+                except (EOFError, KeyboardInterrupt):
+                    pass
             elif choice == "2":
                 show_level2(result)
                 console.print()
-                Prompt.ask("[dim]Press Enter to go back[/dim]")
+                try:
+                    Prompt.ask("[dim]Press Enter to go back[/dim]")
+                except (EOFError, KeyboardInterrupt):
+                    pass
             elif choice == "3":
                 show_level3(result)
                 console.print()
-                Prompt.ask("[dim]Press Enter to go back[/dim]")
+                try:
+                    Prompt.ask("[dim]Press Enter to go back[/dim]")
+                except (EOFError, KeyboardInterrupt):
+                    pass
             elif choice == "4":
                 break
             elif choice == "0":

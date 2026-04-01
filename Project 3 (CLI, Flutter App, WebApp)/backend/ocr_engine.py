@@ -843,16 +843,52 @@ class TranscriptOCR:
         for i, text in enumerate(corrected_text):
             text = text.strip()
 
-            # Extract student info with better patterns
-            if "NAME" in text.upper() and "STUDENT" in text.upper():
-                # Look ahead for the actual name
-                for j in range(i + 1, min(i + 3, len(corrected_text))):
-                    name_candidate = corrected_text[j].strip()
-                    if not any(kw in name_candidate.upper() for kw in ['STUDENT', 'ID', 'DATE', 'CGPA', 'CREDIT', 'COURSE']):
-                        if len(name_candidate) > 3 and not re.match(r'^\d+$', name_candidate):
-                            student_name = name_candidate
-                            _log_debug(f"Student name extracted: {student_name}")
-                            break
+            # Extract student info with better patterns - avoid institutional labels
+            if not student_name and ("NAME" in text.upper() and "STUDENT" in text.upper() or "NAME:" in text.upper()):
+                # Institutional labels to skip
+                skip_keywords = [
+                    'STUDENT', 'ID', 'DATE', 'CGPA', 'CREDIT', 'COURSE', 'SCHOOL', 
+                    'ENGINEERING', 'UNIVERSITY', 'DEPARTMENT', 'COLLEGE', 'FACULTY',
+                    'SCIENCES', 'PHYSICAL', 'ARTS', 'BUSINESS', 'TRANSCRIPT', 'NORTH',
+                    'SOUTH', 'NSU', 'UNOFFICIAL', 'OFFICIAL'
+                ]
+                
+                # First try to extract name from the same line (e.g., "Student Name: John Doe")
+                same_line_match = re.search(r'(?:Student\s*)?Name\s*:\s*([A-Za-z][A-Za-z\s\.]+)', text, re.IGNORECASE)
+                if same_line_match:
+                    candidate = same_line_match.group(1).strip()
+                    # Validate: at least 2 words, doesn't contain institutional labels
+                    if (len(candidate.split()) >= 2 and 
+                        not any(kw in candidate.upper() for kw in skip_keywords)):
+                        student_name = candidate
+                        _log_debug(f"Student name extracted from same line: {student_name}")
+                
+                # If not found on same line, look ahead
+                # NSU transcripts often have format where values start with ":"
+                if not student_name:
+                    for j in range(i + 1, min(i + 10, len(corrected_text))):
+                        name_candidate = corrected_text[j].strip()
+                        if not name_candidate:
+                            continue
+                        
+                        # Handle NSU format where name is on a line starting with ":"
+                        if name_candidate.startswith(':'):
+                            name_candidate = name_candidate[1:].strip()
+                        
+                        if not name_candidate or len(name_candidate) < 5:
+                            continue
+                        
+                        if any(kw in name_candidate.upper() for kw in skip_keywords):
+                            continue
+                        
+                        # Must be letters, spaces, periods only and have 2-5 words
+                        if (not re.match(r'^\d+$', name_candidate) and
+                            re.match(r'^[A-Za-z][A-Za-z\s\.]+$', name_candidate)):
+                            word_count = len(name_candidate.split())
+                            if 2 <= word_count <= 5:
+                                student_name = name_candidate
+                                _log_debug(f"Student name extracted: {student_name}")
+                                break
 
             if "STUDENT" in text.upper() and "ID" in text.upper():
                 # Try to find ID in same line or next lines

@@ -886,6 +886,12 @@ function showResults(data) {
         if (studentId) studentId.textContent = data.ocr_info.student_id || '—';
     }
 
+    // Department Badge Display
+    displayDepartmentBadge(data.ocr_info);
+    
+    // Unknown Courses Warning
+    displayUnknownCoursesWarning(data.ocr_info);
+
     // Populate all levels
     populateLevel1(data.level1);
     populateLevel2(data.level2);
@@ -906,6 +912,124 @@ function showResults(data) {
     switchLevel('1');
 
     resultsSection.scrollIntoView({ behavior: 'smooth' });
+}
+
+// ─── Department Badge Display ──────────────────────────────────────────────────
+function displayDepartmentBadge(ocrInfo) {
+    if (!ocrInfo) return;
+    
+    // Create or get department badge container
+    let deptContainer = document.getElementById('department-badge-container');
+    if (!deptContainer) {
+        // Insert after student card
+        const studentCard = document.getElementById('student-card');
+        if (studentCard) {
+            deptContainer = document.createElement('div');
+            deptContainer.id = 'department-badge-container';
+            deptContainer.className = 'department-badge-container';
+            studentCard.parentNode.insertBefore(deptContainer, studentCard.nextSibling);
+        }
+    }
+    
+    if (!deptContainer) return;
+    
+    if (ocrInfo.department_valid && ocrInfo.department_name) {
+        const badgeColors = {
+            'CSE': { bg: 'rgba(59, 130, 246, 0.15)', border: '#3b82f6', text: '#60a5fa' },
+            'EEE': { bg: 'rgba(168, 85, 247, 0.15)', border: '#a855f7', text: '#c084fc' },
+            'BBA': { bg: 'rgba(34, 197, 94, 0.15)', border: '#22c55e', text: '#4ade80' }
+        };
+        const colors = badgeColors[ocrInfo.department_name] || badgeColors['CSE'];
+        
+        deptContainer.innerHTML = `
+            <div class="department-badge" style="
+                display: inline-flex;
+                align-items: center;
+                gap: 8px;
+                padding: 8px 16px;
+                background: ${colors.bg};
+                border: 1px solid ${colors.border};
+                border-radius: 20px;
+                margin: 10px 0;
+            ">
+                <span class="dept-icon" style="font-size: 1.2em;">🎓</span>
+                <span class="dept-name" style="color: ${colors.text}; font-weight: 600;">
+                    ${esc(ocrInfo.department_name)}
+                </span>
+                <span class="dept-full" style="color: rgba(255,255,255,0.6); font-size: 0.85em;">
+                    ${esc(ocrInfo.department_full_name || '')}
+                </span>
+            </div>
+        `;
+        deptContainer.style.display = 'block';
+    } else {
+        deptContainer.style.display = 'none';
+    }
+}
+
+// ─── Unknown Courses Warning Display ───────────────────────────────────────────
+function displayUnknownCoursesWarning(ocrInfo) {
+    if (!ocrInfo) return;
+    
+    // Create or get warning container
+    let warningContainer = document.getElementById('unknown-courses-warning');
+    if (!warningContainer) {
+        // Insert in the results section, before level tabs
+        const levelTabs = document.querySelector('.level-tabs');
+        if (levelTabs) {
+            warningContainer = document.createElement('div');
+            warningContainer.id = 'unknown-courses-warning';
+            warningContainer.className = 'unknown-courses-warning';
+            levelTabs.parentNode.insertBefore(warningContainer, levelTabs);
+        }
+    }
+    
+    if (!warningContainer) return;
+    
+    const unknownCourses = ocrInfo.unknown_courses || [];
+    
+    if (unknownCourses.length > 0) {
+        // Display first 5 courses, with count of remaining
+        const displayCourses = unknownCourses.slice(0, 5);
+        const remaining = unknownCourses.length - displayCourses.length;
+        
+        warningContainer.innerHTML = `
+            <div class="warning-banner" style="
+                display: flex;
+                align-items: flex-start;
+                gap: 12px;
+                padding: 12px 16px;
+                background: rgba(239, 68, 68, 0.1);
+                border: 1px solid rgba(239, 68, 68, 0.3);
+                border-radius: 8px;
+                margin: 10px 0;
+            ">
+                <span class="warning-icon" style="font-size: 1.3em; color: #ef4444;">⚠️</span>
+                <div class="warning-content" style="flex: 1;">
+                    <div class="warning-title" style="color: #ef4444; font-weight: 600; margin-bottom: 4px;">
+                        ${unknownCourses.length} Unknown Course${unknownCourses.length > 1 ? 's' : ''} Detected
+                    </div>
+                    <div class="warning-courses" style="color: rgba(255,255,255,0.7); font-size: 0.9em;">
+                        ${displayCourses.map(c => `<span class="unknown-course-tag" style="
+                            display: inline-block;
+                            background: rgba(239, 68, 68, 0.2);
+                            padding: 2px 8px;
+                            border-radius: 4px;
+                            margin: 2px 4px 2px 0;
+                            font-family: monospace;
+                        ">${esc(c)}</span>`).join('')}
+                        ${remaining > 0 ? `<span style="color: rgba(255,255,255,0.5);">+${remaining} more</span>` : ''}
+                    </div>
+                    <div class="warning-note" style="color: rgba(255,255,255,0.5); font-size: 0.8em; margin-top: 4px;">
+                        These courses are not in the official NSU catalog and may affect degree audit accuracy.
+                    </div>
+                </div>
+            </div>
+        `;
+        warningContainer.style.display = 'block';
+    } else {
+        warningContainer.style.display = 'none';
+    }
 }
 
 function populateLevel1(level1) {
