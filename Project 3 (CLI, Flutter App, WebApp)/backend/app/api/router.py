@@ -13,5 +13,11 @@ api_router.include_router(health.router, tags=["Health"])
 
 # API v1 endpoints
 api_router.include_router(auth.router, prefix="/auth", tags=["Authentication"])
-api_router.include_router(upload.router, prefix="/api", tags=["Upload & OCR"])
-api_router.include_router(history.router, prefix="/api", tags=["History"])
+
+# Upload at both /upload and /api/upload for backward compatibility
+api_router.include_router(upload.router, tags=["Upload & OCR"])  # /upload
+api_router.include_router(upload.router, prefix="/api", tags=["Upload & OCR"])  # /api/upload (legacy)
+
+# History at both /history and /api/history for backward compatibility
+api_router.include_router(history.router, tags=["History"])  # /history
+api_router.include_router(history.router, prefix="/api", tags=["History"])  # /api/history (legacy)
