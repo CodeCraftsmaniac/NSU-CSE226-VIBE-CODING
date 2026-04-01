@@ -256,13 +256,14 @@ function updateAuthUI(isSignedIn) {
         authButton.innerHTML = `
             <img src="${avatarUrl || ''}" alt="Avatar" class="user-avatar" onerror="this.style.display='none'">
             <span class="user-name">${name.split(' ')[0]}</span>
-            <svg viewBox="0 0 20 20" fill="currentColor" width="14" height="14">
+            <svg viewBox="0 0 20 20" fill="currentColor" width="14" height="14" class="menu-chevron">
                 <path fill-rule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clip-rule="evenodd"/>
             </svg>
         `;
         authButton.onclick = toggleUserMenu;
         authButton.classList.add('signed-in');
-        userMenu.style.display = 'block';
+        // Don't force display:block - let toggle control visibility via .show class
+        userMenu.classList.remove('show');
     } else {
         authButton.innerHTML = `
             <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
@@ -275,7 +276,6 @@ function updateAuthUI(isSignedIn) {
         `;
         authButton.onclick = signInWithGoogle;
         authButton.classList.remove('signed-in');
-        userMenu.style.display = 'none';
         userMenu.classList.remove('show');
     }
 }

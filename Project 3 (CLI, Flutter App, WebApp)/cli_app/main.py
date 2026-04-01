@@ -588,8 +588,8 @@ def show_results_menu():
     menu.add_row("[bold cyan]2[/bold cyan]  [yellow]CGPA Analysis[/yellow]", "Level 2 — CGPA, standing, waiver")
     menu.add_row("[bold cyan]3[/bold cyan]  [magenta]Degree Audit[/magenta]", "Level 3 — Graduation eligibility")
     menu.add_row("", "")
-    menu.add_row("[bold cyan]N[/bold cyan]  [blue]New Scan[/blue]", "Scan a different transcript")
-    menu.add_row("[bold cyan]Q[/bold cyan]  [red]Quit[/red]", "Exit the application")
+    menu.add_row("[bold cyan]4[/bold cyan]  [blue]New Scan[/blue]", "Scan a different transcript")
+    menu.add_row("[bold cyan]0[/bold cyan]  [red]Quit[/red]", "Exit the application")
     return Panel(menu, title="[bold bright_cyan]  Analysis Results  [/bold bright_cyan]",
                  border_style="cyan", box=box.DOUBLE_EDGE, padding=(1, 2))
 
@@ -981,13 +981,13 @@ def main():
             auth_menu.add_row("[bold cyan]1[/bold cyan]", "[green]🔐 Sign in with Google[/green] — Opens browser for secure sign-in")
             auth_menu.add_row("[bold cyan]2[/bold cyan]", "[blue]📧 Quick Email Login[/blue] — Sign in with email directly")
             auth_menu.add_row("[bold cyan]3[/bold cyan]", "[yellow]👤 Continue as Guest[/yellow] — Scan without saving history")
-            auth_menu.add_row("[bold cyan]Q[/bold cyan]", "[red]Exit[/red] — Quit application")
+            auth_menu.add_row("[bold cyan]0[/bold cyan]", "[red]Exit[/red] — Quit application")
             console.print(auth_menu)
             console.print()
             
-            auth_choice = Prompt.ask("[cyan]Select option[/cyan]", choices=["1", "2", "3", "q", "Q"], default="1").upper()
+            auth_choice = Prompt.ask("[cyan]Select option[/cyan]", choices=["1", "2", "3", "0"], default="1")
             
-            if auth_choice == "Q":
+            if auth_choice == "0":
                 console.print("\n[cyan]Goodbye![/cyan]")
                 break
             elif auth_choice == "1":
@@ -1039,13 +1039,13 @@ def main():
             main_menu.add_row("[bold cyan]1[/bold cyan]", "[green]📄 New Scan[/green] — Upload and analyze transcript")
             main_menu.add_row("[bold cyan]2[/bold cyan]", "[blue]📜 View History[/blue] — See your past scans")
             main_menu.add_row("[bold cyan]3[/bold cyan]", "[yellow]🚪 Logout[/yellow] — Sign out of your account")
-            main_menu.add_row("[bold cyan]Q[/bold cyan]", "[red]Exit[/red] — Quit application")
+            main_menu.add_row("[bold cyan]0[/bold cyan]", "[red]Exit[/red] — Quit application")
             console.print(main_menu)
             console.print()
             
-            menu_choice = Prompt.ask("[cyan]Select option[/cyan]", choices=["1", "2", "3", "q", "Q"], default="1").upper()
+            menu_choice = Prompt.ask("[cyan]Select option[/cyan]", choices=["1", "2", "3", "0"], default="1")
             
-            if menu_choice == "Q":
+            if menu_choice == "0":
                 console.print("\n[cyan]Goodbye![/cyan]")
                 break
             elif menu_choice == "2":
@@ -1053,10 +1053,14 @@ def main():
                 show_scan_history(cli_auth)
                 continue
             elif menu_choice == "3":
-                # Logout
+                # Logout with animation
+                console.print("\n")
+                with console.status("[bold yellow]Signing out...[/bold yellow]", spinner="dots"):
+                    time.sleep(1.5)
                 cli_auth.logout()
-                console.print("\n[green]✓ Logged out successfully[/green]")
-                time.sleep(1)
+                console.print("\n[green]✓ You have been logged out successfully![/green]")
+                console.print("[dim]Your session has ended. See you next time![/dim]")
+                time.sleep(1.5)
                 continue
             # If "1", fall through to file selection
         
@@ -1091,7 +1095,7 @@ def main():
             console.print(show_results_menu())
             console.print()
             choice = Prompt.ask("[bold cyan]Select option[/bold cyan]",
-                                choices=["1", "2", "3", "n", "N", "q", "Q"], default="1").upper()
+                                choices=["1", "2", "3", "4", "0"], default="1")
 
             if choice == "1":
                 show_level1(result)
@@ -1105,9 +1109,9 @@ def main():
                 show_level3(result)
                 console.print()
                 Prompt.ask("[dim]Press Enter to go back[/dim]")
-            elif choice == "N":
+            elif choice == "4":
                 break
-            elif choice == "Q":
+            elif choice == "0":
                 clear_screen()
                 console.print(Panel(
                     "[bold cyan]Thank you for using NSU Degree Audit Engine![/bold cyan]\n\n"

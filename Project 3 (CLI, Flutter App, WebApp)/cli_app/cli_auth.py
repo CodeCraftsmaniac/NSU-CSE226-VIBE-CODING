@@ -359,7 +359,6 @@ class CLIAuth:
         
         No localhost servers or redirects needed!
         """
-        global _interrupt_requested
         self._setup_signal_handlers()
         
         print("\n🔐 Starting Google Sign-In...")
