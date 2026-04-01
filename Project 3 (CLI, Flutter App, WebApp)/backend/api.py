@@ -423,12 +423,16 @@ def upload():
     source = request.form.get('source', 'web')
 
     try:
-        # Save temporarily
-        filepath = Path(app.config['UPLOAD_FOLDER']) / file.filename
+        # Save temporarily with secure filename to prevent path traversal
+        from werkzeug.utils import secure_filename
+        safe_filename = secure_filename(file.filename)
+        if not safe_filename:
+            safe_filename = f"upload_{int(time.time())}.{ext}"
+        filepath = Path(app.config['UPLOAD_FOLDER']) / safe_filename
         file.save(str(filepath))
         file_size = filepath.stat().st_size
         
-        logger.info(f"File uploaded: {file.filename}, size: {file_size} bytes")
+        logger.info(f"File uploaded: {safe_filename}, size: {file_size} bytes")
 
         # Handle CSV files directly (no OCR needed)
         if ext == 'csv':

@@ -98,7 +98,15 @@ KB_PATH = PROJECT_ROOT / 'knowledge_base.md'
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 def clear_screen():
-    os.system('cls' if os.name == 'nt' else 'clear')
+    import subprocess
+    try:
+        if os.name == 'nt':
+            subprocess.run(['cmd', '/c', 'cls'], check=False, shell=False)
+        else:
+            subprocess.run(['clear'], check=False, shell=False)
+    except Exception:
+        # Fallback: print empty lines
+        print('\n' * 50)
 
 
 def create_header():
