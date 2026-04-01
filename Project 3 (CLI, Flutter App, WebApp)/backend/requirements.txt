@@ -10,7 +10,7 @@ httpx>=0.26.0
 
 # Environment & Configuration
 python-dotenv>=1.0.0
-pydantic>=2.5.0
+pydantic[email]>=2.5.0
 pydantic-settings>=2.1.0
 
 # PDF & Image Processing
