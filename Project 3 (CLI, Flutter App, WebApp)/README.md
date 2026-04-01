@@ -157,3 +157,4 @@ OCR_SPACE_API_KEY=your_key_here
 <p align="center">
   <sub>CSE226 • Project 3 • NSU Spring 2026</sub>
 </p>
+# Build trigger
