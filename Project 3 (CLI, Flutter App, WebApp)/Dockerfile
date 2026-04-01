@@ -33,13 +33,17 @@ EXPOSE 8080
 # Change to backend directory for correct module resolution
 WORKDIR /app/backend
 
-# FastAPI with uvicorn - single worker for Cloud Run
-# Cloud Run handles scaling via container instances
-# Use --workers=1 because Cloud Run doesn't support multi-process
-CMD uvicorn app.main:app \
-    --host 0.0.0.0 \
-    --port ${PORT:-8080} \
-    --workers 1 \
-    --timeout-keep-alive 120 \
-    --access-log \
-    --log-level info
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
+    CMD python -c "import requests; requests.get('http://localhost:8080/health')" || exit 1
+
+# FastAPI with gunicorn + uvicorn workers
+# This is more stable for Cloud Run than pure uvicorn
+CMD ["gunicorn", "app.main:app", \
+    "--bind", "0.0.0.0:8080", \
+    "--worker-class", "uvicorn.workers.UvicornWorker", \
+    "--workers", "1", \
+    "--timeout", "120", \
+    "--keep-alive", "120", \
+    "--access-logfile", "-", \
+    "--error-logfile", "-"]
