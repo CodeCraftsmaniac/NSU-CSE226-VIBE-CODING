@@ -21,9 +21,11 @@ import sys
 import json
 import time
 import socket
+import signal
 import threading
 import webbrowser
 import urllib.parse
+import uuid
 from pathlib import Path
 from typing import Optional, Dict, List, Any
 from http.server import HTTPServer, BaseHTTPRequestHandler
@@ -36,15 +38,21 @@ TOKEN_FILE = Path.home() / '.nsu_audit_cli_token.json'
 # API Configuration
 API_BASE_URL = os.environ.get("CLOUD_API_URL", "https://ocrapi.nsunexus.app")
 
+# Web App URL (for OAuth redirect)
+WEB_APP_URL = "https://ocr.nsunexus.app"
+
 # Supabase Configuration (same as website)
 SUPABASE_URL = "https://kmbltplmjdkjlbungbbh.supabase.co"
 SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImttYmx0cGxtamRramxidW5nYmJoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njc2Mjc1MDksImV4cCI6MjA4MzIwMzUwOX0.IRoQ306ElYZh8WoTN1dXMVr9mSd20-RPxwKYZ6M6Lcg"
 
 # Connection timeout
-API_TIMEOUT = 30
+API_TIMEOUT = 15
 
 # Local callback server port
 CALLBACK_PORT = 54321
+
+# Global flag for interrupt handling
+_interrupt_requested = False
 
 
 class OAuthCallbackHandler(BaseHTTPRequestHandler):
@@ -324,68 +332,131 @@ class CLIAuth:
             s.bind(('', 0))
             return s.getsockname()[1]
     
+    def _setup_signal_handlers(self):
+        """Setup signal handlers for graceful interrupt."""
+        global _interrupt_requested
+        _interrupt_requested = False
+        
+        def signal_handler(signum, frame):
+            global _interrupt_requested
+            _interrupt_requested = True
+            print("\n⚠️  Authentication cancelled by user.")
+        
+        # Handle Ctrl+C
+        signal.signal(signal.SIGINT, signal_handler)
+        if hasattr(signal, 'SIGTERM'):
+            signal.signal(signal.SIGTERM, signal_handler)
+    
     def login_with_google(self) -> bool:
         """
-        Login with Google OAuth via browser.
-        Opens browser for authentication, captures token via local callback server.
+        Login with Google OAuth using Device Code Flow.
         
-        NOTE: Requires Supabase to have localhost URLs in allowed redirects.
-        If you see a 500 error, go to Supabase Dashboard > Authentication > URL Configuration
-        and add: http://localhost:* to Redirect URLs.
+        Like GitHub CLI / Supabase CLI:
+        1. Request a device code from backend
+        2. Open browser with verification URL
+        3. User signs in with Google on web
+        4. CLI polls backend until auth completes
+        
+        No localhost servers or redirects needed!
         """
-        port = self._find_free_port()
-        redirect_url = f"http://localhost:{port}/callback"
+        global _interrupt_requested
+        self._setup_signal_handlers()
         
-        # Build Supabase OAuth URL
-        auth_url = (
-            f"{SUPABASE_URL}/auth/v1/authorize?"
-            f"provider=google&"
-            f"redirect_to={urllib.parse.quote(redirect_url)}"
-        )
+        print("\n🔐 Starting Google Sign-In...")
+        print()
         
-        # Start local callback server
-        server = HTTPServer(('localhost', port), OAuthCallbackHandler)
-        server.access_token = None
-        server.refresh_token = None
-        server.auth_complete = False
-        server.auth_error = None
-        server.timeout = 120  # 2 minute timeout
-        
-        # Open browser
-        print(f"\n🌐 Opening browser for Google sign-in...")
-        print(f"   If browser doesn't open, visit: {auth_url[:60]}...")
-        webbrowser.open(auth_url)
-        
-        # Wait for callback
-        print("⏳ Waiting for authentication...")
-        
-        start_time = time.time()
-        while not server.auth_complete and (time.time() - start_time) < 120:
-            server.handle_request()
-        
-        server.server_close()
-        
-        if server.access_token:
-            self.token = server.access_token
-            self.refresh_token = server.refresh_token
+        # Step 1: Request device code
+        try:
+            response = requests.post(
+                f"{API_BASE_URL}/auth/device/code",
+                timeout=API_TIMEOUT
+            )
             
-            # Validate and get user info
-            if self._validate_token():
-                # Sync user to backend database
-                self._sync_user_to_backend()
-                self._save_token()
-                return True
-            else:
-                print("❌ Token validation failed")
-                print("\n[TIP] Try using Quick Email Login (option 2) instead.")
+            if response.status_code != 200:
+                print("❌ Failed to start authentication")
+                print("\n💡 TIP: Try Quick Email Login (option 2) instead.")
                 return False
-        else:
-            print("❌ No token received from OAuth callback")
-            if server.auth_error:
-                print(f"   Error: {server.auth_error}")
-            print("\n[TIP] Google OAuth requires Supabase configuration.")
-            print("      Use Quick Email Login (option 2) for now.")
+            
+            data = response.json()
+            device_code = data['device_code']
+            user_code = data['user_code']
+            verification_url = data['verification_url']
+            expires_in = data['expires_in']
+            poll_interval = data.get('interval', 2)
+            
+        except requests.exceptions.ConnectionError:
+            print("❌ Cannot connect to server. Check your internet connection.")
             return False
+        except Exception as e:
+            print(f"❌ Error: {e}")
+            return False
+        
+        # Step 2: Display code and open browser
+        print("╔════════════════════════════════════════════════════════════╗")
+        print("║               ONE-TIME AUTHENTICATION CODE                 ║")
+        print("╠════════════════════════════════════════════════════════════╣")
+        print(f"║                        {user_code}                        ║")
+        print("╚════════════════════════════════════════════════════════════╝")
+        print()
+        print(f"🌐 Opening: {verification_url}")
+        print()
+        print("   Sign in with Google in your browser.")
+        print("   This code expires in 10 minutes.")
+        print()
+        print("⏳ Waiting for authentication... (Press Ctrl+C to cancel)")
+        
+        try:
+            webbrowser.open(verification_url)
+        except Exception:
+            print("   Could not open browser. Please visit the URL manually.")
+        
+        # Step 3: Poll for completion
+        start_time = time.time()
+        spinner_chars = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏']
+        spinner_idx = 0
+        
+        while (time.time() - start_time) < expires_in:
+            if _interrupt_requested:
+                print("\n")
+                return False
+            
+            # Show spinner
+            print(f"\r{spinner_chars[spinner_idx]} Waiting for browser sign-in...", end='', flush=True)
+            spinner_idx = (spinner_idx + 1) % len(spinner_chars)
+            
+            time.sleep(poll_interval)
+            
+            try:
+                poll_response = requests.post(
+                    f"{API_BASE_URL}/auth/device/poll",
+                    json={'device_code': device_code},
+                    timeout=API_TIMEOUT
+                )
+                
+                poll_data = poll_response.json()
+                
+                if poll_data.get('status') == 'complete':
+                    print("\r                                        ")  # Clear line
+                    self.token = poll_data['token']
+                    self.user = poll_data['user']
+                    self._save_token()
+                    
+                    print("✅ Logged in successfully!")
+                    print(f"   Welcome, {self.user.get('name') or self.user.get('email')}!")
+                    return True
+                    
+                elif poll_data.get('status') == 'expired':
+                    print("\r                                        ")
+                    print("❌ Authentication code expired")
+                    return False
+                    
+            except Exception:
+                # Network error, continue polling
+                pass
+        
+        print("\r                                        ")
+        print("❌ Authentication timed out")
+        return False
     
     def _sync_user_to_backend(self):
         """Sync user to backend database (creates user if doesn't exist)."""

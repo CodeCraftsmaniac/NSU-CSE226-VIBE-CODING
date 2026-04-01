@@ -12,6 +12,11 @@ let currentUser = null;
 let authConfig = null;
 let isGuestMode = false;
 
+// History cache for instant loading
+let historyCache = null;
+let historyCacheTime = 0;
+const HISTORY_CACHE_TTL = 30000; // 30 seconds cache
+
 // ─── Initialize Auth ───────────────────────────────────────────────────────────
 
 async function initAuth() {
@@ -92,6 +97,9 @@ async function initAuth() {
                 
                 // Clear hash
                 history.replaceState(null, '', window.location.pathname);
+                
+                // Prefetch history in background for instant loading later
+                prefetchHistory();
             } else {
                 // Callback failed
                 hideAuthLoading();
@@ -290,21 +298,90 @@ async function loadHistory() {
     
     closeUserMenu();
     document.getElementById('history-modal').classList.add('show');
+    
+    // Check cache first for instant display
+    const now = Date.now();
+    if (historyCache && (now - historyCacheTime) < HISTORY_CACHE_TTL) {
+        renderHistory(historyCache);
+        // Refresh in background
+        refreshHistoryInBackground();
+        return;
+    }
+    
     document.getElementById('history-content').innerHTML = '<p class="loading-text">Loading history...</p>';
     
     try {
         const headers = await getAuthHeaders();
-        const response = await fetch(`${API_BASE_URL}/history`, { headers });
+        
+        // Add timeout for faster response
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 8000); // 8 second timeout
+        
+        const response = await fetch(`${API_BASE_URL}/history`, { 
+            headers,
+            signal: controller.signal
+        });
+        clearTimeout(timeoutId);
+        
         const data = await response.json();
         
         if (data.success && data.history) {
+            // Cache the result
+            historyCache = data.history;
+            historyCacheTime = Date.now();
             renderHistory(data.history);
         } else {
             document.getElementById('history-content').innerHTML = '<p class="no-history">No scan history yet</p>';
         }
     } catch (error) {
         console.error('Load history error:', error);
-        document.getElementById('history-content').innerHTML = '<p class="error-text">Failed to load history</p>';
+        if (error.name === 'AbortError') {
+            document.getElementById('history-content').innerHTML = '<p class="error-text">Request timed out. Please try again.</p>';
+        } else {
+            document.getElementById('history-content').innerHTML = '<p class="error-text">Failed to load history</p>';
+        }
+    }
+}
+
+async function refreshHistoryInBackground() {
+    try {
+        const headers = await getAuthHeaders();
+        const response = await fetch(`${API_BASE_URL}/history`, { headers });
+        const data = await response.json();
+        
+        if (data.success && data.history) {
+            historyCache = data.history;
+            historyCacheTime = Date.now();
+            // Update display if modal still open
+            const modal = document.getElementById('history-modal');
+            if (modal && modal.classList.contains('show')) {
+                renderHistory(data.history);
+            }
+        }
+    } catch (error) {
+        // Silent fail for background refresh
+    }
+}
+
+// Invalidate cache when a new scan is done
+function invalidateHistoryCache() {
+    historyCache = null;
+    historyCacheTime = 0;
+}
+
+// Prefetch history on login for instant loading
+async function prefetchHistory() {
+    try {
+        const headers = await getAuthHeaders();
+        const response = await fetch(`${API_BASE_URL}/history`, { headers });
+        const data = await response.json();
+        
+        if (data.success && data.history) {
+            historyCache = data.history;
+            historyCacheTime = Date.now();
+        }
+    } catch (error) {
+        // Silent fail
     }
 }
 
@@ -347,12 +424,28 @@ function closeHistoryModal() {
 
 async function viewHistoryItem(id) {
     try {
+        // Show loading state
+        showToast('Loading scan details...', 'info');
+        closeHistoryModal();
+        
         const headers = await getAuthHeaders();
         const response = await fetch(`${API_BASE_URL}/history/${id}`, { headers });
         const data = await response.json();
         
         if (data.success && data.scan && data.scan.analysis_data) {
-            closeHistoryModal();
+            // Hide upload section completely (same as when scanning completes)
+            const uploadSection = document.getElementById('upload-section');
+            const heroContent = document.querySelector('.hero-content');
+            const uploadCard = uploadSection?.querySelector('.upload-card');
+            
+            if (heroContent) heroContent.classList.add('hidden');
+            if (uploadCard) uploadCard.style.display = 'none';
+            
+            // Also hide the entire upload section
+            if (uploadSection) {
+                uploadSection.style.display = 'none';
+            }
+            
             // Use showResults from app.js
             if (typeof showResults === 'function') {
                 showResults(data.scan.analysis_data);
@@ -396,4 +489,27 @@ async function deleteHistoryItem(id) {
 
 document.addEventListener('DOMContentLoaded', () => {
     initAuth();
+    
+    // Close user menu when clicking outside
+    document.addEventListener('click', (e) => {
+        const userMenu = document.getElementById('user-menu');
+        const authButton = document.getElementById('auth-button');
+        
+        if (userMenu && userMenu.classList.contains('show')) {
+            // Check if click is outside menu and button
+            if (!userMenu.contains(e.target) && !authButton.contains(e.target)) {
+                userMenu.classList.remove('show');
+            }
+        }
+    });
+    
+    // Close history modal when clicking overlay
+    const historyModal = document.getElementById('history-modal');
+    if (historyModal) {
+        historyModal.addEventListener('click', (e) => {
+            if (e.target === historyModal) {
+                closeHistoryModal();
+            }
+        });
+    }
 });

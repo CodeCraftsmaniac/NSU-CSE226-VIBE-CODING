@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NSU Degree Audit - CLI Authentication</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #0a0e1a 0%, #0d1b2e 50%, #1F6FEB 100%);
+            color: white;
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        .container {
+            text-align: center;
+            padding: 48px;
+            background: rgba(255,255,255,0.05);
+            border-radius: 24px;
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(255,255,255,0.1);
+            max-width: 480px;
+            box-shadow: 0 24px 48px rgba(0,0,0,0.3);
+        }
+        .logo {
+            font-size: 56px;
+            margin-bottom: 16px;
+        }
+        h1 {
+            color: #38bdf8;
+            margin-bottom: 24px;
+            font-size: 28px;
+        }
+        h2 {
+            font-size: 24px;
+            margin-bottom: 16px;
+        }
+        .status-icon {
+            font-size: 72px;
+            margin: 24px 0;
+        }
+        .success { color: #4ade80; }
+        .error { color: #ef4444; }
+        .loading { color: #38bdf8; }
+        .message {
+            color: #94a3b8;
+            margin-top: 16px;
+            line-height: 1.6;
+        }
+        .spinner {
+            border: 4px solid rgba(56, 189, 248, 0.2);
+            border-top: 4px solid #38bdf8;
+            border-radius: 50%;
+            width: 48px;
+            height: 48px;
+            animation: spin 1s linear infinite;
+            margin: 24px auto;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .instruction {
+            background: rgba(56, 189, 248, 0.1);
+            border: 1px solid rgba(56, 189, 248, 0.3);
+            border-radius: 12px;
+            padding: 16px;
+            margin-top: 24px;
+        }
+        .instruction code {
+            background: rgba(0,0,0,0.3);
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-family: 'Consolas', monospace;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="logo">🎓</div>
+        <h1>NSU Degree Audit</h1>
+        
+        <div id="loading">
+            <div class="spinner"></div>
+            <p class="message">Processing authentication...</p>
+        </div>
+        
+        <div id="success" style="display: none;">
+            <div class="status-icon success">✓</div>
+            <h2 style="color: #4ade80;">Authentication Successful!</h2>
+            <p class="message">You can now close this window and return to the CLI.</p>
+            <div class="instruction">
+                <p>Your CLI session is now authenticated.</p>
+            </div>
+        </div>
+        
+        <div id="error" style="display: none;">
+            <div class="status-icon error">✗</div>
+            <h2 style="color: #ef4444;">Authentication Failed</h2>
+            <p class="message" id="error-message">An error occurred.</p>
+            <div class="instruction">
+                <p>Please try again or use <code>Quick Email Login</code> in the CLI.</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Get CLI port from URL params (set by CLI when initiating OAuth)
+        const urlParams = new URLSearchParams(window.location.search);
+        const cliPort = urlParams.get('cli_port');
+        
+        // Extract tokens from URL hash (Supabase returns tokens in hash fragment)
+        const hash = window.location.hash.substring(1);
+        const hashParams = new URLSearchParams(hash);
+        const accessToken = hashParams.get('access_token');
+        const refreshToken = hashParams.get('refresh_token');
+        
+        function showSuccess() {
+            document.getElementById('loading').style.display = 'none';
+            document.getElementById('success').style.display = 'block';
+            // Auto-close window after 3 seconds
+            setTimeout(() => {
+                window.close();
+            }, 3000);
+        }
+        
+        function showError(message) {
+            document.getElementById('loading').style.display = 'none';
+            document.getElementById('error').style.display = 'block';
+            document.getElementById('error-message').textContent = message;
+        }
+        
+        async function sendTokenToCLI(token, refreshToken) {
+            if (!cliPort) {
+                // No CLI port specified - maybe direct web access
+                showError('No CLI port specified. Please start authentication from the CLI.');
+                return;
+            }
+            
+            try {
+                // Create an image to make the request (works cross-origin)
+                const img = new Image();
+                const tokenUrl = `http://localhost:${cliPort}/token?access_token=${encodeURIComponent(token)}&refresh_token=${encodeURIComponent(refreshToken || '')}`;
+                
+                img.onload = function() {
+                    showSuccess();
+                };
+                
+                img.onerror = function() {
+                    // Image load error is expected, but request was still made
+                    // The CLI server responds with JSON, not an image
+                    showSuccess();
+                };
+                
+                img.src = tokenUrl;
+                
+                // Also try fetch as backup
+                try {
+                    await fetch(tokenUrl, { mode: 'no-cors' });
+                } catch (e) {
+                    // Expected to fail due to CORS, but request was made
+                }
+                
+                // Show success after a short delay
+                setTimeout(showSuccess, 500);
+                
+            } catch (error) {
+                console.error('Failed to send token to CLI:', error);
+                showError('Failed to communicate with CLI. Please try again.');
+            }
+        }
+        
+        // Main logic
+        if (accessToken) {
+            sendTokenToCLI(accessToken, refreshToken);
+        } else {
+            // Check for error in URL
+            const error = urlParams.get('error') || hashParams.get('error');
+            const errorDescription = urlParams.get('error_description') || hashParams.get('error_description');
+            
+            if (error) {
+                showError(errorDescription || error);
+            } else {
+                showError('No access token received. Please try again.');
+            }
+        }
+    </script>
+</body>
+</html>

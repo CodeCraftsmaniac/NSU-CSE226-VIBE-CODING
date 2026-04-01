@@ -55,6 +55,29 @@ def index():
     return render_template('index.html')
 
 
+@app.route('/cli-callback')
+def cli_callback():
+    """Serve CLI OAuth callback page (legacy).
+    
+    This page receives OAuth tokens from Supabase and forwards them
+    to the local CLI server running on the specified port.
+    """
+    return render_template('cli_callback.html')
+
+
+@app.route('/cli-auth')
+def cli_auth():
+    """Serve CLI device code authentication page.
+    
+    Like GitHub CLI / Supabase CLI flow:
+    1. CLI generates device code
+    2. User opens this page with code in URL
+    3. User signs in with Google
+    4. CLI polls and receives token
+    """
+    return render_template('cli_auth.html')
+
+
 @app.route('/health')
 def health():
     """Health check endpoint."""

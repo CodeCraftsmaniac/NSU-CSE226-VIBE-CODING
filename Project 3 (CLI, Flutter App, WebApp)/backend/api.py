@@ -23,6 +23,7 @@ History Endpoints:
 
 import os
 import sys
+import time
 import logging
 import tempfile
 import platform
@@ -799,6 +800,166 @@ def delete_history(scan_id):
         return jsonify({'error': 'Scan not found or access denied'}), 404
     
     return jsonify({'success': True, 'message': 'Scan deleted'})
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Device Code Flow for CLI Authentication (like GitHub CLI / Supabase CLI)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+# In-memory store for device codes (use Redis in production)
+_device_codes = {}
+
+import secrets
+import string
+
+def generate_device_code():
+    """Generate a short, user-friendly device code."""
+    # 8 character alphanumeric code (easy to type)
+    chars = string.ascii_uppercase + string.digits
+    # Remove confusing characters
+    chars = chars.replace('O', '').replace('0', '').replace('I', '').replace('1', '').replace('L', '')
+    return ''.join(secrets.choice(chars) for _ in range(8))
+
+
+@app.route('/auth/device/code', methods=['POST'])
+def create_device_code():
+    """
+    Step 1: CLI requests a device code.
+    Returns a code that user will enter on web to authenticate.
+    Similar to: gh auth login, supabase login
+    """
+    device_code = generate_device_code()
+    user_code = f"{device_code[:4]}-{device_code[4:]}"  # Format: XXXX-XXXX
+    
+    # Store code with expiration (10 minutes)
+    _device_codes[device_code] = {
+        'status': 'pending',
+        'created_at': time.time(),
+        'expires_at': time.time() + 600,  # 10 minutes
+        'token': None,
+        'user': None
+    }
+    
+    verification_url = f"https://ocr.nsunexus.app/cli-auth?code={device_code}"
+    
+    return jsonify({
+        'success': True,
+        'device_code': device_code,
+        'user_code': user_code,
+        'verification_url': verification_url,
+        'expires_in': 600,
+        'interval': 2  # Poll every 2 seconds
+    })
+
+
+@app.route('/auth/device/poll', methods=['POST'])
+def poll_device_code():
+    """
+    Step 2: CLI polls this endpoint to check if user has authenticated.
+    Returns pending, expired, or the token.
+    """
+    data = request.get_json() or {}
+    device_code = data.get('device_code', '').replace('-', '').upper()
+    
+    if not device_code or device_code not in _device_codes:
+        return jsonify({'error': 'Invalid device code'}), 400
+    
+    code_data = _device_codes[device_code]
+    
+    # Check expiration
+    if time.time() > code_data['expires_at']:
+        del _device_codes[device_code]
+        return jsonify({'status': 'expired', 'error': 'Device code expired'}), 410
+    
+    # Check if authenticated
+    if code_data['status'] == 'complete':
+        token = code_data['token']
+        user = code_data['user']
+        del _device_codes[device_code]  # One-time use
+        return jsonify({
+            'status': 'complete',
+            'success': True,
+            'token': token,
+            'user': user
+        })
+    
+    # Still pending
+    return jsonify({
+        'status': 'pending',
+        'message': 'Waiting for user to authenticate...'
+    })
+
+
+@app.route('/auth/device/verify', methods=['POST'])
+def verify_device_code():
+    """
+    Step 3: Web app calls this after user authenticates via Google.
+    Links the device code to the authenticated user.
+    """
+    data = request.get_json() or {}
+    device_code = data.get('device_code', '').replace('-', '').upper()
+    access_token = data.get('access_token')
+    user_data = data.get('user')
+    
+    if not device_code or device_code not in _device_codes:
+        return jsonify({'error': 'Invalid or expired device code'}), 400
+    
+    code_data = _device_codes[device_code]
+    
+    if time.time() > code_data['expires_at']:
+        del _device_codes[device_code]
+        return jsonify({'error': 'Device code expired'}), 410
+    
+    if not access_token or not user_data:
+        return jsonify({'error': 'Missing token or user data'}), 400
+    
+    # Get or create user in our database
+    email = user_data.get('email')
+    name = user_data.get('user_metadata', {}).get('full_name', '') or user_data.get('user_metadata', {}).get('name', '')
+    
+    if DB_AVAILABLE and email:
+        db_user = create_user(email=email, name=name, provider='google')
+        if db_user:
+            user_data['db_id'] = db_user['id']
+    
+    # Generate our own token for CLI
+    import hashlib
+    import hmac
+    import base64
+    import json as token_json
+    
+    from auth import SUPABASE_SERVICE_ROLE_KEY as AUTH_SERVICE_KEY
+    SECRET_KEY = AUTH_SERVICE_KEY[:32] if AUTH_SERVICE_KEY else 'cli-device-auth-key'[:32]
+    
+    payload = {
+        'user_id': user_data.get('db_id') or user_data.get('id'),
+        'email': email,
+        'exp': int(time.time()) + (30 * 24 * 3600)  # 30 days
+    }
+    
+    payload_bytes = base64.urlsafe_b64encode(token_json.dumps(payload).encode()).decode()
+    signature = hmac.new(SECRET_KEY.encode(), payload_bytes.encode(), hashlib.sha256).hexdigest()[:16]
+    cli_token = f"{payload_bytes}.{signature}"
+    
+    # Mark code as complete
+    _device_codes[device_code] = {
+        'status': 'complete',
+        'token': cli_token,
+        'user': {
+            'id': user_data.get('id'),
+            'db_id': user_data.get('db_id'),
+            'email': email,
+            'name': name,
+            'avatar_url': user_data.get('user_metadata', {}).get('avatar_url', ''),
+            'provider': 'google'
+        },
+        'expires_at': code_data['expires_at']
+    }
+    
+    return jsonify({
+        'success': True,
+        'message': 'Device authenticated successfully'
+    })
 
 
 # ═══════════════════════════════════════════════════════════════════════════════

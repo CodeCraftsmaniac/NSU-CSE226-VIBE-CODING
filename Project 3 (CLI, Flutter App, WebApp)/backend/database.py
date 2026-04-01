@@ -192,13 +192,16 @@ def save_scan(
 
 
 def get_user_scans(user_id: str, limit: int = 50) -> List[Dict]:
-    """Get scan history for a user from cse226_ocr_scans table."""
+    """Get scan history for a user from cse226_ocr_scans table.
+    Excludes analysis_data for faster listing (fetched separately in detail view).
+    """
     supabase = get_supabase()
     if not supabase:
         return []
     try:
+        # Select only needed fields for listing (exclude large analysis_data)
         result = supabase.table('cse226_ocr_scans')\
-            .select('*')\
+            .select('id, user_id, filename, total_courses, total_credits, cgpa, source, created_at')\
             .eq('user_id', user_id)\
             .order('created_at', desc=True)\
             .limit(limit)\
