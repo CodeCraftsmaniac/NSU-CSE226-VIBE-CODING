@@ -11,6 +11,19 @@ Author:  CSE226 Project 1
 import csv, os, re, sys
 from collections import OrderedDict
 from datetime import datetime
+from typing import Optional, Dict, Any
+
+# Import curriculum versioning
+try:
+    from curriculum_versions import (
+        get_curriculum_version,
+        detect_enrollment_year,
+        compare_credits_to_curriculum,
+        get_curriculum_version_display
+    )
+    CURRICULUM_VERSIONING_AVAILABLE = True
+except ImportError:
+    CURRICULUM_VERSIONING_AVAILABLE = False
 
 # ─── Force UTF-8 encoding (Windows fix) ────────────────────────────────────────
 if sys.platform == 'win32':
@@ -796,7 +809,7 @@ def detect_program(courses):
 #  ENGINE  ·  Full 3-Level Analysis (used by CLI, Web, Flutter backend)
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-def run_full_analysis(courses_raw, kb_path=None):
+def run_full_analysis(courses_raw, kb_path=None, student_id=None, enrollment_year_override=None):
     """Run all 3 levels of analysis on OCR-extracted courses.
 
     This is THE single source of truth for analysis logic.
@@ -805,9 +818,11 @@ def run_full_analysis(courses_raw, kb_path=None):
     Args:
         courses_raw: List of dicts with keys: course_code, credits, grade, semester
         kb_path: Optional path to knowledge_base.md for Level 3 audit
+        student_id: Optional student ID for curriculum version detection
+        enrollment_year_override: Optional manual override for enrollment year
 
     Returns:
-        Dict with keys: level1, level2, level3, courses, semesters
+        Dict with keys: level1, level2, level3, courses, semesters, curriculum
     """
 
     # Filter valid courses
@@ -986,6 +1001,39 @@ def run_full_analysis(courses_raw, kb_path=None):
         }
 
     # ═════════════════════════════════════════════════════════════════════════
+    # CURRICULUM VERSION DETECTION
+    # ═════════════════════════════════════════════════════════════════════════
+    curriculum_info = None
+    enrollment_year = enrollment_year_override
+    
+    if CURRICULUM_VERSIONING_AVAILABLE and detected_program:
+        # Detect enrollment year from student ID if not overridden
+        if enrollment_year is None and student_id:
+            enrollment_year = detect_enrollment_year(student_id)
+        
+        # Get curriculum version
+        curriculum_info = get_curriculum_version(
+            department=detected_program,
+            enrollment_year=enrollment_year,
+            student_id=student_id
+        )
+        
+        if curriculum_info:
+            # Use curriculum-specific total credits for progress calculation
+            required_credits = curriculum_info.get('total_credits', 130)
+            
+            # Update level1 with curriculum-aware progress
+            level1['required_credits'] = required_credits
+            level1['progress'] = round(earned_credits / required_credits * 100, 1) if required_credits > 0 else 0
+            
+            # Update level3 graduation_ready check
+            if level3:
+                level3['graduation_ready'] = (
+                    len(level3.get('mandatory_missing', [])) == 0 and 
+                    earned_credits >= required_credits
+                )
+
+    # ═════════════════════════════════════════════════════════════════════════
     # Semester-grouped courses for display
     # ═════════════════════════════════════════════════════════════════════════
     semesters = {}
@@ -1015,10 +1063,40 @@ def run_full_analysis(courses_raw, kb_path=None):
             'courses': semesters[sem_name]
         })
 
-    return {
+    # Build final result
+    result = {
         'level1': level1,
         'level2': level2,
         'level3': level3,
         'courses': course_details,
         'semesters': sorted_semesters
     }
+    
+    # Add curriculum info if available
+    if curriculum_info:
+        result['curriculum'] = {
+            'version': curriculum_info.get('version'),
+            'name': curriculum_info.get('name'),
+            'year_range': curriculum_info.get('year_range'),
+            'total_credits': curriculum_info.get('total_credits'),
+            'enrollment_year': enrollment_year,
+            'min_electives': curriculum_info.get('min_electives', 3),
+            'is_current': curriculum_info.get('is_current', False),
+            'notes': curriculum_info.get('notes', []),
+            'requirements': curriculum_info.get('requirements', {})
+        }
+    else:
+        # Default curriculum info when versioning not available
+        result['curriculum'] = {
+            'version': 'default',
+            'name': 'Standard Curriculum',
+            'year_range': 'All Years',
+            'total_credits': 130,
+            'enrollment_year': enrollment_year,
+            'min_electives': 3,
+            'is_current': True,
+            'notes': [],
+            'requirements': {}
+        }
+    
+    return result

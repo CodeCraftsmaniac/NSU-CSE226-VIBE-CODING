@@ -119,15 +119,17 @@ def detect_department_from_id(student_id: str) -> dict:
     """
     Detect department from NSU student ID.
     
-    NSU ID format: 10 digits where department code is encoded in the middle
-    - Typical format: YYYYSS DD NN (Year, Semester, Dept, Seq)
-    - Department code at positions 5-6 (0-indexed) = 2 digits
-    - Example: 0920 4 42 543 -> "42" at positions 5-6 -> CSE
-    - Example: 0920 4 43 543 -> "43" at positions 5-6 -> EEE
-    - Example: 0920 4 30 543 -> "30" at positions 5-6 -> BBA
+    NSU ID formats observed:
+    - Pattern 1: "XXXXXXX S DD" format (e.g., "0920402 S 43") where DD is dept code at end
+    - Pattern 2: "XXXXXXXXDD" format (10 continuous digits)
+    
+    The department code (42=CSE, 43=EEE, 30=BBA) can appear:
+    - At the END after "S" separator (most reliable)
+    - At positions 7-8 in 10-digit format
+    - At positions 5-6 in some older formats
     
     Args:
-        student_id: The 10-digit NSU student ID
+        student_id: The NSU student ID (various formats)
         
     Returns:
         dict with keys:
@@ -137,44 +139,79 @@ def detect_department_from_id(student_id: str) -> dict:
         - department_full_name: str - full name
         - error: str - error message if invalid
     """
+    def make_valid_result(dept_code: int) -> dict:
+        return {
+            "valid": True,
+            "department_code": dept_code,
+            "department_name": VALID_DEPARTMENTS[dept_code],
+            "department_full_name": DEPARTMENT_FULL_NAMES[dept_code]
+        }
+    
     if not student_id:
         return {
             "valid": False, 
             "error": "No student ID provided"
         }
     
-    # Clean the ID - remove spaces and non-digits
-    clean_id = ''.join(c for c in str(student_id) if c.isdigit())
+    original = str(student_id).strip()
     
-    if len(clean_id) < 10:
-        return {
-            "valid": False, 
-            "error": f"Invalid NSU ID format (expected 10 digits, got {len(clean_id)})"
-        }
+    # Pattern 1: Check for "S XX" or "S XX" pattern (space + S + optional space + 2 digits)
+    # This handles formats like "0920402 S 43" or "0920402S43"
+    match = re.search(r'S\s*(\d{2})\s*$', original, re.IGNORECASE)
+    if match:
+        try:
+            dept_code = int(match.group(1))
+            if dept_code in VALID_DEPARTMENTS:
+                return make_valid_result(dept_code)
+        except ValueError:
+            pass
     
-    try:
-        # Extract department code from positions 5-6 (0-indexed)
-        # Format: YYYY S DD NNN where DD is department code
-        dept_code = int(clean_id[5:7])
-        
-        if dept_code in VALID_DEPARTMENTS:
-            return {
-                "valid": True,
-                "department_code": dept_code,
-                "department_name": VALID_DEPARTMENTS[dept_code],
-                "department_full_name": DEPARTMENT_FULL_NAMES[dept_code]
-            }
-        else:
-            return {
-                "valid": False,
-                "department_code": dept_code,
-                "error": f"Department code {dept_code} is not supported. Only CSE (42), EEE (43), and BBA (30) are supported."
-            }
-    except (ValueError, IndexError) as e:
-        return {
-            "valid": False, 
-            "error": f"Could not parse department from ID: {str(e)}"
-        }
+    # Clean all non-digits for position-based extraction
+    clean_id = ''.join(c for c in original if c.isdigit())
+    
+    # Pattern 2: Try last 2 digits (works for formats where dept code is at the end)
+    # E.g., "092040243" -> last 2 = "43" = EEE
+    if len(clean_id) >= 9:
+        try:
+            dept_code = int(clean_id[-2:])
+            if dept_code in VALID_DEPARTMENTS:
+                return make_valid_result(dept_code)
+        except ValueError:
+            pass
+    
+    # Pattern 3: Try positions 7-8 (0-indexed) for 10-digit format
+    # E.g., "0920402543" -> positions 7-8 = "54" (not valid), but "0920424302" -> "43"
+    if len(clean_id) >= 10:
+        try:
+            dept_code = int(clean_id[7:9])
+            if dept_code in VALID_DEPARTMENTS:
+                return make_valid_result(dept_code)
+        except ValueError:
+            pass
+    
+    # Pattern 4: Try positions 5-6 (original format assumption)
+    # E.g., "0920442543" -> positions 5-6 = "42" = CSE
+    if len(clean_id) >= 7:
+        try:
+            dept_code = int(clean_id[5:7])
+            if dept_code in VALID_DEPARTMENTS:
+                return make_valid_result(dept_code)
+        except ValueError:
+            pass
+    
+    # No valid department found
+    attempted_codes = []
+    if len(clean_id) >= 9:
+        attempted_codes.append(f"last 2 digits: {clean_id[-2:]}")
+    if len(clean_id) >= 10:
+        attempted_codes.append(f"positions 7-8: {clean_id[7:9]}")
+    if len(clean_id) >= 7:
+        attempted_codes.append(f"positions 5-6: {clean_id[5:7]}")
+    
+    return {
+        "valid": False, 
+        "error": f"Could not detect valid department. Tried: {', '.join(attempted_codes) if attempted_codes else 'ID too short'}. Valid codes: CSE(42), EEE(43), BBA(30)"
+    }
 
 
 def validate_courses_against_catalog(courses: list) -> list:
@@ -669,14 +706,38 @@ class WebOCR:
         for i, line in enumerate(lines):
             line_clean = line.strip()
             
-            # Student ID
+            # Student ID - handle multiple NSU ID formats
+            # Format 1: "XXXXXXX S DD" (e.g., "0920402 S 43")
+            # Format 2: 10+ continuous digits
+            # Format 3: "Student ID : XXXXXXX S DD"
             if not student_id:
-                id_match = re.search(r'\b(\d{10,})\b', line_clean)
-                if id_match:
-                    student_id = id_match.group(1)
-                id_match2 = re.search(r':\s*(\d{7})\s*(\d)\s*(\d{2})', line_clean)
-                if id_match2:
-                    student_id = id_match2.group(1) + id_match2.group(2) + id_match2.group(3)
+                # First try: "Student ID" label followed by the ID value
+                id_label_match = re.search(r'Student\s*ID\s*[:\s]+(\d{7,})\s*S?\s*(\d{2})?', line_clean, re.IGNORECASE)
+                if id_label_match:
+                    if id_label_match.group(2):
+                        # Format with S separator: preserve as "XXXXXXX S DD"
+                        student_id = f"{id_label_match.group(1)} S {id_label_match.group(2)}"
+                    else:
+                        student_id = id_label_match.group(1)
+                
+                # Try pattern: "XXXXXXX S DD" anywhere on line
+                if not student_id:
+                    id_match_sep = re.search(r'\b(\d{7})\s*S\s*(\d{2})\b', line_clean, re.IGNORECASE)
+                    if id_match_sep:
+                        student_id = f"{id_match_sep.group(1)} S {id_match_sep.group(2)}"
+                
+                # Try continuous 10+ digit ID
+                if not student_id:
+                    id_match = re.search(r'\b(\d{10,})\b', line_clean)
+                    if id_match:
+                        student_id = id_match.group(1)
+                
+                # Try colon-prefixed format: ": 0920402 S 43" or ": 0920402 5 43"
+                if not student_id:
+                    id_match2 = re.search(r':\s*(\d{7})\s*(\w)\s*(\d{2})', line_clean)
+                    if id_match2:
+                        # Preserve format with separator
+                        student_id = f"{id_match2.group(1)} {id_match2.group(2)} {id_match2.group(3)}"
             
             # Student Name - improved extraction to avoid institutional labels
             if not student_name and ('Student Name' in line_clean or 'Name:' in line_clean):
@@ -729,17 +790,34 @@ class WebOCR:
                                 student_name = potential_name
                                 break
             
-            # CGPA
-            if 'Cumulative Grade Point Average' in line_clean:
-                cgpa_match = re.search(r':\s*(\d+\.\d{1,2})', line_clean)
-                if cgpa_match:
-                    cgpa = float(cgpa_match.group(1))
+            # CGPA - multiple patterns for different transcript formats
+            if any(x in line_clean.upper() for x in ['CUMULATIVE', 'CGPA', 'CUM. GPA', 'CUM GPA']):
+                # Try multiple patterns
+                cgpa_patterns = [
+                    r':\s*(\d+\.\d{1,2})',           # ": 3.45"
+                    r'(\d+\.\d{1,2})\s*$',           # "3.45" at end
+                    r'CGPA\s*(\d+\.\d{1,2})',        # "CGPA 3.45"
+                    r'(\d+\.\d{1,2})\s*/\s*4\.0',    # "3.45/4.0"
+                ]
+                for pattern in cgpa_patterns:
+                    cgpa_match = re.search(pattern, line_clean)
+                    if cgpa_match:
+                        potential_cgpa = float(cgpa_match.group(1))
+                        if 0.0 <= potential_cgpa <= 4.0:
+                            cgpa = potential_cgpa
+                            break
             
-            # Total Credits
-            if 'Total Credits' in line_clean:
-                cr_match = re.search(r':\s*(\d+(?:\.\d)?)', line_clean)
-                if cr_match:
-                    total_credits_from_pdf = float(cr_match.group(1))
+            # Total Credits - multiple patterns
+            if any(x in line_clean.upper() for x in ['TOTAL CREDITS', 'CREDITS EARNED', 'CREDIT HOURS']):
+                cr_patterns = [
+                    r':\s*(\d+(?:\.\d)?)',           # ": 130"
+                    r'(\d{2,3}(?:\.\d)?)\s*$',       # "130" at end
+                ]
+                for pattern in cr_patterns:
+                    cr_match = re.search(pattern, line_clean)
+                    if cr_match:
+                        total_credits_from_pdf = float(cr_match.group(1))
+                        break
 
         # ===== PASS 1: COLLECT ALL DATA =====
         

@@ -495,8 +495,12 @@ def upload():
                 for c in ocr_result.courses
             ]
 
-            # Run analysis
-            result = run_full_analysis(courses, kb_path=str(KB_PATH))
+            # Run analysis with student_id for curriculum versioning
+            result = run_full_analysis(
+                courses, 
+                kb_path=str(KB_PATH),
+                student_id=ocr_result.student_id
+            )
 
             # Add OCR info with department and validation data
             result['ocr_info'] = {

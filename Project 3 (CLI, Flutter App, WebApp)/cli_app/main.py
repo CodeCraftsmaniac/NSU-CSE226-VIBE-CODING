@@ -384,13 +384,19 @@ def scan_transcript(file_path):
     # ═══════════════════════════════════════════════════════════════════
     # Call the SHARED analysis engine from src/core.py
     # This is THE SAME function the website calls — zero duplication
+    # Pass student_id for curriculum versioning
     # ═══════════════════════════════════════════════════════════════════
-    result = run_full_analysis(courses, kb_path=str(KB_PATH))
+    result = run_full_analysis(
+        courses, 
+        kb_path=str(KB_PATH),
+        student_id=ocr_result.student_id
+    )
 
     _log("[L2]", "Computing CGPA...", "dim white", "bold blue")
     _log("[L2]", "Determining academic standing...", "dim white", "bold blue")
     _log("[L2]", "Checking waiver eligibility...", "dim", "yellow")
     _log("[L3]", "Running degree audit...", "dim white", "bold blue")
+    _log("[L3]", "Detecting curriculum version...", "dim white", "bold blue")
     _log("[L3]", "Checking graduation requirements...", "dim", "yellow")
     _log("[OK]", "Analysis complete ✓", "green", "bold green")
     console.print()
@@ -486,13 +492,67 @@ def show_ocr_summary(ocr_info, course_count):
         ))
 
 
+def show_curriculum_info(data):
+    """Display curriculum version information."""
+    curriculum = data.get('curriculum', {})
+    if not curriculum or curriculum.get('version') == 'default':
+        return
+    
+    # Extract enrollment year from student ID for display
+    enrollment_year = curriculum.get('enrollment_year')
+    enrollment_display = f"Enrolled {enrollment_year}" if enrollment_year else "Year Unknown"
+    
+    # Curriculum version display
+    version_name = curriculum.get('name', 'Standard Curriculum')
+    year_range = curriculum.get('year_range', 'All Years')
+    total_credits = curriculum.get('total_credits', 130)
+    
+    # Color based on whether this is current curriculum
+    is_current = curriculum.get('is_current', False)
+    border_color = "bright_cyan" if is_current else "yellow"
+    
+    # Build curriculum panel content
+    content_parts = [
+        f"[bold cyan]📚 {version_name}[/bold cyan]",
+        f"[dim]Year Range:[/dim] [white]{year_range}[/white]",
+        f"[dim]Required Credits:[/dim] [bold white]{total_credits}[/bold white]",
+    ]
+    
+    if enrollment_year:
+        batch_year = enrollment_year + 4
+        content_parts.insert(1, f"[dim]Enrollment:[/dim] [white]{enrollment_year}[/white] [dim](Batch of {batch_year})[/dim]")
+    
+    # Add notes if available
+    notes = curriculum.get('notes', [])
+    if notes:
+        content_parts.append("")
+        for note in notes[:2]:  # Show max 2 notes
+            content_parts.append(f"[dim]• {note}[/dim]")
+    
+    console.print(Panel(
+        "\n".join(content_parts),
+        title="[bold]Curriculum Version[/bold]",
+        border_style=border_color,
+        box=box.ROUNDED,
+        padding=(0, 1),
+    ))
+
+
 def show_level1(data):
     clear_screen()
     console.print(create_header())
     level1 = data['level1']
+    curriculum = data.get('curriculum', {})
+    
+    # Show curriculum info first
+    show_curriculum_info(data)
+    console.print()
 
     console.print(Panel("[bold green]Level 1: Credit Tally[/bold green]", border_style="green", box=box.HEAVY))
 
+    # Use curriculum-specific total credits
+    required_credits = curriculum.get('total_credits', 130)
+    
     stats = Table(box=box.ROUNDED, border_style="cyan", expand=True, show_header=False)
     stats.add_column("Label", style="dim", justify="center")
     stats.add_column("Value", style="bold white", justify="center")
@@ -505,20 +565,22 @@ def show_level1(data):
         "Unique Courses", str(level1['unique_courses']),
         "Credits Earned", f"[bold green]{level1['earned_credits']}[/bold green]",
     )
+    
+    # Use curriculum-aware progress
+    prog = level1.get('progress', level1.get('progress_130', 0))
     stats.add_row(
         "Credits Attempted", str(level1['total_credits_attempted']),
         "Failed Credits", f"[red]{level1['failed_credits']}[/red]" if level1['failed_credits'] > 0 else "0",
-        "Progress (130)", f"[bold cyan]{level1['progress_130']}%[/bold cyan]",
+        f"Progress ({required_credits})", f"[bold cyan]{prog}%[/bold cyan]",
     )
     console.print(stats)
 
-    # Progress bar
-    prog = level1['progress_130']
+    # Progress bar with curriculum-specific credits
     bar_len = 40
     filled = int(bar_len * min(prog, 100) / 100)
     bar = "█" * filled + "░" * (bar_len - filled)
     bar_color = "green" if prog >= 100 else "cyan" if prog >= 75 else "yellow"
-    console.print(f"\n  [{bar_color}]{bar}[/{bar_color}]  [bold]{prog}%[/bold] of 130 credits\n")
+    console.print(f"\n  [{bar_color}]{bar}[/{bar_color}]  [bold]{prog}%[/bold] of {required_credits} credits\n")
 
     # Retakes
     if level1['retakes']:
