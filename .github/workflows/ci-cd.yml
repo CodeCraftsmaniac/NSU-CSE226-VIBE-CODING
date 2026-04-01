@@ -106,7 +106,19 @@ jobs:
             --region ${{ env.REGION }} \
             --allow-unauthenticated \
             --clear-base-image \
-            --set-env-vars "GOOGLE_CLOUD_VISION_KEY=${{ secrets.GOOGLE_CLOUD_VISION_KEY }},OCR_SPACE_API_KEY=${{ secrets.OCR_SPACE_API_KEY }},ENVIRONMENT=production"
+            --set-env-vars "\
+              ENVIRONMENT=production,\
+              DEBUG=false,\
+              LOG_LEVEL=INFO,\
+              SUPABASE_URL=${{ secrets.SUPABASE_URL }},\
+              SUPABASE_KEY=${{ secrets.SUPABASE_KEY }},\
+              SUPABASE_SERVICE_ROLE_KEY=${{ secrets.SUPABASE_SERVICE_ROLE_KEY }},\
+              SUPABASE_JWT_SECRET=${{ secrets.SUPABASE_JWT_SECRET }},\
+              GOOGLE_CLIENT_ID=${{ secrets.GOOGLE_CLIENT_ID }},\
+              GOOGLE_CLIENT_SECRET=${{ secrets.GOOGLE_CLIENT_SECRET }},\
+              OCR_SPACE_API_KEY=${{ secrets.OCR_SPACE_API_KEY }},\
+              GOOGLE_CLOUD_VISION_KEY=${{ secrets.GOOGLE_CLOUD_VISION_KEY }}\
+            "
 
   # ═══════════════════════════════════════════════════════════════
   # Summary
