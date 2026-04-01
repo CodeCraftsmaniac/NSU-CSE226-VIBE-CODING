@@ -57,8 +57,37 @@ try:
 except ImportError:
     pass
 
+import logging
+import sys
+
+# Configure logging to show at startup
+logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
+logger = logging.getLogger(__name__)
+
+# Track router loading status
+_router_loaded = False
+_router_error = None
+
 try:
     from app.api.router import api_router
     app.include_router(api_router)
-except Exception:
-    pass
+    _router_loaded = True
+    logger.info("✅ API router loaded successfully")
+    print("✅ API router loaded successfully", file=sys.stderr)
+except Exception as e:
+    _router_error = str(e)
+    logger.error(f"❌ Failed to load API router: {e}")
+    print(f"❌ Failed to load API router: {e}", file=sys.stderr)
+    import traceback
+    traceback.print_exc()
+
+
+@app.get("/debug/status")
+def debug_status():
+    """Debug endpoint to check router loading status."""
+    return {
+        "router_loaded": _router_loaded,
+        "router_error": _router_error,
+        "python_version": sys.version,
+        "python_path": sys.path[:5]  # First 5 entries
+    }
