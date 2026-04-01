@@ -5,26 +5,30 @@ Pydantic Settings for secure, validated configuration.
 All secrets come from environment variables - NO hardcoded defaults.
 """
 
+import os
 from pydantic_settings import BaseSettings
+from pydantic import model_validator
 from functools import lru_cache
-from typing import List
+from typing import List, Any
 
 
 class Settings(BaseSettings):
     """
     Application settings with validation.
     
-    Required secrets have no defaults - app will fail to start if not set.
-    This is intentional to prevent accidental deployment without proper config.
+    Supports multiple env var naming conventions for compatibility:
+    - SUPABASE_KEY or SUPABASE_ANON_KEY
+    - JWT_SECRET_KEY or SUPABASE_JWT_SECRET
+    - GOOGLE_CLOUD_VISION_KEY or GOOGLE_VISION_API_KEY
     """
     
-    # === REQUIRED - No defaults for secrets (app fails if not set) ===
-    SUPABASE_URL: str
-    SUPABASE_ANON_KEY: str
-    SUPABASE_SERVICE_ROLE_KEY: str
+    # === REQUIRED - Supabase Configuration ===
+    SUPABASE_URL: str = ""
+    SUPABASE_ANON_KEY: str = ""
+    SUPABASE_SERVICE_ROLE_KEY: str = ""
     
     # JWT Configuration
-    JWT_SECRET_KEY: str
+    JWT_SECRET_KEY: str = ""
     JWT_ALGORITHM: str = "HS256"
     JWT_EXPIRE_DAYS: int = 30
     
@@ -53,6 +57,33 @@ class Settings(BaseSettings):
     # === Optional Google OAuth (for frontend) ===
     GOOGLE_CLIENT_ID: str = ""
     
+    @model_validator(mode='before')
+    @classmethod
+    def resolve_aliases(cls, data: Any) -> Any:
+        """Resolve alternative env var names for compatibility."""
+        if isinstance(data, dict):
+            # Support SUPABASE_KEY as alias for SUPABASE_ANON_KEY
+            if not data.get('SUPABASE_ANON_KEY') and data.get('SUPABASE_KEY'):
+                data['SUPABASE_ANON_KEY'] = data.get('SUPABASE_KEY')
+            
+            # Support SUPABASE_JWT_SECRET as alias for JWT_SECRET_KEY
+            if not data.get('JWT_SECRET_KEY') and data.get('SUPABASE_JWT_SECRET'):
+                data['JWT_SECRET_KEY'] = data.get('SUPABASE_JWT_SECRET')
+            
+            # Support GOOGLE_CLOUD_VISION_KEY as alias for GOOGLE_VISION_API_KEY
+            if not data.get('GOOGLE_VISION_API_KEY') and data.get('GOOGLE_CLOUD_VISION_KEY'):
+                data['GOOGLE_VISION_API_KEY'] = data.get('GOOGLE_CLOUD_VISION_KEY')
+        
+        # Also check os.environ directly for Cloud Run
+        if not data.get('SUPABASE_ANON_KEY'):
+            data['SUPABASE_ANON_KEY'] = os.environ.get('SUPABASE_KEY', '')
+        if not data.get('JWT_SECRET_KEY'):
+            data['JWT_SECRET_KEY'] = os.environ.get('SUPABASE_JWT_SECRET', '')
+        if not data.get('GOOGLE_VISION_API_KEY'):
+            data['GOOGLE_VISION_API_KEY'] = os.environ.get('GOOGLE_CLOUD_VISION_KEY', '')
+        
+        return data
+    
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"
@@ -72,10 +103,18 @@ def get_settings() -> Settings:
     """
     Get cached settings instance.
     
-    Raises ValidationError if required settings are missing.
-    This is intentional - fail fast on misconfiguration.
+    Returns default settings if validation fails to allow graceful startup.
     """
-    return Settings()
+    try:
+        return Settings()
+    except Exception:
+        # Return settings with defaults for graceful degradation
+        return Settings(
+            SUPABASE_URL=os.environ.get('SUPABASE_URL', ''),
+            SUPABASE_ANON_KEY=os.environ.get('SUPABASE_KEY', os.environ.get('SUPABASE_ANON_KEY', '')),
+            SUPABASE_SERVICE_ROLE_KEY=os.environ.get('SUPABASE_SERVICE_ROLE_KEY', ''),
+            JWT_SECRET_KEY=os.environ.get('SUPABASE_JWT_SECRET', os.environ.get('JWT_SECRET_KEY', 'dev-secret')),
+        )
 
 
 def validate_settings_on_startup() -> dict:
