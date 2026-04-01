@@ -193,4 +193,4 @@ jobs:
       
       - name: Verify Docker image
         run: |
-          docker run --rm nsu-audit-api:test python -c "from backend.app.main import app; print('✅ Docker build verified')"
+          docker run --rm nsu-audit-api:test python -c "from app.main import app; print('✅ Docker build verified')"

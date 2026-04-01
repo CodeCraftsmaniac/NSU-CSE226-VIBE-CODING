@@ -1,7 +1,7 @@
 # NSU Degree Audit Engine - Backend API Dockerfile
 # =================================================
 # FastAPI backend - High-performance async API
-# Optimized for 20+ concurrent users with uvicorn
+# Optimized for Cloud Run with auto-scaling
 
 FROM python:3.11-slim
 
@@ -26,21 +26,20 @@ RUN mkdir -p uploads && chmod 777 uploads
 # Environment
 ENV PYTHONUNBUFFERED=1
 ENV PORT=8080
-ENV PYTHONPATH=/app/backend
-
-# Concurrency settings for 20+ users
-ENV WEB_CONCURRENCY=4
-ENV UVICORN_WORKERS=4
+ENV PYTHONPATH=/app:/app/backend
 
 EXPOSE 8080
 
-# FastAPI with uvicorn - high-performance async server
-# Supports async operations for better concurrency
-# Cloud Run will scale instances for additional load
-CMD exec uvicorn backend.app.main:app \
+# Change to backend directory for correct module resolution
+WORKDIR /app/backend
+
+# FastAPI with uvicorn - single worker for Cloud Run
+# Cloud Run handles scaling via container instances
+# Use --workers=1 because Cloud Run doesn't support multi-process
+CMD uvicorn app.main:app \
     --host 0.0.0.0 \
-    --port $PORT \
-    --workers ${UVICORN_WORKERS:-4} \
-    --timeout-keep-alive 5 \
+    --port ${PORT:-8080} \
+    --workers 1 \
+    --timeout-keep-alive 120 \
     --access-log \
     --log-level info
