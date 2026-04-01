@@ -46,7 +46,7 @@ jobs:
             --cpu 1 \
             --timeout 300 \
             --max-instances 10 \
-            --set-env-vars FLASK_ENV=production \
+            --set-env-vars ENVIRONMENT=production \
             --set-env-vars DEBUG=false \
             --set-env-vars LOG_LEVEL=INFO \
             --set-env-vars MAX_CONTENT_LENGTH_MB=16 \

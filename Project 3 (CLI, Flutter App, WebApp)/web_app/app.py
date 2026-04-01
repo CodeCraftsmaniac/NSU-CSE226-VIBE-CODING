@@ -12,61 +12,68 @@ import logging
 from pathlib import Path
 from datetime import datetime
 
-from flask import Flask, render_template, jsonify, send_from_directory
-
-# Enable CORS for API access
-try:
-    from flask_cors import CORS
-    CORS_AVAILABLE = True
-except ImportError:
-    CORS_AVAILABLE = False
+from fastapi import FastAPI, Request
+from fastapi.responses import HTMLResponse, JSONResponse, FileResponse
+from fastapi.staticfiles import StaticFiles
+from fastapi.templating import Jinja2Templates
+from fastapi.middleware.cors import CORSMiddleware
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # Application Configuration
 # ═══════════════════════════════════════════════════════════════════════════════
 
-def create_app():
-    """Application factory for Flask app."""
-    app = Flask(__name__)
-    
-    if CORS_AVAILABLE:
-        CORS(app, origins="*")
+app = FastAPI(
+    title="NSU Degree Audit - Web Frontend",
+    version="2.2.0",
+    docs_url=None,  # Disable docs for frontend
+    redoc_url=None
+)
 
-    app.config['ENV'] = os.getenv('FLASK_ENV', 'production')
-    app.config['DEBUG'] = os.getenv('DEBUG', 'false').lower() == 'true'
-    app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'nsu-web-frontend')
+# CORS
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
-    # Configure logging
-    log_level = getattr(logging, os.getenv('LOG_LEVEL', 'INFO').upper(), logging.INFO)
-    logging.basicConfig(level=log_level, format='%(asctime)s [%(levelname)s] %(message)s')
-
-    return app
-
-app = create_app()
+# Configure logging
+log_level = getattr(logging, os.getenv('LOG_LEVEL', 'INFO').upper(), logging.INFO)
+logging.basicConfig(level=log_level, format='%(asctime)s [%(levelname)s] %(message)s')
 logger = logging.getLogger(__name__)
+
+# Get the directory where app.py is located
+BASE_DIR = Path(__file__).parent
+
+# Setup templates
+templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
+
+# Mount static files
+app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="static")
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # Routes - Pure Frontend (no OCR logic)
 # ═══════════════════════════════════════════════════════════════════════════════
 
-@app.route('/')
-def index():
+@app.get("/", response_class=HTMLResponse)
+async def index(request: Request):
     """Render main page."""
-    return render_template('index.html')
+    return templates.TemplateResponse("index.html", {"request": request})
 
 
-@app.route('/cli-callback')
-def cli_callback():
+@app.get("/cli-callback", response_class=HTMLResponse)
+async def cli_callback(request: Request):
     """Serve CLI OAuth callback page (legacy).
     
     This page receives OAuth tokens from Supabase and forwards them
     to the local CLI server running on the specified port.
     """
-    return render_template('cli_callback.html')
+    return templates.TemplateResponse("cli_callback.html", {"request": request})
 
 
-@app.route('/cli-auth')
-def cli_auth():
+@app.get("/cli-auth", response_class=HTMLResponse)
+async def cli_auth(request: Request):
     """Serve CLI device code authentication page.
     
     Like GitHub CLI / Supabase CLI flow:
@@ -75,37 +82,38 @@ def cli_auth():
     3. User signs in with Google
     4. CLI polls and receives token
     """
-    return render_template('cli_auth.html')
+    return templates.TemplateResponse("cli_auth.html", {"request": request})
 
 
-@app.route('/health')
-def health():
+@app.get("/health")
+async def health():
     """Health check endpoint."""
-    return jsonify({
+    return {
         'status': 'healthy',
         'type': 'frontend',
+        'framework': 'FastAPI',
         'backend': 'https://ocrapi.nsunexus.app',
         'timestamp': datetime.utcnow().isoformat(),
-        'version': '2.1.0'
-    })
+        'version': '2.2.0'
+    }
 
 
-@app.route('/static/<path:filename>')
-def serve_static(filename):
-    """Serve static files (CSS, JS, images)."""
-    return send_from_directory('static', filename)
-
-
-@app.errorhandler(404)
-def not_found(e):
+@app.exception_handler(404)
+async def not_found(request: Request, exc):
     """Handle 404 errors."""
-    return jsonify({'error': 'Not found'}), 404
+    return JSONResponse(
+        status_code=404,
+        content={'error': 'Not found'}
+    )
 
 
-@app.errorhandler(500)
-def server_error(e):
+@app.exception_handler(500)
+async def server_error(request: Request, exc):
     """Handle 500 errors."""
-    return jsonify({'error': 'Internal server error'}), 500
+    return JSONResponse(
+        status_code=500,
+        content={'error': 'Internal server error'}
+    )
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -114,6 +122,7 @@ def server_error(e):
 
 if __name__ == '__main__':
     import socket
+    import uvicorn
     
     def get_local_ip():
         try:
@@ -129,7 +138,7 @@ if __name__ == '__main__':
     local_ip = get_local_ip()
 
     print("\n" + "=" * 60)
-    print("  NSU Degree Audit - Web Frontend")
+    print("  NSU Degree Audit - Web Frontend (FastAPI)")
     print("=" * 60)
     print(f"\n  Local       : http://localhost:{port}")
     print(f"  Network     : http://{local_ip}:{port}")
@@ -137,8 +146,8 @@ if __name__ == '__main__':
     print("\n  Press Ctrl+C to stop\n")
     print("=" * 60)
 
-    app.run(debug=True, host='0.0.0.0', port=port)
+    uvicorn.run(app, host='0.0.0.0', port=port)
 
 
-# Vercel serverless handler
+# Vercel/ASGI handler
 handler = app

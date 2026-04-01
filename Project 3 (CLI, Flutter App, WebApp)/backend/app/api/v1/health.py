@@ -2,7 +2,7 @@
 Health Check Endpoints
 ======================
 Liveness and readiness probes for container orchestration.
-Premium health endpoint with detailed system info (migrated from Flask).
+Premium health endpoint with detailed system info (FastAPI endpoint).
 """
 import os
 import sys

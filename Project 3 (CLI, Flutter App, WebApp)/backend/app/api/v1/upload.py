@@ -2,7 +2,7 @@
 Upload & OCR Endpoints
 ======================
 Handle transcript file uploads and OCR processing.
-Migrated from Flask api.py - maintains backward compatibility.
+FastAPI upload and OCR endpoints.
 """
 import sys
 import csv
@@ -267,7 +267,7 @@ async def upload_transcript(
     - Image files (PNG, JPG, JPEG - OCR processing)
     
     Returns processed transcript data with courses and audit results.
-    Same response format as old Flask API for backward compatibility.
+    Standard response format for backward compatibility.
     """
     # Get dependencies lazily
     get_current_user_optional, get_db_user_id, DB_MODULE_AVAILABLE = get_dependencies()

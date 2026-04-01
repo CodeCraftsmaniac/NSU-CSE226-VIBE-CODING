@@ -9,10 +9,15 @@ requests>=2.31.0       # HTTP client for cloud API
 PyMuPDF>=1.23.0        # PDF handling (fitz) - for native text extraction
 Pillow>=10.0.0         # Image processing/compression
 
-# Web Application
-flask>=3.0.0           # Web framework
-flask-cors>=4.0.0      # CORS support for Flutter/mobile apps
-werkzeug>=3.0.0        # WSGI utilities
+# Web Framework - FastAPI
+fastapi>=0.109.0       # Modern async web framework
+uvicorn>=0.27.0        # ASGI server
+pydantic>=2.0.0        # Data validation
+pydantic-settings>=2.0.0  # Settings management
+python-multipart>=0.0.6   # File upload handling
+slowapi>=0.1.9         # Rate limiting for FastAPI
+
+# Environment
 python-dotenv>=1.0.0   # Environment variable management
 
 # Database - Supabase
@@ -20,14 +25,10 @@ supabase>=2.0.0        # Supabase Python client
 python-jose>=3.3.0     # JWT token handling
 
 # Production Server
-gunicorn>=21.0.0       # Production WSGI server (Linux/Mac/Cloud Run)
-waitress>=2.1.0        # Production WSGI server (Windows compatible)
+gunicorn>=21.0.0       # Production server (with uvicorn workers)
 
 # Load Testing (for 20 concurrent users verification)
 locust>=2.20.0         # Load testing framework
-
-# Optional: Rate limiting
-# flask-limiter>=3.0.0 # Rate limiting
 
 # Note: OCR.space API is used for OCR (free, no downloads needed)
 # Optional heavy OCR (if you want local processing):

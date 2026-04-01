@@ -2,14 +2,12 @@
 NSU Degree Audit - Authentication Module
 =========================================
 Handles Supabase Auth integration with Google OAuth.
+Framework-agnostic (no Flask dependency).
 """
 
 import os
 import logging
-from functools import wraps
 from typing import Optional, Dict, Any
-
-from flask import request, jsonify, g
 
 logger = logging.getLogger(__name__)
 
@@ -22,10 +20,11 @@ try:
     SUPABASE_SERVICE_ROLE_KEY = _settings.SUPABASE_SERVICE_ROLE_KEY
     logger.info("Auth module: Loaded settings from config")
 except Exception as e:
-    # Fail with clear error message - no hardcoded fallbacks
-    logger.critical(f"Auth module: Failed to load settings: {e}")
-    logger.critical("Ensure all required environment variables are set (see .env.example)")
-    raise RuntimeError(f"Missing required configuration: {e}")
+    # Fallback to environment variables
+    logger.warning(f"Auth module: Could not load from config ({e}), using env vars")
+    SUPABASE_URL = os.getenv('SUPABASE_URL', '')
+    SUPABASE_KEY = os.getenv('SUPABASE_KEY', os.getenv('SUPABASE_ANON_KEY', ''))
+    SUPABASE_SERVICE_ROLE_KEY = os.getenv('SUPABASE_SERVICE_ROLE_KEY', '')
 
 _supabase_client = None
 
@@ -71,35 +70,6 @@ def verify_supabase_token(access_token: str) -> Optional[Dict[str, Any]]:
             }
     except Exception as e:
         logger.error(f"Token verification error: {e}")
-    
-    return None
-
-
-def get_current_user() -> Optional[Dict[str, Any]]:
-    """Get current user from Authorization header.
-    
-    Supports two token types:
-    1. Supabase JWT tokens (from web app Google OAuth)
-    2. CLI tokens (simple hash tokens from /auth/google)
-    """
-    auth_header = request.headers.get('Authorization', '')
-    
-    if not auth_header or not auth_header.startswith('Bearer '):
-        return None
-    
-    token = auth_header[7:]  # Remove 'Bearer ' prefix
-    
-    # Try Supabase token verification first (web app Google OAuth)
-    user = verify_supabase_token(token)
-    if user:
-        # Sync user to our database
-        sync_user_to_db(user)
-        return user
-    
-    # Try CLI token verification (from /auth/google endpoint)
-    user = verify_cli_token(token)
-    if user:
-        return user
     
     return None
 
@@ -190,27 +160,6 @@ def sync_user_to_db(user: Dict[str, Any]) -> Optional[Dict]:
     except Exception as e:
         logger.error(f"User sync error: {e}")
         return None
-
-
-def require_auth(f):
-    """Decorator requiring valid authentication."""
-    @wraps(f)
-    def decorated(*args, **kwargs):
-        user = get_current_user()
-        if not user:
-            return jsonify({'error': 'Authentication required', 'code': 'AUTH_REQUIRED'}), 401
-        g.user = user
-        return f(*args, **kwargs)
-    return decorated
-
-
-def optional_auth(f):
-    """Decorator that optionally captures auth info."""
-    @wraps(f)
-    def decorated(*args, **kwargs):
-        g.user = get_current_user()
-        return f(*args, **kwargs)
-    return decorated
 
 
 def get_auth_config() -> Dict[str, Any]:

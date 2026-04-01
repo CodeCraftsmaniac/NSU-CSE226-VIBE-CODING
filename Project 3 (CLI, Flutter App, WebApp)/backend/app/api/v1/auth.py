@@ -2,7 +2,7 @@
 Authentication Endpoints
 ========================
 User authentication via Supabase Auth and device code flow for CLI.
-Migrated from Flask api.py - maintains backward compatibility.
+FastAPI authentication endpoints.
 """
 import sys
 import os

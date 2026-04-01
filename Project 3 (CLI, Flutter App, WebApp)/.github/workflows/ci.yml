@@ -48,7 +48,7 @@ jobs:
       
       - name: Run backend tests
         run: |
-          python -m pytest tests/ -v --tb=short --ignore=tests/locustfile.py --ignore=tests/run_load_test.py || echo "No unit tests found yet"
+          cd backend && python -m pytest tests/ -v --tb=short || echo "No unit tests found yet"
         continue-on-error: true
       
       - name: Verify backend imports
@@ -57,7 +57,7 @@ jobs:
           python -c "from app.main import app; print('✅ FastAPI backend imports successfully')"
           python -c "from core import run_full_analysis; print('✅ Core analysis imports successfully')"
           python -c "from database import get_supabase; print('✅ Database module imports successfully')"
-          python -c "from auth import require_auth; print('✅ Auth module imports successfully')"
+          python -c "from auth import verify_supabase_token; print('✅ Auth module imports successfully')"
 
   # ═══════════════════════════════════════════════════════════════════════════
   # CLI Tests
@@ -142,10 +142,10 @@ jobs:
           python-version: '3.11'
       
       - name: Install dependencies
-        run: pip install flask flask-cors
+        run: pip install fastapi uvicorn jinja2 python-multipart
       
       - name: Verify web app imports
-        run: python -c "from app import app; print('✅ Web app imports successfully')"
+        run: python -c "from app import app; print('✅ Web app (FastAPI) imports successfully')"
 
   # ═══════════════════════════════════════════════════════════════════════════
   # Security Scanning

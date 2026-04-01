@@ -2,7 +2,7 @@
 History Endpoints
 =================
 User audit history management.
-Migrated from Flask api.py - maintains backward compatibility.
+FastAPI history endpoints.
 """
 import sys
 import logging
