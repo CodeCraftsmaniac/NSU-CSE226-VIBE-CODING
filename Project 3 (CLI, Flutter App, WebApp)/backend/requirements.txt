@@ -1,0 +1,22 @@
+# NSU Degree Audit Engine - Backend Requirements
+# ===============================================
+
+# Core Web Framework
+flask>=3.0.0
+flask-cors>=4.0.0
+werkzeug>=3.0.0
+python-dotenv>=1.0.0
+
+# PDF & Image Processing
+PyMuPDF>=1.23.0
+Pillow>=10.0.0
+
+# Database - Supabase
+supabase>=2.0.0
+python-jose>=3.3.0
+
+# HTTP Client
+requests>=2.31.0
+
+# Production Server
+gunicorn>=21.0.0
