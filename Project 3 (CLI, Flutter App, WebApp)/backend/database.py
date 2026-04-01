@@ -15,15 +15,19 @@ from typing import Optional, Dict, List, Any
 
 logger = logging.getLogger(__name__)
 
-# Supabase Configuration - HARDCODED FALLBACK for Cloud Run
-# These are safe to hardcode as they're also in the .env file
-_DEFAULT_SUPABASE_URL = 'https://kmbltplmjdkjlbungbbh.supabase.co'
-_DEFAULT_SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImttYmx0cGxtamRramxidW5nYmJoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njc2Mjc1MDksImV4cCI6MjA4MzIwMzUwOX0.IRoQ306ElYZh8WoTN1dXMVr9mSd20-RPxwKYZ6M6Lcg'
-_DEFAULT_SERVICE_ROLE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImttYmx0cGxtamRramxidW5nYmJoIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2NzYyNzUwOSwiZXhwIjoyMDgzMjAzNTA5fQ.CCtw4HCNIXB95TW4Ry1mAtB3__XoL1W8s49kXKHDzdI'
-
-SUPABASE_URL = os.getenv('SUPABASE_URL', _DEFAULT_SUPABASE_URL)
-SUPABASE_KEY = os.getenv('SUPABASE_KEY', _DEFAULT_SUPABASE_KEY)
-SUPABASE_SERVICE_ROLE_KEY = os.getenv('SUPABASE_SERVICE_ROLE_KEY', _DEFAULT_SERVICE_ROLE_KEY)
+# Load configuration from centralized settings
+try:
+    from app.config import get_settings
+    _settings = get_settings()
+    SUPABASE_URL = _settings.SUPABASE_URL
+    SUPABASE_KEY = _settings.SUPABASE_ANON_KEY
+    SUPABASE_SERVICE_ROLE_KEY = _settings.SUPABASE_SERVICE_ROLE_KEY
+    logger.info("Database module: Loaded settings from config")
+except Exception as e:
+    # Fail with clear error message - no hardcoded fallbacks
+    logger.critical(f"Database module: Failed to load settings: {e}")
+    logger.critical("Ensure all required environment variables are set (see .env.example)")
+    raise RuntimeError(f"Missing required configuration: {e}")
 
 # Thread-safe client management for concurrent users
 _supabase_client = None

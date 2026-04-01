@@ -90,35 +90,71 @@ except Exception as e:
 # Application Factory
 # ═══════════════════════════════════════════════════════════════════════════════
 
+# Load centralized configuration
+try:
+    from app.config import get_settings, validate_settings_on_startup
+    _app_settings = get_settings()
+    CONFIG_LOADED = True
+except Exception as e:
+    CONFIG_LOADED = False
+    _app_settings = None
+    print(f"Warning: Could not load config module: {e}")
+
+
 def create_app():
     """Create Flask API application."""
     app = Flask(__name__)
     
-    # CORS - Allow all origins for mobile/Flutter app compatibility
+    # CORS - Use specific origins from config (no wildcard in production)
     if CORS_AVAILABLE:
-        CORS(app, resources={r"/*": {"origins": "*"}})
+        if CONFIG_LOADED and _app_settings:
+            cors_origins = _app_settings.CORS_ORIGINS
+            # In debug mode, also allow any localhost
+            if _app_settings.DEBUG:
+                cors_origins = cors_origins + ["http://localhost:*", "http://127.0.0.1:*"]
+        else:
+            # Fallback to restrictive defaults
+            cors_origins = [
+                "https://ocr.nsunexus.app",
+                "http://localhost:3000",
+                "http://localhost:5173"
+            ]
+        CORS(app, resources={r"/*": {"origins": cors_origins}})
 
     project_root = Path(__file__).parent.parent
     runtime_root = Path(tempfile.gettempdir()) / 'nsu-audit-api'
 
-    # Configuration
-    app.config['ENV'] = os.getenv('FLASK_ENV', 'production')
-    app.config['DEBUG'] = os.getenv('DEBUG', 'false').lower() == 'true'
-    app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', os.urandom(24).hex())
+    # Configuration from settings or env
+    if CONFIG_LOADED and _app_settings:
+        app.config['DEBUG'] = _app_settings.DEBUG
+        app.config['SECRET_KEY'] = _app_settings.JWT_SECRET_KEY
+        max_mb = _app_settings.MAX_UPLOAD_SIZE_MB
+        log_level_str = _app_settings.LOG_LEVEL
+    else:
+        app.config['DEBUG'] = os.getenv('DEBUG', 'false').lower() == 'true'
+        app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', os.urandom(24).hex())
+        max_mb = int(os.getenv('MAX_CONTENT_LENGTH_MB', '16'))
+        log_level_str = os.getenv('LOG_LEVEL', 'INFO')
     
-    # File upload
-    max_mb = int(os.getenv('MAX_CONTENT_LENGTH_MB', '16'))
+    app.config['ENV'] = os.getenv('FLASK_ENV', 'production')
     app.config['MAX_CONTENT_LENGTH'] = max_mb * 1024 * 1024
     app.config['UPLOAD_FOLDER'] = runtime_root / 'uploads'
     app.config['UPLOAD_FOLDER'].mkdir(parents=True, exist_ok=True)
 
     # Logging
-    log_level = getattr(logging, os.getenv('LOG_LEVEL', 'INFO').upper(), logging.INFO)
+    log_level = getattr(logging, log_level_str.upper(), logging.INFO)
     logging.basicConfig(
         level=log_level,
         format='%(asctime)s [%(levelname)s] %(message)s',
         handlers=[logging.StreamHandler()]
     )
+    
+    # TODO: Add rate limiting middleware (Phase 2)
+    # Rate limiting will use: _app_settings.RATE_LIMIT_PER_MINUTE
+    # Suggested library: flask-limiter
+    # Example:
+    #   from flask_limiter import Limiter
+    #   limiter = Limiter(app, default_limits=[f"{rate_limit}/minute"])
 
     return app
 

@@ -61,13 +61,22 @@ except ImportError:
     def get_course_info(code):
         return None
 
-# API Keys - Load from environment with HARDCODED FALLBACK for Cloud Run
-# These keys are also in the .env file - safe to include as fallback
-_DEFAULT_GOOGLE_VISION_KEY = 'AIzaSyA5YsERnW7V9UzpsqkgdFhldqY8LtpJPes'
-_DEFAULT_OCR_SPACE_KEY = 'K86084037488957'
+# API Keys - Load from centralized config (no hardcoded fallbacks)
+try:
+    from app.config import get_settings
+    _settings = get_settings()
+    GOOGLE_VISION_API_KEY = _settings.GOOGLE_VISION_API_KEY
+    OCR_SPACE_API_KEY = _settings.OCR_SPACE_API_KEY
+    _logger.info("OCR module: Loaded settings from config")
+except Exception as e:
+    # Fallback to environment variables for backward compatibility
+    _logger.warning(f"OCR module: Could not load from config ({e}), using env vars")
+    GOOGLE_VISION_API_KEY = os.environ.get('GOOGLE_CLOUD_VISION_KEY') or os.environ.get('GOOGLE_VISION_API_KEY', '')
+    OCR_SPACE_API_KEY = os.environ.get('OCR_SPACE_API_KEY', '')
 
-GOOGLE_VISION_API_KEY = os.environ.get('GOOGLE_CLOUD_VISION_KEY') or os.environ.get('GOOGLE_VISION_API_KEY', _DEFAULT_GOOGLE_VISION_KEY)
-OCR_SPACE_API_KEY = os.environ.get('OCR_SPACE_API_KEY', _DEFAULT_OCR_SPACE_KEY)
+# Warn if no OCR provider is configured
+if not GOOGLE_VISION_API_KEY and not OCR_SPACE_API_KEY:
+    _logger.warning("No OCR API keys configured - OCR functionality will be limited")
 
 VALID_GRADES = {'A', 'A-', 'B+', 'B', 'B-', 'C+', 'C', 'C-', 'D+', 'D', 'F', 'W', 'I', 'P', 'TR'}
 COURSE_PATTERN = re.compile(r'^([A-Z]{2,4})(\d{3}[A-Z]?)$')

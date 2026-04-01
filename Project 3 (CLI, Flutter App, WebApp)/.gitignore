@@ -42,6 +42,7 @@ models/
 .env
 .env.local
 .env.*.local
+backend/.env
 
 # Logs
 logs/

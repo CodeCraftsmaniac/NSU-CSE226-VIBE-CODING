@@ -1,7 +1,7 @@
 # NSU Degree Audit Engine - Backend API Dockerfile
 # =================================================
-# Pure API backend - NO UI, only JSON endpoints
-# Optimized for 20+ concurrent users
+# FastAPI backend - High-performance async API
+# Optimized for 20+ concurrent users with uvicorn
 
 FROM python:3.11-slim
 
@@ -16,7 +16,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Backend API and shared logic (all in backend/ now)
+# Backend API and shared logic
 COPY backend/ ./backend/
 COPY knowledge_base.md .
 
@@ -26,28 +26,21 @@ RUN mkdir -p uploads && chmod 777 uploads
 # Environment
 ENV PYTHONUNBUFFERED=1
 ENV PORT=8080
+ENV PYTHONPATH=/app/backend
 
 # Concurrency settings for 20+ users
-# WEB_CONCURRENCY can be overridden at runtime
 ENV WEB_CONCURRENCY=4
-ENV GUNICORN_WORKERS=4
-ENV GUNICORN_THREADS=4
+ENV UVICORN_WORKERS=4
 
 EXPOSE 8080
 
-# Production server - Optimized for 20+ concurrent users
-# Formula: workers = (2 * CPU cores) + 1, with 4 threads each
-# This supports: 4 workers * 4 threads = 16 concurrent requests + queueing
+# FastAPI with uvicorn - high-performance async server
+# Supports async operations for better concurrency
 # Cloud Run will scale instances for additional load
-CMD exec gunicorn \
-    --bind :$PORT \
-    --workers ${GUNICORN_WORKERS:-4} \
-    --threads ${GUNICORN_THREADS:-4} \
-    --timeout 120 \
-    --keep-alive 5 \
-    --max-requests 1000 \
-    --max-requests-jitter 50 \
-    --graceful-timeout 30 \
-    --access-logfile - \
-    --error-logfile - \
-    backend.api:app
+CMD exec uvicorn backend.app.main:app \
+    --host 0.0.0.0 \
+    --port $PORT \
+    --workers ${UVICORN_WORKERS:-4} \
+    --timeout-keep-alive 5 \
+    --access-log \
+    --log-level info

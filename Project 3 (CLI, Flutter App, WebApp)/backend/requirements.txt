@@ -1,11 +1,22 @@
 # NSU Degree Audit Engine - Backend Requirements
 # ===============================================
 
-# Core Web Framework
+# Core Web Framework - FastAPI (Migration)
+fastapi>=0.109.0
+uvicorn[standard]>=0.27.0
+slowapi>=0.1.9
+python-multipart>=0.0.9
+httpx>=0.26.0
+
+# Legacy Flask (kept for gradual migration)
 flask>=3.0.0
 flask-cors>=4.0.0
 werkzeug>=3.0.0
+
+# Environment & Configuration
 python-dotenv>=1.0.0
+pydantic>=2.5.0
+pydantic-settings>=2.1.0
 
 # PDF & Image Processing
 PyMuPDF>=1.23.0

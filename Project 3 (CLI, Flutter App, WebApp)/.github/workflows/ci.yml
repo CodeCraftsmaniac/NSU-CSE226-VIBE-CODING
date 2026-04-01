@@ -54,7 +54,7 @@ jobs:
       - name: Verify backend imports
         run: |
           cd backend
-          python -c "from api import app; print('✅ Backend imports successfully')"
+          python -c "from app.main import app; print('✅ FastAPI backend imports successfully')"
           python -c "from core import run_full_analysis; print('✅ Core analysis imports successfully')"
           python -c "from database import get_supabase; print('✅ Database module imports successfully')"
           python -c "from auth import require_auth; print('✅ Auth module imports successfully')"
@@ -193,4 +193,4 @@ jobs:
       
       - name: Verify Docker image
         run: |
-          docker run --rm nsu-audit-api:test python -c "from backend.api import app; print('✅ Docker build verified')"
+          docker run --rm nsu-audit-api:test python -c "from backend.app.main import app; print('✅ Docker build verified')"
