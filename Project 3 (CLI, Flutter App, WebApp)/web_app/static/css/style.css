@@ -1627,21 +1627,61 @@ body.review-active .main {
 
 /* OCR Banner */
 .ocr-banner {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: var(--space-5) var(--space-6);
+    padding: var(--space-4) var(--space-5);
     background: linear-gradient(135deg, rgba(16, 185, 129, 0.1), rgba(0, 82, 155, 0.1));
     border: 1px solid rgba(16, 185, 129, 0.2);
     border-radius: var(--radius-xl);
     margin-bottom: var(--space-6);
-    flex-wrap: wrap;
-    gap: var(--space-4);
     backdrop-filter: blur(10px);
     box-shadow:
         0 4px 20px rgba(0, 0, 0, 0.3),
         inset 0 1px 0 rgba(255, 255, 255, 0.05);
     animation: bannerSlideIn 0.6s ease 0.2s both;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.ocr-banner:hover {
+    border-color: rgba(16, 185, 129, 0.4);
+}
+
+.ocr-banner-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+}
+
+.ocr-banner-toggle {
+    width: 28px;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-secondary);
+    transition: transform 0.3s ease;
+}
+
+.ocr-banner.collapsed .ocr-banner-toggle {
+    transform: rotate(0deg);
+}
+
+.ocr-banner:not(.collapsed) .ocr-banner-toggle {
+    transform: rotate(180deg);
+}
+
+.ocr-banner-content {
+    overflow: hidden;
+    max-height: 0;
+    opacity: 0;
+    transition: max-height 0.3s ease, opacity 0.3s ease, margin 0.3s ease;
+    margin-top: 0;
+}
+
+.ocr-banner:not(.collapsed) .ocr-banner-content {
+    max-height: 200px;
+    opacity: 1;
+    margin-top: var(--space-4);
 }
 
 @keyframes bannerSlideIn {
@@ -2935,8 +2975,8 @@ body.review-active .main {
     .tab-name { display: none; }
     .cgpa-value { font-size: 3.5rem; }
     .stats-grid { grid-template-columns: repeat(2, 1fr); }
-    .ocr-banner { flex-direction: column; text-align: center; }
-    .ocr-banner-left { flex-direction: column; }
+    .ocr-banner-header { flex-direction: row; }
+    .ocr-banner-left { flex-direction: row; }
     .scanning-steps { flex-wrap: wrap; gap: var(--space-2); }
     .scan-step span { font-size: 0.6rem; }
     .student-card { flex-direction: column; gap: var(--space-3); }
@@ -2995,8 +3035,9 @@ body.review-active .main {
     .stat-label { font-size: 0.7rem; }
     
     /* Mobile OCR Banner */
-    .ocr-banner { padding: var(--space-3); flex-direction: column; }
-    .ocr-banner-left { flex-direction: column; gap: var(--space-2); }
+    .ocr-banner { padding: var(--space-3); }
+    .ocr-banner-header { flex-direction: row; }
+    .ocr-banner-left { flex-direction: row; gap: var(--space-2); }
     .ocr-engine-badge { font-size: 0.7rem; }
     
     /* Mobile Scanning */

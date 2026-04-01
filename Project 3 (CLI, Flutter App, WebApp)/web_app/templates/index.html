@@ -357,28 +357,37 @@
         <!-- Results Section -->
         <section id="results-section" class="results-section" style="display: none;">
             <div class="container">
-                <!-- OCR Summary Banner -->
-                <div class="ocr-banner" id="ocr-banner">
-                    <div class="ocr-banner-left">
-                        <div class="ocr-success-icon">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-                                <path d="M9 12l2 2 4-4" stroke-linecap="round" stroke-linejoin="round"/>
-                                <circle cx="12" cy="12" r="10"/>
+                <!-- OCR Summary Banner (Collapsible) -->
+                <div class="ocr-banner collapsed" id="ocr-banner" onclick="toggleOcrBanner()">
+                    <div class="ocr-banner-header">
+                        <div class="ocr-banner-left">
+                            <div class="ocr-success-icon">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                                    <path d="M9 12l2 2 4-4" stroke-linecap="round" stroke-linejoin="round"/>
+                                    <circle cx="12" cy="12" r="10"/>
+                                </svg>
+                            </div>
+                            <div>
+                                <div class="ocr-banner-title">Extraction Complete</div>
+                                <div class="ocr-banner-meta" id="ocr-meta">—</div>
+                            </div>
+                        </div>
+                        <div class="ocr-banner-toggle">
+                            <svg viewBox="0 0 20 20" fill="currentColor" width="20" height="20">
+                                <path fill-rule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clip-rule="evenodd"/>
                             </svg>
                         </div>
-                        <div>
-                            <div class="ocr-banner-title">Extraction Complete</div>
-                            <div class="ocr-banner-meta" id="ocr-meta">—</div>
-                        </div>
                     </div>
-                    <div class="ocr-banner-stats">
-                        <div class="ocr-stat">
-                            <span class="ocr-stat-value" id="ocr-courses-count">0</span>
-                            <span class="ocr-stat-label">Courses</span>
-                        </div>
-                        <div class="ocr-stat">
-                            <span class="ocr-stat-value" id="ocr-confidence-value">0%</span>
-                            <span class="ocr-stat-label">Confidence</span>
+                    <div class="ocr-banner-content">
+                        <div class="ocr-banner-stats">
+                            <div class="ocr-stat">
+                                <span class="ocr-stat-value" id="ocr-courses-count">0</span>
+                                <span class="ocr-stat-label">Courses</span>
+                            </div>
+                            <div class="ocr-stat">
+                                <span class="ocr-stat-value" id="ocr-confidence-value">0%</span>
+                                <span class="ocr-stat-label">Confidence</span>
+                            </div>
                         </div>
                     </div>
                 </div>

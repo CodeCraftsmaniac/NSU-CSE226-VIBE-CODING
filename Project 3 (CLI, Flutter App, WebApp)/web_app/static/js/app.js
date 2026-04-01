@@ -1261,6 +1261,14 @@ function initRestartButton() {
     }
 }
 
+// Toggle OCR Banner (collapsible)
+function toggleOcrBanner() {
+    const banner = document.getElementById('ocr-banner');
+    if (banner) {
+        banner.classList.toggle('collapsed');
+    }
+}
+
 // Global reset function
 window.resetAnalysis = function() {
     resetToInitial();
