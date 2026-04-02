@@ -166,10 +166,19 @@ async def not_found(request: Request, exc):
 
 @app.exception_handler(500)
 async def server_error(request: Request, exc):
-    """Handle 500 errors."""
+    """Handle 500 errors with details for debugging."""
+    import traceback
+    error_detail = str(exc) if exc else "Unknown error"
+    tb = traceback.format_exc() if exc else "No traceback available"
+    logger.error(f"500 Error: {error_detail}")
+    logger.error(f"Traceback: {tb}")
     return JSONResponse(
         status_code=500,
-        content={'error': 'Internal server error'}
+        content={
+            'error': 'Internal server error',
+            'detail': error_detail,
+            'path': str(request.url.path) if request else None,
+        }
     )
 
 
