@@ -176,6 +176,147 @@ CURRICULUM_VERSIONS: Dict[str, Dict[str, Dict[str, Any]]] = {
                 "Streamlined elective requirements",
             ]
         }
+    },
+    
+    # Additional departments with simplified curriculum versions
+    "ECE": {
+        "v1": {
+            "name": "ECE Curriculum 2022+",
+            "valid_years": range(2000, 2035),
+            "total_credits": 130,
+            "requirements": {
+                "foundation": 11,
+                "core": 45,
+                "electives": 9,
+                "university_core": 34,
+                "seps_core": 27,
+                "capstone": 4,
+            },
+            "min_electives": 3,
+            "notes": ["Electronic & Computer Engineering curriculum"]
+        }
+    },
+    
+    "ETE": {
+        "v1": {
+            "name": "ETE Curriculum 2022+",
+            "valid_years": range(2000, 2035),
+            "total_credits": 130,
+            "requirements": {
+                "foundation": 11,
+                "core": 45,
+                "electives": 9,
+                "university_core": 34,
+                "seps_core": 27,
+                "capstone": 4,
+            },
+            "min_electives": 3,
+            "notes": ["Electronics & Telecommunications Engineering curriculum"]
+        }
+    },
+    
+    "ARC": {
+        "v1": {
+            "name": "Architecture Curriculum",
+            "valid_years": range(2000, 2035),
+            "total_credits": 180,  # 5-year program
+            "requirements": {
+                "foundation": 24,
+                "design_studios": 60,
+                "theory_history": 24,
+                "technology": 30,
+                "electives": 18,
+                "university_core": 24,
+            },
+            "min_electives": 6,
+            "notes": ["5-year Bachelor of Architecture program"]
+        }
+    },
+    
+    "ENV": {
+        "v1": {
+            "name": "Environmental Science Curriculum",
+            "valid_years": range(2000, 2035),
+            "total_credits": 130,
+            "requirements": {
+                "foundation": 15,
+                "core": 45,
+                "electives": 12,
+                "university_core": 34,
+                "field_work": 6,
+                "capstone": 4,
+            },
+            "min_electives": 4,
+            "notes": ["Environmental Science & Management curriculum"]
+        }
+    },
+    
+    "ECO": {
+        "v1": {
+            "name": "Economics Curriculum",
+            "valid_years": range(2000, 2035),
+            "total_credits": 130,
+            "requirements": {
+                "foundation": 18,
+                "core": 45,
+                "electives": 15,
+                "university_core": 34,
+                "quantitative": 18,
+            },
+            "min_electives": 5,
+            "notes": ["Bachelor of Science in Economics curriculum"]
+        }
+    },
+    
+    "PHR": {
+        "v1": {
+            "name": "Pharmacy Curriculum",
+            "valid_years": range(2000, 2035),
+            "total_credits": 160,  # 4-year + internship
+            "requirements": {
+                "foundation": 24,
+                "core": 72,
+                "electives": 12,
+                "university_core": 24,
+                "clinical_practice": 28,
+            },
+            "min_electives": 4,
+            "notes": ["Bachelor of Pharmacy curriculum"]
+        }
+    },
+    
+    "MIC": {
+        "v1": {
+            "name": "Microbiology Curriculum",
+            "valid_years": range(2000, 2035),
+            "total_credits": 130,
+            "requirements": {
+                "foundation": 18,
+                "core": 48,
+                "electives": 12,
+                "university_core": 34,
+                "lab_work": 18,
+            },
+            "min_electives": 4,
+            "notes": ["Bachelor of Science in Microbiology curriculum"]
+        }
+    },
+    
+    "BCH": {
+        "v1": {
+            "name": "Biochemistry & Biotechnology Curriculum",
+            "valid_years": range(2000, 2035),
+            "total_credits": 130,
+            "requirements": {
+                "foundation": 18,
+                "core": 48,
+                "electives": 12,
+                "university_core": 34,
+                "lab_work": 18,
+            },
+            "min_electives": 4,
+            "notes": ["Bachelor of Science in Biochemistry and Biotechnology curriculum"]
+        }
     }
 }
 

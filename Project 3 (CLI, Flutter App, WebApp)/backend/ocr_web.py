@@ -139,15 +139,53 @@ ALL_COURSE_PREFIXES = {
 # ═══════════════════════════════════════════════════════════════════════════════
 
 VALID_DEPARTMENTS = {
-    42: "CSE",  # Computer Science & Engineering
-    43: "EEE",  # Electrical & Electronic Engineering
-    30: "BBA",  # Bachelor of Business Administration
+    # School of Engineering & Applied Science
+    42: "CSE",   # Computer Science & Engineering
+    43: "EEE",   # Electrical & Electronic Engineering
+    44: "ECE",   # Electronic & Computer Engineering
+    45: "ETE",   # Electronics & Telecommunications Engineering
+    46: "ARC",   # Architecture
+    47: "ENV",   # Environmental Science & Management
+    
+    # School of Business
+    30: "BBA",   # Bachelor of Business Administration
+    31: "MBA",   # Master of Business Administration
+    
+    # School of Arts and Social Science
+    50: "ECO",   # Economics
+    51: "ENG",   # English
+    52: "POL",   # Political Science / Governance
+    
+    # School of Life Science
+    60: "PHR",   # Pharmacy
+    61: "PBH",   # Public Health
+    62: "MIC",   # Microbiology
+    63: "BCH",   # Biochemistry & Biotechnology
 }
 
 DEPARTMENT_FULL_NAMES = {
+    # School of Engineering & Applied Science
     42: "Computer Science & Engineering",
     43: "Electrical & Electronic Engineering",
+    44: "Electronic & Computer Engineering",
+    45: "Electronics & Telecommunications Engineering",
+    46: "Architecture",
+    47: "Environmental Science & Management",
+    
+    # School of Business
     30: "Bachelor of Business Administration",
+    31: "Master of Business Administration",
+    
+    # School of Arts and Social Science
+    50: "Economics",
+    51: "English",
+    52: "Political Science & Governance",
+    
+    # School of Life Science
+    60: "Pharmacy",
+    61: "Public Health",
+    62: "Microbiology",
+    63: "Biochemistry & Biotechnology",
 }
 
 

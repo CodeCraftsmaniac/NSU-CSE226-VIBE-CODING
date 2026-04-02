@@ -2,14 +2,32 @@
 nsu_courses.py - NSU Official Course Data
 ==========================================
 Comprehensive course catalog for North South University
-Data sourced from official NSU ECE and SBE department websites.
+Data sourced from official NSU department websites.
 
-Departments:
-- CSE (Computer Science & Engineering) - Department Code: 42
-- EEE (Electrical & Electronic Engineering) - Department Code: 43
-- BBA (Bachelor of Business Administration) - Department Code: 30
+Schools & Departments:
+- School of Engineering & Applied Science (SEAS)
+  - CSE (Computer Science & Engineering) - Department Code: 42
+  - EEE (Electrical & Electronic Engineering) - Department Code: 43
+  - ECE (Electronic & Computer Engineering) - Department Code: 44
+  - ETE (Electronics & Telecommunications Engineering) - Department Code: 45
+  - ARC (Architecture) - Department Code: 46
+  - ENV (Environmental Science & Management) - Department Code: 47
 
-Last Updated: 2025
+- School of Business (SBE)
+  - BBA (Bachelor of Business Administration) - Department Code: 30
+
+- School of Arts and Social Science (SASS)
+  - ECO (Economics) - Department Code: 50
+  - ENG (English) - Department Code: 51
+
+- School of Life Science (SLS)
+  - PHR (Pharmacy) - Department Code: 60
+  - PBH (Public Health) - Department Code: 61
+  - MIC (Microbiology) - Department Code: 62
+  - BCH (Biochemistry & Biotechnology) - Department Code: 63
+
+Last Updated: April 2026
+Reference: https://www.northsouth.edu/academic/
 """
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -504,13 +522,220 @@ BBA_COURSES = {
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+#  ADDITIONAL NSU PROGRAMS
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+# ECE - ELECTRONIC & COMPUTER ENGINEERING (Department Code: 44)
+ECE_COURSES = {
+    "department_code": 44,
+    "department_name": "Electronic & Computer Engineering",
+    "degree": "Bachelor of Science in Electronic and Computer Engineering (BSECE)",
+    "total_credits": 130,
+    "foundation": [
+        ("CSE115", "Programming Language I", 3),
+        ("CSE115L", "Programming Language I Lab", 1),
+    ],
+    "core": [
+        ("EEE141", "Electrical Circuits I", 3),
+        ("EEE141L", "Electrical Circuits I Lab", 1),
+        ("EEE111", "Analog Electronics I", 3),
+        ("EEE111L", "Analog Electronics I Lab", 1),
+        ("EEE211", "Digital Logic Design", 3),
+        ("EEE211L", "Digital Logic Design Lab", 0),
+        ("CSE225", "Data Structures and Algorithm", 3),
+        ("CSE331", "Microprocessor Interfacing & Embedded Systems", 3),
+        ("CSE332", "Computer Organization and Architecture", 3),
+    ],
+}
+
+# ETE - ELECTRONICS & TELECOMMUNICATIONS ENGINEERING (Department Code: 45)
+ETE_COURSES = {
+    "department_code": 45,
+    "department_name": "Electronics & Telecommunications Engineering",
+    "degree": "Bachelor of Science in Electronics and Telecommunications Engineering (BSETE)",
+    "total_credits": 130,
+    "foundation": [
+        ("CSE115", "Programming Language I", 3),
+        ("CSE115L", "Programming Language I Lab", 1),
+    ],
+    "core": [
+        ("EEE141", "Electrical Circuits I", 3),
+        ("EEE141L", "Electrical Circuits I Lab", 1),
+        ("EEE111", "Analog Electronics I", 3),
+        ("EEE111L", "Analog Electronics I Lab", 1),
+        ("EEE221", "Signals and Systems", 3),
+        ("EEE321", "Introduction to Communications Systems", 3),
+        ("EEE422", "Principles of Digital Communications", 3),
+        ("EEE424", "Mobile and Wireless Communication System", 3),
+    ],
+}
+
+# ARC - ARCHITECTURE (Department Code: 46)
+ARC_COURSES = {
+    "department_code": 46,
+    "department_name": "Architecture",
+    "degree": "Bachelor of Architecture (B.Arch)",
+    "total_credits": 180,  # Architecture is typically 5 years
+    "foundation": [
+        ("ARC101", "Design Fundamentals I", 3),
+        ("ARC102", "Design Fundamentals II", 3),
+        ("ARC111", "Architectural Graphics I", 2),
+    ],
+    "core": [
+        ("ARC201", "Architectural Design Studio I", 6),
+        ("ARC202", "Architectural Design Studio II", 6),
+        ("ARC221", "History of Architecture I", 3),
+        ("ARC222", "History of Architecture II", 3),
+        ("ARC231", "Building Construction I", 3),
+        ("ARC232", "Building Construction II", 3),
+        ("ARC241", "Environmental Control I", 3),
+        ("ARC242", "Environmental Control II", 3),
+    ],
+}
+
+# ENV - ENVIRONMENTAL SCIENCE & MANAGEMENT (Department Code: 47)
+ENV_COURSES = {
+    "department_code": 47,
+    "department_name": "Environmental Science & Management",
+    "degree": "Bachelor of Science in Environmental Science (BSES)",
+    "total_credits": 130,
+    "foundation": [
+        ("ENV101", "Introduction to Environmental Science", 3),
+        ("ENV102", "Environmental Chemistry", 3),
+        ("BIO103", "Biology", 4),
+    ],
+    "core": [
+        ("ENV201", "Ecology", 3),
+        ("ENV202", "Environmental Biology", 3),
+        ("ENV301", "Environmental Impact Assessment", 3),
+        ("ENV302", "Environmental Pollution and Control", 3),
+        ("ENV401", "Environmental Management Systems", 3),
+    ],
+}
+
+# ECO - ECONOMICS (Department Code: 50)
+ECO_COURSES = {
+    "department_code": 50,
+    "department_name": "Economics",
+    "degree": "Bachelor of Science in Economics",
+    "total_credits": 130,
+    "foundation": [
+        ("ECO101", "Introduction to Microeconomics", 3),
+        ("ECO104", "Introduction to Macroeconomics", 3),
+        ("MAT120", "Calculus I", 3),
+        ("BUS172", "Business Statistics I", 3),
+    ],
+    "core": [
+        ("ECO201", "Intermediate Microeconomics", 3),
+        ("ECO202", "Intermediate Macroeconomics", 3),
+        ("ECO301", "Econometrics I", 3),
+        ("ECO302", "Econometrics II", 3),
+        ("ECO401", "Mathematical Economics", 3),
+    ],
+}
+
+# PHR - PHARMACY (Department Code: 60)
+PHR_COURSES = {
+    "department_code": 60,
+    "department_name": "Pharmacy",
+    "degree": "Bachelor of Pharmacy (B.Pharm)",
+    "total_credits": 160,
+    "foundation": [
+        ("CHE101", "Chemistry I", 4),
+        ("CHE101L", "Chemistry I Lab", 0),
+        ("BIO103", "Biology", 4),
+        ("PHY107", "Physics I", 3),
+    ],
+    "core": [
+        ("PHR201", "Pharmaceutics I", 3),
+        ("PHR202", "Pharmaceutical Chemistry I", 3),
+        ("PHR211", "Pharmacology I", 3),
+        ("PHR221", "Pharmacognosy I", 3),
+        ("PHR301", "Clinical Pharmacy", 3),
+        ("PHR401", "Pharmaceutical Analysis", 3),
+    ],
+}
+
+# PBH - PUBLIC HEALTH (Department Code: 61)
+PBH_COURSES = {
+    "department_code": 61,
+    "department_name": "Public Health",
+    "degree": "Master of Public Health (MPH)",
+    "total_credits": 60,
+    "core": [
+        ("PBH501", "Introduction to Public Health", 3),
+        ("PBH502", "Epidemiology", 3),
+        ("PBH503", "Biostatistics", 3),
+        ("PBH504", "Health Policy and Management", 3),
+        ("PBH505", "Environmental Health", 3),
+    ],
+}
+
+# MIC - MICROBIOLOGY (Department Code: 62)
+MIC_COURSES = {
+    "department_code": 62,
+    "department_name": "Microbiology",
+    "degree": "Bachelor of Science in Microbiology",
+    "total_credits": 130,
+    "foundation": [
+        ("BIO103", "Biology", 4),
+        ("CHE101", "Chemistry I", 4),
+    ],
+    "core": [
+        ("MIC201", "General Microbiology", 3),
+        ("MIC202", "Microbiology Lab", 1),
+        ("MIC301", "Bacteriology", 3),
+        ("MIC302", "Virology", 3),
+        ("MIC401", "Immunology", 3),
+        ("MIC402", "Medical Microbiology", 3),
+    ],
+}
+
+# BCH - BIOCHEMISTRY & BIOTECHNOLOGY (Department Code: 63)
+BCH_COURSES = {
+    "department_code": 63,
+    "department_name": "Biochemistry & Biotechnology",
+    "degree": "Bachelor of Science in Biochemistry and Biotechnology",
+    "total_credits": 130,
+    "foundation": [
+        ("BIO103", "Biology", 4),
+        ("CHE101", "Chemistry I", 4),
+    ],
+    "core": [
+        ("BCH201", "Biochemistry I", 3),
+        ("BCH202", "Biochemistry II", 3),
+        ("BCH301", "Molecular Biology", 3),
+        ("BCH302", "Genetic Engineering", 3),
+        ("BCH401", "Biotechnology", 3),
+        ("BCH402", "Bioinformatics", 3),
+    ],
+}
+
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 #  COMBINED COURSE CATALOG
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 NSU_PROGRAMS = {
+    # School of Engineering & Applied Science
     "CSE": CSE_COURSES,
     "EEE": EEE_COURSES,
+    "ECE": ECE_COURSES,
+    "ETE": ETE_COURSES,
+    "ARC": ARC_COURSES,
+    "ENV": ENV_COURSES,
+    
+    # School of Business
     "BBA": BBA_COURSES,
+    
+    # School of Arts and Social Science
+    "ECO": ECO_COURSES,
+    
+    # School of Life Science
+    "PHR": PHR_COURSES,
+    "PBH": PBH_COURSES,
+    "MIC": MIC_COURSES,
+    "BCH": BCH_COURSES,
 }
 
 
