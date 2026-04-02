@@ -9,6 +9,7 @@
     --nsu-blue-deep: #00306A;
     --nsu-blue-light: #2E86DE;
     --nsu-blue-glow: rgba(0, 82, 155, 0.35);
+    --nsu-gold: #FFD700;  /* NSU Gold accent */
 
     /* Professional Accent — Electric Cyan (replaces gold) */
     --accent: #38BDF8;
@@ -691,8 +692,19 @@ body.scanning-active .upload-card {
     flex-wrap: wrap;
 }
 
-.student-department {
+.student-info-left {
+    display: flex;
+    align-items: center;
+    gap: var(--space-4);
+    flex-wrap: wrap;
+}
+
+.student-info-right {
     margin-left: auto;
+}
+
+.student-department {
+    margin-left: 0;
 }
 
 .dept-badge {
@@ -704,7 +716,7 @@ body.scanning-active .upload-card {
     border: 1px solid rgba(139, 92, 246, 0.4);
     border-radius: 20px;
     color: #a78bfa;
-    font-size: 0.8rem;
+    font-size: 0.875rem;
     font-weight: 600;
 }
 
@@ -2040,7 +2052,10 @@ body.review-active .main {
     font-size: 2rem;
     font-weight: 800;
     font-family: var(--font-mono);
-    background: linear-gradient(135deg, var(--nsu-blue-light), var(--nsu-gold));
+    /* Solid color fallback for browsers that don't support gradient text */
+    color: var(--accent);
+    /* Gradient text */
+    background: linear-gradient(135deg, var(--nsu-blue-light), var(--accent));
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;

@@ -106,25 +106,61 @@ function selectModel(engine, persist = true) {
 }
 
 // ─── Export Report Function ────────────────────────────────────────────────────
-let currentScanId = null;
+// Make currentScanId globally accessible for history viewing
+window.currentScanId = null;
+let currentScanId = null;  // Keep local reference for backward compatibility
+
+function setCurrentScanId(id) {
+    currentScanId = id;
+    window.currentScanId = id;
+    console.log('Scan ID set:', id);
+}
 
 async function exportReport(format) {
-    if (!currentScanId) {
+    // Check both local and window scope for currentScanId
+    const scanId = currentScanId || window.currentScanId;
+    if (!scanId) {
         showToast('No scan available to export', 'error');
         return;
     }
     
     try {
-        const token = localStorage.getItem('supabase_token');
-        if (!token) {
+        // Get auth token - try multiple methods
+        let token = null;
+        
+        // Method 1: Use getAccessToken from auth.js
+        if (typeof getAccessToken === 'function') {
+            token = await getAccessToken();
+        }
+        
+        // Method 2: Try to get from supabaseClient directly
+        if (!token && typeof supabaseClient !== 'undefined' && supabaseClient) {
+            try {
+                const { data: { session } } = await supabaseClient.auth.getSession();
+                token = session?.access_token;
+            } catch (e) {
+                console.warn('Could not get session:', e);
+            }
+        }
+        
+        // Method 3: Check if we're in guest mode
+        const isGuest = sessionStorage.getItem('nsu_guest_mode') === 'true';
+        
+        if (!token && !isGuest) {
             showToast('Please sign in to export', 'error');
             return;
         }
         
-        const response = await fetch(`${API_BASE_URL}/export/${currentScanId}?format=${format}`, {
-            headers: {
-                'Authorization': `Bearer ${token}`
-            }
+        // If guest mode, we can't export (no user to associate with)
+        if (isGuest) {
+            showToast('Export requires sign in. Please sign in to save and export reports.', 'warning');
+            return;
+        }
+        
+        const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
+        
+        const response = await fetch(`${API_BASE_URL}/export/${scanId}?format=${format}`, {
+            headers: headers
         });
         
         if (!response.ok) {
@@ -971,9 +1007,9 @@ function markStepDone(stepId) {
 
 // ─── Results Display ───────────────────────────────────────────────────────────
 function showResults(data) {
-    // Store scan ID for export functionality
+    // Store scan ID for export functionality (update both local and global)
     if (data.scan_id) {
-        currentScanId = data.scan_id;
+        setCurrentScanId(data.scan_id);
     }
     
     // Ensure hero remains hidden

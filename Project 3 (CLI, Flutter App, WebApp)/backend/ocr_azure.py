@@ -147,6 +147,149 @@ class AzureDocIntelligence:
             logger.exception(f"Azure OCR error: {e}")
             return "", f"Azure OCR error: {str(e)}"
     
+    def extract_text_with_confidence(self, file_data: bytes, filename: str) -> Tuple[str, Optional[str], float]:
+        """
+        Extract text with confidence score from Azure Document Intelligence.
+        
+        Args:
+            file_data: Raw file bytes
+            filename: Original filename
+            
+        Returns:
+            Tuple of (extracted_text, error_message, confidence)
+            confidence is 0.0 to 1.0 (average word/span confidence)
+        """
+        if not self.is_configured:
+            return "", "Azure Document Intelligence not configured.", 0.0
+        
+        ext = filename.lower().split('.')[-1] if '.' in filename else ''
+        content_types = {
+            'pdf': 'application/pdf',
+            'png': 'image/png',
+            'jpg': 'image/jpeg',
+            'jpeg': 'image/jpeg',
+            'tiff': 'image/tiff',
+            'bmp': 'image/bmp'
+        }
+        content_type = content_types.get(ext, 'application/octet-stream')
+        
+        try:
+            analyze_url = f"{self.endpoint}/formrecognizer/documentModels/prebuilt-document:analyze?api-version=2023-07-31"
+            
+            headers = {
+                'Ocp-Apim-Subscription-Key': self.api_key,
+                'Content-Type': content_type
+            }
+            
+            req = urllib_request.Request(
+                analyze_url,
+                data=file_data,
+                headers=headers,
+                method='POST'
+            )
+            
+            try:
+                response = urllib_request.urlopen(req, timeout=API_TIMEOUT)
+            except HTTPError as e:
+                error_body = e.read().decode('utf-8', errors='ignore')
+                return "", f"Azure API error {e.code}: {error_body[:200]}", 0.0
+            except URLError as e:
+                return "", f"Network error: {e.reason}", 0.0
+            
+            operation_location = response.headers.get('Operation-Location')
+            if not operation_location:
+                return "", "Azure API did not return operation location", 0.0
+            
+            # Poll for results with confidence
+            return self._poll_for_result_with_confidence(operation_location)
+            
+        except Exception as e:
+            logger.exception(f"Azure OCR error: {e}")
+            return "", f"Azure OCR error: {str(e)}", 0.0
+    
+    def _poll_for_result_with_confidence(self, operation_location: str, max_wait: int = 120) -> Tuple[str, Optional[str], float]:
+        """Poll Azure API and extract text with real confidence score."""
+        headers = {'Ocp-Apim-Subscription-Key': self.api_key}
+        start_time = time.time()
+        
+        while time.time() - start_time < max_wait:
+            try:
+                req = urllib_request.Request(operation_location, headers=headers)
+                response = urllib_request.urlopen(req, timeout=30)
+                result = json.loads(response.read().decode('utf-8'))
+                
+                status = result.get('status', '')
+                
+                if status == 'succeeded':
+                    return self._extract_text_and_confidence(result)
+                elif status == 'failed':
+                    error = result.get('error', {})
+                    return "", f"Azure analysis failed: {error.get('message', 'Unknown')}", 0.0
+                elif status in ('notStarted', 'running'):
+                    time.sleep(POLL_INTERVAL)
+                else:
+                    return "", f"Unknown status: {status}", 0.0
+                    
+            except HTTPError as e:
+                if e.code == 429:
+                    time.sleep(POLL_INTERVAL * 2)
+                    continue
+                return "", f"Azure polling error {e.code}", 0.0
+            except Exception as e:
+                return "", f"Polling error: {str(e)}", 0.0
+        
+        return "", "Azure analysis timed out", 0.0
+    
+    def _extract_text_and_confidence(self, result: dict) -> Tuple[str, Optional[str], float]:
+        """Extract text and calculate real average confidence from Azure response."""
+        try:
+            analyze_result = result.get('analyzeResult', {})
+            content = analyze_result.get('content', '')
+            
+            # Calculate REAL confidence from pages/words
+            confidence_scores = []
+            pages = analyze_result.get('pages', [])
+            for page in pages:
+                # Get word-level confidence (most accurate)
+                for word in page.get('words', []):
+                    if 'confidence' in word:
+                        confidence_scores.append(word['confidence'])
+                
+                # Fallback to line-level
+                if not confidence_scores:
+                    for line in page.get('lines', []):
+                        if 'confidence' in line:
+                            confidence_scores.append(line['confidence'])
+            
+            # Calculate average confidence
+            if confidence_scores:
+                avg_confidence = sum(confidence_scores) / len(confidence_scores)
+                logger.info(f"Azure OCR: {len(confidence_scores)} confidence scores, avg: {avg_confidence:.2%}")
+            else:
+                # If no confidence available but text extracted, use high default
+                avg_confidence = 0.97 if content.strip() else 0.0
+                logger.info(f"Azure OCR: No confidence data, using default {avg_confidence}")
+            
+            if content.strip():
+                return content, None, avg_confidence
+            
+            # Fallback extraction methods
+            all_text = []
+            for page in pages:
+                for line in page.get('lines', []):
+                    text = line.get('content', '')
+                    if text.strip():
+                        all_text.append(text)
+            
+            if all_text:
+                return '\n'.join(all_text), None, avg_confidence
+            
+            return "", "Azure returned no text content", 0.0
+            
+        except Exception as e:
+            logger.exception(f"Error parsing Azure result: {e}")
+            return "", f"Error parsing result: {str(e)}", 0.0
+    
     def _poll_for_result(self, operation_location: str, max_wait: int = 120) -> Tuple[str, Optional[str]]:
         """
         Poll Azure API for analysis results.

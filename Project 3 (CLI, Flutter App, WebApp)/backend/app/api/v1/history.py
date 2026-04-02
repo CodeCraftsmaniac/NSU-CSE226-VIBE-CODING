@@ -161,6 +161,8 @@ async def get_history_detail(
     Returns full audit results including courses and requirements.
     Requires authentication and ownership of the scan.
     """
+    import json
+    
     get_current_user, get_db_user_id, _, require_db = get_dependencies()
     _, get_scan_by_id, _, _ = get_db_functions()
     
@@ -184,6 +186,13 @@ async def get_history_detail(
     # Verify ownership
     if scan['user_id'] != db_user_id:
         raise HTTPException(status_code=403, detail="Access denied")
+    
+    # Ensure analysis_data is properly parsed (handle if it's a JSON string)
+    if isinstance(scan.get('analysis_data'), str):
+        try:
+            scan['analysis_data'] = json.loads(scan['analysis_data'])
+        except json.JSONDecodeError:
+            logger.error(f"Failed to parse analysis_data for scan {scan_id}")
     
     return ScanDetailResponse(scan=scan)
 

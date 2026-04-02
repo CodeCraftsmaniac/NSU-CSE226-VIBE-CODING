@@ -679,7 +679,7 @@ async def export_scan(
     if not DB_MODULE_AVAILABLE:
         raise HTTPException(status_code=503, detail="Database not available")
     
-    # Get user
+    # Get user from Authorization header
     user = None
     auth_header = request.headers.get('Authorization')
     if auth_header:
@@ -692,12 +692,26 @@ async def export_scan(
     try:
         from database import get_scan_by_id
         db_user_id = await get_db_user_id(user)
-        scan = get_scan_by_id(scan_id, db_user_id)
+        scan = get_scan_by_id(scan_id)  # Only pass scan_id
         
         if not scan:
             raise HTTPException(status_code=404, detail="Scan not found")
         
+        # Verify ownership
+        if scan.get('user_id') != db_user_id:
+            raise HTTPException(status_code=403, detail="Access denied")
+        
         analysis_data = scan.get('analysis_data', {})
+        
+        # Handle case where analysis_data is a JSON string
+        import json as json_module
+        if isinstance(analysis_data, str):
+            try:
+                analysis_data = json_module.loads(analysis_data)
+            except json_module.JSONDecodeError:
+                logger.error(f"Failed to parse analysis_data for scan {scan_id}")
+                analysis_data = {}
+        
         level1 = analysis_data.get('level1', {})
         level2 = analysis_data.get('level2', {})
         level3 = analysis_data.get('level3', {})

@@ -442,9 +442,25 @@ async function viewHistoryItem(id) {
         
         const headers = await getAuthHeaders();
         const response = await fetch(`${API_BASE_URL}/history/${id}`, { headers });
+        
+        if (!response.ok) {
+            const errorData = await response.json();
+            console.error('API error:', response.status, errorData);
+            showToast(errorData.detail || 'Failed to load scan details', 'error');
+            return;
+        }
+        
         const data = await response.json();
+        console.log('History detail response:', data);
         
         if (data.success && data.scan && data.scan.analysis_data) {
+            // Set currentScanId for export functionality using the helper function if available
+            if (typeof setCurrentScanId === 'function') {
+                setCurrentScanId(id);
+            } else {
+                window.currentScanId = id;
+            }
+            
             // Hide upload section completely (same as when scanning completes)
             const uploadSection = document.getElementById('upload-section');
             const heroContent = document.querySelector('.hero-content');
@@ -458,14 +474,21 @@ async function viewHistoryItem(id) {
                 uploadSection.style.display = 'none';
             }
             
+            // Ensure scan_id is in the analysis_data for export
+            const analysisData = data.scan.analysis_data;
+            if (!analysisData.scan_id) {
+                analysisData.scan_id = id;
+            }
+            
             // Use showResults from app.js
             if (typeof showResults === 'function') {
-                showResults(data.scan.analysis_data);
+                showResults(analysisData);
             } else {
                 console.error('showResults function not found');
                 showToast('Unable to display results', 'error');
             }
         } else {
+            console.error('Invalid response structure:', data);
             showToast('No analysis data found for this scan', 'warning');
         }
     } catch (error) {

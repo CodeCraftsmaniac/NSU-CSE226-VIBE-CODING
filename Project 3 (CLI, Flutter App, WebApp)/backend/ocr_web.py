@@ -444,6 +444,8 @@ class WebOCR:
         last_error = None
         pages_processed = 0
         actual_engine = None  # Track which engine was actually used
+        total_confidence = 0.0
+        confidence_count = 0
 
         for i, page in enumerate(doc):
             self._report("page", 30 + (i / len(doc)) * 50, f"OCR page {i+1}/{len(doc)}...")
@@ -456,13 +458,18 @@ class WebOCR:
             if len(img_data) > 900000:
                 img_data = self._compress_image(img_data)
 
-            # Run OCR with selected engine
-            page_text, error, page_engine = self._ocr_image(img_data, "page.png")
+            # Run OCR with selected engine (now returns confidence)
+            page_text, error, page_engine, page_confidence = self._ocr_image(img_data, "page.png")
             pages_processed += 1
             
             # Track which engine was used (use first successful page's engine)
             if page_text and not actual_engine:
                 actual_engine = page_engine
+            
+            # Accumulate confidence scores
+            if page_confidence > 0:
+                total_confidence += page_confidence
+                confidence_count += 1
 
             if page_text:
                 ocr_text += page_text + "\n"
@@ -482,7 +489,12 @@ class WebOCR:
         self._report("parse", 85, "Parsing extracted text...")
         result = self._parse_transcript_text(ocr_text)
         result.engine_used = actual_engine or ("Google Vision" if self.google_api_key else ("Azure" if self.azure else "None"))
-        result.confidence_score = 0.95 if "Azure" in (actual_engine or "") else 0.92
+        
+        # Use real average confidence across all pages
+        if confidence_count > 0:
+            result.confidence_score = total_confidence / confidence_count
+        else:
+            result.confidence_score = 0.90  # Default if no confidence data
 
         self._report("complete", 100, "Done!")
         return result
@@ -500,7 +512,7 @@ class WebOCR:
             img_data = self._compress_image(img_data)
 
         self._report("ocr", 40, "Running OCR...")
-        text, error, engine_used = self._ocr_image(img_data, path.name)
+        text, error, engine_used, confidence = self._ocr_image(img_data, path.name)
 
         if not text:
             if error:
@@ -512,7 +524,7 @@ class WebOCR:
         self._report("parse", 80, "Parsing...")
         result = self._parse_transcript_text(text)
         result.engine_used = engine_used or "Unknown"
-        result.confidence_score = 0.95 if 'Azure' in result.engine_used else 0.92
+        result.confidence_score = confidence if confidence > 0 else 0.90  # Use real confidence
 
         self._report("complete", 100, "Done!")
         return result
@@ -521,8 +533,9 @@ class WebOCR:
         """Run OCR on image data using selected or available API.
 
         Returns:
-            tuple: (text, error, engine_used) - text is the extracted text, 
-                   error is the error message if any, engine_used is the name of the engine
+            tuple: (text, error, engine_used, confidence) - text is the extracted text, 
+                   error is the error message if any, engine_used is the name of the engine,
+                   confidence is the average confidence score (0.0 to 1.0)
         """
         google_error = None
         azure_error = None
@@ -542,14 +555,14 @@ class WebOCR:
         for engine in engines:
             if engine == 'google' and self.google_api_key:
                 google_tried = True
-                text, google_error = self._google_vision_ocr(img_data)
+                text, google_error, confidence = self._google_vision_ocr(img_data)
                 if text:
-                    return text, None, "Google Cloud Vision"
+                    return text, None, "Google Cloud Vision", confidence
             elif engine == 'azure' and self.azure_client and self.azure_client.is_configured:
                 azure_tried = True
-                text, azure_error = self.azure_client.extract_text(img_data, filename)
+                text, azure_error, confidence = self.azure_client.extract_text_with_confidence(img_data, filename)
                 if text:
-                    return text, None, "Azure Document Intelligence"
+                    return text, None, "Azure Document Intelligence", confidence
 
         # Build error message
         error_msg = ""
@@ -569,7 +582,7 @@ class WebOCR:
         else:
             error_msg = "No OCR API keys configured. Set GOOGLE_CLOUD_VISION_KEY or AZURE_DOC_INTELLIGENCE_KEY in .env"
         
-        return "", error_msg, None
+        return "", error_msg, None, 0.0
 
     def _google_vision_ocr(self, img_data: bytes) -> tuple:
         """
@@ -580,9 +593,12 @@ class WebOCR:
         - Tables and columns
         - Multi-line text blocks
         - Character-level confidence scores
+        
+        Returns:
+            tuple: (text, error, confidence) where confidence is 0.0 to 1.0
         """
         if not self.google_api_key:
-            return "", None
+            return "", None, 0.0
 
         try:
             b64_image = base64.b64encode(img_data).decode('utf-8')
@@ -612,11 +628,12 @@ class WebOCR:
             if responses:
                 if 'error' in responses[0]:
                     error_msg = responses[0]['error'].get('message', 'Unknown error')
-                    return "", f"API error: {error_msg}"
+                    return "", f"API error: {error_msg}", 0.0
                 annotation = responses[0].get('fullTextAnnotation', {})
                 text = annotation.get('text', '')
                 
-                # Log confidence if available (for debugging/monitoring)
+                # Extract REAL confidence from API response
+                avg_confidence = 0.0
                 if annotation and 'pages' in annotation:
                     confidence_scores = []
                     for page in annotation.get('pages', []):
@@ -626,12 +643,16 @@ class WebOCR:
                     if confidence_scores:
                         avg_confidence = sum(confidence_scores) / len(confidence_scores)
                         _logger.info(f"Google Vision OCR: {len(confidence_scores)} blocks, avg confidence: {avg_confidence:.2%}")
+                    else:
+                        # If no block-level confidence, use 0.95 as default for successful extraction
+                        avg_confidence = 0.95
+                        _logger.info("Google Vision OCR: No block confidence available, using default 0.95")
                 
                 if text:
-                    return text, None
-                return "", None
+                    return text, None, avg_confidence
+                return "", None, 0.0
             else:
-                return "", "No response from API"
+                return "", "No response from API", 0.0
 
         except HTTPError as e:
             try:
@@ -640,11 +661,11 @@ class WebOCR:
                 error_msg = error_json.get('error', {}).get('message', str(e.reason))
             except (json.JSONDecodeError, AttributeError):
                 error_msg = str(e.reason)
-            return "", f"HTTP {e.code}: {error_msg}"
+            return "", f"HTTP {e.code}: {error_msg}", 0.0
         except URLError as e:
-            return "", f"Network error: {e.reason}"
+            return "", f"Network error: {e.reason}", 0.0
         except Exception as e:
-            return "", f"Error: {str(e)}"
+            return "", f"Error: {str(e)}", 0.0
 
     def _compress_image(self, data: bytes) -> bytes:
         """Compress image for API limits."""
@@ -694,37 +715,47 @@ class WebOCR:
             line_clean = line.strip()
             
             # Student ID - handle multiple NSU ID formats
-            # Format 1: "XXXXXXX S DD" (e.g., "0920402 S 43")
-            # Format 2: 10+ continuous digits
-            # Format 3: "Student ID : XXXXXXX S DD"
+            # Format 1: "XXXXXXX S DD" (e.g., "0920402 S 43")  
+            # Format 2: "XXXXXXX 0 DD" (OCR reads as-is)
+            # Format 3: 10+ continuous digits
+            # Format 4: "Student ID : XXXXXXX S DD"
+            # IMPORTANT: Preserve the exact character from OCR (don't normalize)
             if not student_id:
                 # First try: "Student ID" label followed by the ID value
-                id_label_match = re.search(r'Student\s*ID\s*[:\s]+(\d{7,})\s*S?\s*(\d{2})?', line_clean, re.IGNORECASE)
+                # Match "071415 0 30" or "0920402 S 43" patterns - preserve exact separator
+                id_label_match = re.search(r'Student\s*ID\s*[:\s]+(\d{6,7})\s*([S0s5])\s*(\d{2})', line_clean, re.IGNORECASE)
                 if id_label_match:
-                    if id_label_match.group(2):
-                        # Format with S separator: preserve as "XXXXXXX S DD"
-                        student_id = f"{id_label_match.group(1)} S {id_label_match.group(2)}"
-                    else:
-                        student_id = id_label_match.group(1)
+                    # Preserve the exact separator character from OCR
+                    sep = id_label_match.group(2)
+                    student_id = f"{id_label_match.group(1)} {sep} {id_label_match.group(3)}"
                 
-                # Try pattern: "XXXXXXX S DD" anywhere on line
+                # Also try without separator: "Student ID : XXXXXXXXXX"
                 if not student_id:
-                    id_match_sep = re.search(r'\b(\d{7})\s*S\s*(\d{2})\b', line_clean, re.IGNORECASE)
+                    id_label_match2 = re.search(r'Student\s*ID\s*[:\s]+(\d{9,10})', line_clean, re.IGNORECASE)
+                    if id_label_match2:
+                        student_id = id_label_match2.group(1)
+                
+                # Try pattern: "XXXXXXX S DD" or "XXXXXXX 0 DD" anywhere on line
+                if not student_id:
+                    id_match_sep = re.search(r'\b(\d{6,7})\s*([S0s5])\s*(\d{2})\b', line_clean)
                     if id_match_sep:
-                        student_id = f"{id_match_sep.group(1)} S {id_match_sep.group(2)}"
+                        # Preserve exact separator
+                        sep = id_match_sep.group(2)
+                        student_id = f"{id_match_sep.group(1)} {sep} {id_match_sep.group(3)}"
                 
-                # Try continuous 10+ digit ID
+                # Try continuous 9-10 digit ID (no separator)
                 if not student_id:
-                    id_match = re.search(r'\b(\d{10,})\b', line_clean)
+                    id_match = re.search(r'\b(\d{9,10})\b', line_clean)
                     if id_match:
                         student_id = id_match.group(1)
                 
-                # Try colon-prefixed format: ": 0920402 S 43" or ": 0920402 5 43"
+                # Try colon-prefixed format: ": 0920402 S 43" or ": 071415 0 30"
                 if not student_id:
-                    id_match2 = re.search(r':\s*(\d{7})\s*(\w)\s*(\d{2})', line_clean)
+                    id_match2 = re.search(r':\s*(\d{6,7})\s*(\w)\s*(\d{2})', line_clean)
                     if id_match2:
-                        # Preserve format with separator
-                        student_id = f"{id_match2.group(1)} {id_match2.group(2)} {id_match2.group(3)}"
+                        # Preserve exact separator
+                        sep = id_match2.group(2)
+                        student_id = f"{id_match2.group(1)} {sep} {id_match2.group(3)}"
             
             # Student Name - improved extraction to avoid institutional labels
             if not student_name and ('Student Name' in line_clean or 'Name:' in line_clean):
