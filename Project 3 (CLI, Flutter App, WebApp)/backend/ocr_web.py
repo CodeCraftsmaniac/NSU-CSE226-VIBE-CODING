@@ -11,6 +11,9 @@ Features:
 5. Department detection from NSU ID
 6. Course validation against official catalog
 7. Engine selection (google_vision, azure)
+
+OCR Performance: Maximum accuracy mode enabled by default.
+Both Google Vision and Azure use highest quality settings.
 """
 
 __version__ = "3.0.0"
@@ -33,12 +36,24 @@ from urllib.error import URLError, HTTPError
 
 warnings.filterwarnings('ignore')
 
-# Configuration constants
-API_TIMEOUT = 30
-OCR_CONFIDENCE_THRESHOLD = 0.7
+# Maximum accuracy configuration (hardcoded for best results)
+# These values ensure highest quality OCR output
+API_TIMEOUT = int(os.environ.get('API_TIMEOUT', 60))  # Allow more time for accurate processing
+OCR_CONFIDENCE_THRESHOLD = 0.5  # Low threshold to capture all text, post-processing handles accuracy
 MAX_CGPA = 4.0
 MAX_CREDITS_PER_COURSE = 6
 MAX_TOTAL_CREDITS = 200
+
+# Google Vision maximum accuracy settings
+GOOGLE_VISION_FEATURES = [
+    {"type": "DOCUMENT_TEXT_DETECTION"}  # Best for structured documents like transcripts
+]
+GOOGLE_VISION_IMAGE_CONTEXT = {
+    "languageHints": ["en"],  # English language hint for better accuracy
+    "textDetectionParams": {
+        "enableTextDetectionConfidenceScore": True
+    }
+}
 
 # Setup logging
 _logger = logging.getLogger(__name__)
@@ -556,17 +571,27 @@ class WebOCR:
         return "", error_msg
 
     def _google_vision_ocr(self, img_data: bytes) -> tuple:
-        """Google Cloud Vision API text detection."""
+        """
+        Google Cloud Vision API text detection with maximum accuracy settings.
+        
+        Uses DOCUMENT_TEXT_DETECTION for optimal text extraction from structured
+        documents like transcripts. This provides better handling of:
+        - Tables and columns
+        - Multi-line text blocks
+        - Character-level confidence scores
+        """
         if not self.google_api_key:
             return "", None
 
         try:
             b64_image = base64.b64encode(img_data).decode('utf-8')
 
+            # Maximum accuracy payload with language hints and confidence scoring
             payload = {
                 "requests": [{
                     "image": {"content": b64_image},
-                    "features": [{"type": "DOCUMENT_TEXT_DETECTION"}]
+                    "features": GOOGLE_VISION_FEATURES,  # DOCUMENT_TEXT_DETECTION for best results
+                    "imageContext": GOOGLE_VISION_IMAGE_CONTEXT  # English hints + confidence scoring
                 }]
             }
 
@@ -589,6 +614,18 @@ class WebOCR:
                     return "", f"API error: {error_msg}"
                 annotation = responses[0].get('fullTextAnnotation', {})
                 text = annotation.get('text', '')
+                
+                # Log confidence if available (for debugging/monitoring)
+                if annotation and 'pages' in annotation:
+                    confidence_scores = []
+                    for page in annotation.get('pages', []):
+                        for block in page.get('blocks', []):
+                            if 'confidence' in block:
+                                confidence_scores.append(block['confidence'])
+                    if confidence_scores:
+                        avg_confidence = sum(confidence_scores) / len(confidence_scores)
+                        _logger.info(f"Google Vision OCR: {len(confidence_scores)} blocks, avg confidence: {avg_confidence:.2%}")
+                
                 if text:
                     return text, None
                 return "", None

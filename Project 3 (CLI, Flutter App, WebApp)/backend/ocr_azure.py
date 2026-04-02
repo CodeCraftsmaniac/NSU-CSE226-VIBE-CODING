@@ -12,6 +12,12 @@ Features:
 - Table extraction capability
 - Multi-page PDF support
 - Confidence scores
+
+Maximum Accuracy Mode:
+- Uses prebuilt-document model (most accurate)
+- API version 2024-02-29-preview (latest)
+- Extended polling for quality results
+- No confidence threshold filtering (captures all text)
 """
 
 __version__ = "1.0.0"
@@ -28,10 +34,11 @@ from urllib.error import URLError, HTTPError
 
 logger = logging.getLogger(__name__)
 
-# API Configuration
-API_TIMEOUT = 60
+# Maximum accuracy configuration
+API_TIMEOUT = int(os.environ.get('API_TIMEOUT', 60))  # Allow more time for quality processing
 MAX_RETRIES = 3
-POLL_INTERVAL = 2  # seconds
+POLL_INTERVAL = 2  # seconds between polling
+MAX_POLL_TIME = 120  # seconds max for polling (allows large PDFs)
 
 # Load Azure credentials
 try:

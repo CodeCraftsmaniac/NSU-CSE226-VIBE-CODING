@@ -628,55 +628,139 @@ body.scanning-active .upload-card {
     opacity: 0.7;
 }
 
-/* ─── OCR Engine Selector ───────────────────────────────────────────────────── */
+/* ─── OCR Engine Button Pills ──────────────────────────────────────────────── */
 
-.ocr-engine-selector {
+.ocr-engine-pills {
     display: flex;
     align-items: center;
-    gap: var(--space-2);
+    gap: 8px;
     margin-top: var(--space-3);
     margin-bottom: var(--space-2);
-    padding: var(--space-2) var(--space-3);
-    background: rgba(10, 18, 34, 0.4);
-    border: 1px solid var(--border-subtle);
-    border-radius: var(--radius-sm);
 }
 
-.engine-label {
+.engine-pill {
     display: flex;
     align-items: center;
     gap: 6px;
-    font-size: 0.75rem;
-    font-weight: 500;
-    color: var(--text-secondary);
-    white-space: nowrap;
-}
-
-.engine-select {
-    flex: 1;
-    padding: 6px 10px;
-    background: var(--bg-elevated);
+    padding: 8px 16px;
+    background: rgba(10, 18, 34, 0.6);
     border: 1px solid var(--border-subtle);
-    border-radius: var(--radius-sm);
-    color: var(--text-primary);
+    border-radius: 20px;
+    color: var(--text-secondary);
     font-size: 0.8rem;
+    font-weight: 500;
     cursor: pointer;
     transition: all 0.2s ease;
 }
 
-.engine-select:hover {
+.engine-pill:hover {
+    background: rgba(56, 189, 248, 0.1);
     border-color: var(--accent-dim);
-}
-
-.engine-select:focus {
-    outline: none;
-    border-color: var(--accent);
-    box-shadow: 0 0 0 2px var(--accent-glow);
-}
-
-.engine-select option {
-    background: var(--bg-surface);
     color: var(--text-primary);
+}
+
+.engine-pill.active {
+    background: linear-gradient(135deg, rgba(56, 189, 248, 0.2) 0%, rgba(14, 165, 233, 0.15) 100%);
+    border-color: var(--accent);
+    color: var(--accent);
+    box-shadow: 0 0 12px var(--accent-glow);
+}
+
+.engine-pill svg {
+    opacity: 0.8;
+}
+
+.engine-pill.active svg {
+    opacity: 1;
+}
+
+/* ─── Export Actions Bar ───────────────────────────────────────────────────── */
+
+.export-actions-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-3);
+    padding: var(--space-3) var(--space-4);
+    background: var(--bg-card);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-md);
+    margin-bottom: var(--space-3);
+}
+
+.export-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.9rem;
+    font-weight: 500;
+    color: var(--text-secondary);
+}
+
+.export-buttons {
+    display: flex;
+    gap: 8px;
+}
+
+.export-btn {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 14px;
+    background: rgba(10, 18, 34, 0.6);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-sm);
+    color: var(--text-secondary);
+    font-size: 0.8rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.export-btn:hover {
+    background: rgba(56, 189, 248, 0.1);
+    border-color: var(--accent-dim);
+    color: var(--accent);
+}
+
+.export-btn:active {
+    transform: scale(0.97);
+}
+
+/* ─── Student Card with Inline Department ──────────────────────────────────── */
+
+.student-info-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-4);
+    flex-wrap: wrap;
+}
+
+.student-department {
+    margin-left: auto;
+}
+
+.dept-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 14px;
+    background: linear-gradient(135deg, rgba(139, 92, 246, 0.2) 0%, rgba(124, 58, 237, 0.15) 100%);
+    border: 1px solid rgba(139, 92, 246, 0.4);
+    border-radius: 20px;
+    color: #a78bfa;
+    font-size: 0.8rem;
+    font-weight: 600;
+}
+
+.dept-badge svg {
+    color: #a78bfa;
+}
+
+/* Hide old selector styles */
+.ocr-engine-selector {
+    display: none;
 }
 
 /* ─── Scanning Section ──────────────────────────────────────────────────────── */

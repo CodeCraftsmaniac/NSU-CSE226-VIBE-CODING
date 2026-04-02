@@ -5,11 +5,14 @@ cli_app/main.py — NSU Degree Audit Engine (Premium CLI)
 OCR-based transcript analysis with premium terminal UI.
 Uses Cloud Run backend API (single backend for CLI, Web, Flutter).
 
-Flow: Upload PDF → Cloud API → OCR Extract → View 3-Level Analysis
+Supported file types: PDF, PNG, JPG, JPEG, CSV
+
+Flow: Upload File → Cloud API → OCR Extract → View 3-Level Analysis
 
 Usage:
   python cli_app/main.py                    # Cloud mode (default)
   python cli_app/main.py <transcript.pdf>   # Direct scan mode
+  python cli_app/main.py <data.csv>         # CSV upload
   python cli_app/main.py --local            # Use local OCR instead
   python cli_app/main.py --login            # Login with Google
   python cli_app/main.py --logout           # Logout
@@ -149,7 +152,8 @@ def grade_color(grade):
 
 def scan_transcript_cloud(file_path):
     """Upload transcript to cloud API and get analysis results.
-    Uses the same backend as web app - just via HTTP instead of local."""
+    Uses the same backend as web app - just via HTTP instead of local.
+    Supports: PDF, PNG, JPG, JPEG, CSV files."""
     import requests
     
     if not Path(file_path).exists():
@@ -158,6 +162,17 @@ def scan_transcript_cloud(file_path):
     file_name = Path(file_path).name
     file_size = Path(file_path).stat().st_size
     file_size_str = f"{file_size/1024:.0f} KB" if file_size < 1024*1024 else f"{file_size/1024/1024:.1f} MB"
+    
+    # Determine MIME type based on file extension
+    ext = Path(file_path).suffix.lower()
+    mime_types = {
+        '.pdf': 'application/pdf',
+        '.png': 'image/png',
+        '.jpg': 'image/jpeg',
+        '.jpeg': 'image/jpeg',
+        '.csv': 'text/csv'
+    }
+    mime_type = mime_types.get(ext, 'application/octet-stream')
     
     console.print()
     console.print(Panel(
@@ -186,7 +201,7 @@ def scan_transcript_cloud(file_path):
                 headers = cli_auth._get_headers()
             
             with open(file_path, 'rb') as f:
-                files = {'file': (file_name, f, 'application/pdf')}
+                files = {'file': (file_name, f, mime_type)}
                 data = {'source': 'cli'}
                 response = requests.post(
                     f"{CLOUD_API_URL}/upload",
@@ -765,7 +780,14 @@ def get_file_path():
     console.print()
 
     default_pdf = PROJECT_ROOT / "Transcript PDF.pdf"
-    pdfs = list(PROJECT_ROOT.glob("*.pdf")) + list(PROJECT_ROOT.glob("*.png")) + list(PROJECT_ROOT.glob("*.jpg"))
+    # Support all file types: PDF, images (PNG, JPG, JPEG), and CSV
+    pdfs = (
+        list(PROJECT_ROOT.glob("*.pdf")) + 
+        list(PROJECT_ROOT.glob("*.png")) + 
+        list(PROJECT_ROOT.glob("*.jpg")) +
+        list(PROJECT_ROOT.glob("*.jpeg")) +
+        list(PROJECT_ROOT.glob("*.csv"))
+    )
 
     if pdfs:
         file_table = Table(title="Available Files", box=box.ROUNDED, border_style="cyan")

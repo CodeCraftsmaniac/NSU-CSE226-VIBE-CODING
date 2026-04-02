@@ -36,7 +36,83 @@ document.addEventListener('DOMContentLoaded', () => {
     initParticles();
     initRestartButton();
     initCancelButton();
+    initOcrEnginePills();
 });
+
+// ─── OCR Engine Pills ──────────────────────────────────────────────────────────
+function initOcrEnginePills() {
+    const pills = document.querySelectorAll('.engine-pill');
+    const hiddenInput = document.getElementById('ocr-engine');
+    
+    pills.forEach(pill => {
+        pill.addEventListener('click', () => {
+            // Remove active from all
+            pills.forEach(p => p.classList.remove('active'));
+            // Add active to clicked
+            pill.classList.add('active');
+            // Update hidden input
+            if (hiddenInput) {
+                hiddenInput.value = pill.dataset.engine;
+            }
+        });
+    });
+}
+
+// ─── Export Report Function ────────────────────────────────────────────────────
+let currentScanId = null;
+
+async function exportReport(format) {
+    if (!currentScanId) {
+        showToast('No scan available to export', 'error');
+        return;
+    }
+    
+    try {
+        const token = localStorage.getItem('supabase_token');
+        if (!token) {
+            showToast('Please sign in to export', 'error');
+            return;
+        }
+        
+        const response = await fetch(`${API_BASE_URL}/export/${currentScanId}?format=${format}`, {
+            headers: {
+                'Authorization': `Bearer ${token}`
+            }
+        });
+        
+        if (!response.ok) {
+            throw new Error('Export failed');
+        }
+        
+        // For JSON, just show in new tab
+        if (format === 'json') {
+            const data = await response.json();
+            const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+            downloadBlob(blob, `transcript_${currentScanId}.json`);
+        } else {
+            // For CSV, Excel, PDF - download the blob
+            const blob = await response.blob();
+            const ext = format === 'excel' ? 'xlsx' : format;
+            downloadBlob(blob, `transcript_${currentScanId}.${ext}`);
+        }
+        
+        showToast(`Exported as ${format.toUpperCase()}`, 'success');
+    } catch (error) {
+        console.error('Export error:', error);
+        showToast('Export failed', 'error');
+    }
+}
+
+function downloadBlob(blob, filename) {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+}
 
 // ─── Particle Background ───────────────────────────────────────────────────────
 function initParticles() {
@@ -848,6 +924,11 @@ function markStepDone(stepId) {
 
 // ─── Results Display ───────────────────────────────────────────────────────────
 function showResults(data) {
+    // Store scan ID for export functionality
+    if (data.scan_id) {
+        currentScanId = data.scan_id;
+    }
+    
     // Ensure hero remains hidden
     if (heroContent) {
         heroContent.classList.add('hidden');
@@ -923,50 +1004,34 @@ function showResults(data) {
 function displayDepartmentBadge(ocrInfo) {
     if (!ocrInfo) return;
     
-    // Create or get department badge container
-    let deptContainer = document.getElementById('department-badge-container');
-    if (!deptContainer) {
-        // Insert after student card
-        const studentCard = document.getElementById('student-card');
-        if (studentCard) {
-            deptContainer = document.createElement('div');
-            deptContainer.id = 'department-badge-container';
-            deptContainer.className = 'department-badge-container';
-            studentCard.parentNode.insertBefore(deptContainer, studentCard.nextSibling);
-        }
-    }
+    // Use the new inline department element
+    const deptContainer = document.getElementById('student-department');
+    const deptBadge = document.getElementById('dept-badge');
+    const deptName = document.getElementById('dept-name');
     
-    if (!deptContainer) return;
+    if (!deptContainer || !deptName) return;
     
     if (ocrInfo.department_valid && ocrInfo.department_name) {
-        const badgeColors = {
-            'CSE': { bg: 'rgba(59, 130, 246, 0.15)', border: '#3b82f6', text: '#60a5fa' },
-            'EEE': { bg: 'rgba(168, 85, 247, 0.15)', border: '#a855f7', text: '#c084fc' },
-            'BBA': { bg: 'rgba(34, 197, 94, 0.15)', border: '#22c55e', text: '#4ade80' }
+        const badgeStyles = {
+            'CSE': { bg: 'rgba(59, 130, 246, 0.2)', border: 'rgba(59, 130, 246, 0.4)', color: '#60a5fa' },
+            'EEE': { bg: 'rgba(168, 85, 247, 0.2)', border: 'rgba(168, 85, 247, 0.4)', color: '#c084fc' },
+            'BBA': { bg: 'rgba(34, 197, 94, 0.2)', border: 'rgba(34, 197, 94, 0.4)', color: '#4ade80' }
         };
-        const colors = badgeColors[ocrInfo.department_name] || badgeColors['CSE'];
+        const style = badgeStyles[ocrInfo.department_name] || badgeStyles['CSE'];
         
-        deptContainer.innerHTML = `
-            <div class="department-badge" style="
-                display: inline-flex;
-                align-items: center;
-                gap: 8px;
-                padding: 8px 16px;
-                background: ${colors.bg};
-                border: 1px solid ${colors.border};
-                border-radius: 20px;
-                margin: 10px 0;
-            ">
-                <span class="dept-icon" style="font-size: 1.2em;">🎓</span>
-                <span class="dept-name" style="color: ${colors.text}; font-weight: 600;">
-                    ${esc(ocrInfo.department_name)}
-                </span>
-                <span class="dept-full" style="color: rgba(255,255,255,0.6); font-size: 0.85em;">
-                    ${esc(ocrInfo.department_full_name || '')}
-                </span>
-            </div>
-        `;
-        deptContainer.style.display = 'block';
+        // Update badge styling
+        if (deptBadge) {
+            deptBadge.style.background = `linear-gradient(135deg, ${style.bg} 0%, ${style.bg.replace('0.2', '0.15')} 100%)`;
+            deptBadge.style.borderColor = style.border;
+            deptBadge.style.color = style.color;
+            deptBadge.querySelector('svg').style.color = style.color;
+        }
+        
+        // Set department name with full name if available
+        const fullName = ocrInfo.department_full_name || '';
+        deptName.textContent = fullName ? `${ocrInfo.department_name} ${fullName}` : ocrInfo.department_name;
+        
+        deptContainer.style.display = 'flex';
     } else {
         deptContainer.style.display = 'none';
     }
