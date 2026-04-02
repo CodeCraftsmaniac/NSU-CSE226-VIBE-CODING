@@ -89,13 +89,3 @@ except Exception as e:
     logger.error(f"❌ Failed to load API router: {e}")
     import traceback
     traceback.print_exc()
-
-
-@app.get("/debug/status", include_in_schema=False)
-def debug_status():
-    """Debug endpoint to check router loading status (hidden from docs)."""
-    return {
-        "router_loaded": _router_loaded,
-        "router_error": _router_error,
-        "python_version": sys.version,
-    }

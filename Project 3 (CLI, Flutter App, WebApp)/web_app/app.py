@@ -84,11 +84,25 @@ jinja_env.cache = None
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 templates.env = jinja_env  # Use our custom environment
 
-# Mount static files only if directory exists
+# Mount static files
+# On Vercel, static files are served by @vercel/static build, so this is for local dev
 if STATIC_DIR.exists():
     app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 else:
-    logger.warning(f"Static directory not found: {STATIC_DIR}")
+    # Log for debugging but don't warn - Vercel handles static files separately
+    logger.info(f"Static directory not found locally: {STATIC_DIR} (OK for Vercel)")
+
+
+# Add a fallback static file handler for Vercel
+@app.get("/static/{file_path:path}")
+async def serve_static_fallback(file_path: str):
+    """Fallback static file handler for Vercel."""
+    # Try multiple paths
+    for base in [STATIC_DIR, Path("/var/task/web_app/static"), Path.cwd() / "web_app" / "static"]:
+        full_path = base / file_path
+        if full_path.exists() and full_path.is_file():
+            return FileResponse(full_path)
+    return JSONResponse(status_code=404, content={"error": f"Static file not found: {file_path}"})
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # Routes - Pure Frontend (no OCR logic)

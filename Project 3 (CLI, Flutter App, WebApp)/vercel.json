@@ -2,6 +2,10 @@
   "version": 2,
   "builds": [
     {
+      "src": "web_app/static/**",
+      "use": "@vercel/static"
+    },
+    {
       "src": "web_app/app.py",
       "use": "@vercel/python",
       "config": {
@@ -18,6 +22,5 @@
       "src": "/(.*)",
       "dest": "/web_app/app.py"
     }
-  ],
-  "outputDirectory": "."
+  ]
 }

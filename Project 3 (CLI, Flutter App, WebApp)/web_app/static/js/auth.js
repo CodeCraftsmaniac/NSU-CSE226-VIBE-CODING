@@ -191,7 +191,6 @@ async function syncUserToBackend() {
     const data = await response.json();
     
     if (!data.success) throw new Error('Sync failed');
-    console.log('User synced:', data.user);
     return data.user;
 }
 
