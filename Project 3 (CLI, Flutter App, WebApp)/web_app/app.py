@@ -122,6 +122,23 @@ async def cli_auth(request: Request):
     return templates.TemplateResponse("cli_auth.html", {"request": request})
 
 
+@app.get("/debug/paths")
+async def debug_paths():
+    """Debug endpoint to check path resolution on Vercel."""
+    import os
+    cwd = os.getcwd()
+    return {
+        'cwd': cwd,
+        'base_dir': str(BASE_DIR),
+        'templates_dir': str(TEMPLATES_DIR),
+        'templates_exists': TEMPLATES_DIR.exists(),
+        'static_dir': str(STATIC_DIR),
+        'static_exists': STATIC_DIR.exists(),
+        'cwd_contents': os.listdir(cwd)[:20] if os.path.exists(cwd) else [],
+        'templates_contents': list(TEMPLATES_DIR.iterdir()) if TEMPLATES_DIR.exists() else [],
+    }
+
+
 @app.get("/health")
 async def health():
     """Health check endpoint."""
