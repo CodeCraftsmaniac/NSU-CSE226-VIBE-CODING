@@ -24,7 +24,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI(
     title="NSU Degree Audit - Web Frontend",
-    version="2.2.0",
+    version="2.3.0",
     docs_url=None,  # Disable docs for frontend
     redoc_url=None
 )
@@ -163,7 +163,7 @@ async def health():
         'framework': 'FastAPI',
         'backend': 'https://ocrapi.nsunexus.app',
         'timestamp': datetime.utcnow().isoformat(),
-        'version': '2.2.1'
+        'version': '2.3.0'
     }
 
 

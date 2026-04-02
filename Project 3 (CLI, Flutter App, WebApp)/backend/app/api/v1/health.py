@@ -43,8 +43,7 @@ def check_db_connection():
         
         from database import check_db_connection as _check_db
         return _check_db()
-    except Exception as e:
-        logger.debug(f"Database check failed: {e}")
+    except Exception:
         return False
 
 

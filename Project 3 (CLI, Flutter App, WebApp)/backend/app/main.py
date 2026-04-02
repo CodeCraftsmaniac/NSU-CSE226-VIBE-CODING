@@ -28,7 +28,7 @@ CORS_ORIGINS = os.getenv("CORS_ORIGINS", "").split(",") if os.getenv("CORS_ORIGI
 # Create app
 app = FastAPI(
     title="NSU Degree Audit API",
-    version="2.4.1",
+    version="2.5.0",
 )
 
 # CORS - Use specific origins (not wildcard) for security
@@ -45,7 +45,7 @@ app.add_middleware(
 def root():
     return {
         "name": "NSU Degree Audit API",
-        "version": "2.4.1",
+        "version": "2.5.0",
         "framework": "FastAPI",
         "status": "running",
     }

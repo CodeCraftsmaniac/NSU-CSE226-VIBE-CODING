@@ -102,7 +102,6 @@ def verify_cli_token(token: str) -> Optional[Dict[str, Any]]:
         expected_sig = hmac.new(SECRET_KEY.encode(), payload_b64.encode(), hashlib.sha256).hexdigest()
         
         if not hmac.compare_digest(signature, expected_sig):
-            logger.debug("CLI token: signature mismatch")
             return None
         
         # Decode payload
@@ -110,7 +109,6 @@ def verify_cli_token(token: str) -> Optional[Dict[str, Any]]:
         
         # Check expiry
         if payload.get('exp', 0) < time.time():
-            logger.debug("CLI token: expired")
             return None
         
         # Get user from database to get full info
@@ -127,8 +125,8 @@ def verify_cli_token(token: str) -> Optional[Dict[str, Any]]:
                     'provider': db_user.get('provider', 'cli'),
                     'created_at': db_user.get('created_at')
                 }
-        except Exception as e:
-            logger.debug(f"CLI token: db lookup failed: {e}")
+        except Exception:
+            pass
         
         # Fallback: return info from token payload
         return {
@@ -141,8 +139,8 @@ def verify_cli_token(token: str) -> Optional[Dict[str, Any]]:
             'created_at': None
         }
         
-    except Exception as e:
-        logger.debug(f"CLI token verification error: {e}")
+    except Exception:
+        pass
     return None
 
 

@@ -108,16 +108,13 @@ async def get_current_user_optional(
         # Sync user to our database
         if DB_MODULE_AVAILABLE:
             sync_user_to_db(user)
-        logger.debug(f"Authenticated via Supabase: {user.get('email')}")
         return user
     
     # Try CLI token verification (from /auth/google endpoint)
     user = verify_cli_token(token)
     if user:
-        logger.debug(f"Authenticated via CLI token: {user.get('email')}")
         return user
     
-    logger.debug("Token verification failed for both Supabase and CLI")
     return None
 
 
