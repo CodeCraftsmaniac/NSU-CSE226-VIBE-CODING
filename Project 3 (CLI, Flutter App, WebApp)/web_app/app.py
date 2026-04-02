@@ -70,14 +70,19 @@ if not TEMPLATES_DIR.exists():
             logger.info(f"Using alternative template path: {TEMPLATES_DIR}")
             break
 
-# Create Jinja2 environment with no caching to avoid Vercel compatibility issues
+# Create Jinja2 environment with cache disabled to avoid Vercel compatibility issues
 from jinja2 import Environment, FileSystemLoader
+
+# Disable Jinja2 caching completely to avoid the "unhashable type: dict" error
 jinja_env = Environment(
     loader=FileSystemLoader(str(TEMPLATES_DIR)),
-    auto_reload=True,  # Disable caching
+    auto_reload=True,
 )
+# Disable the LRUCache by setting cache_size to 0
+jinja_env.cache = None
+
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
-templates.env = jinja_env  # Override default environment
+templates.env = jinja_env  # Use our custom environment
 
 # Mount static files only if directory exists
 if STATIC_DIR.exists():
