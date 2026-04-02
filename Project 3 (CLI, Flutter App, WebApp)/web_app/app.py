@@ -86,15 +86,18 @@ else:
 async def index(request: Request):
     """Render main page."""
     try:
-        return templates.TemplateResponse("index.html", {"request": request})
+        # Debug: log before attempting render
+        logger.info(f"Attempting to render index.html from {TEMPLATES_DIR}")
+        resp = templates.TemplateResponse("index.html", {"request": request})
+        logger.info("Template rendered successfully")
+        return resp
     except Exception as e:
+        import traceback
+        error_tb = traceback.format_exc()
         logger.error(f"Failed to render index.html: {e}")
-        logger.error(f"Templates directory: {TEMPLATES_DIR}")
-        logger.error(f"Templates exists: {TEMPLATES_DIR.exists()}")
-        if TEMPLATES_DIR.exists():
-            logger.error(f"Templates contents: {list(TEMPLATES_DIR.iterdir())}")
+        logger.error(f"Traceback: {error_tb}")
         return HTMLResponse(
-            content=f"<html><body><h1>Error loading page</h1><p>Template path: {TEMPLATES_DIR}</p><p>Error: {e}</p></body></html>",
+            content=f"<html><body><h1>Error loading page</h1><pre>Template: {TEMPLATES_DIR}\n\nError: {e}\n\nTraceback:\n{error_tb}</pre></body></html>",
             status_code=500
         )
 
