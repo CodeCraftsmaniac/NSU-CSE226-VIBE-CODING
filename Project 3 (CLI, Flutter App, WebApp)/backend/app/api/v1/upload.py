@@ -10,6 +10,8 @@ import os
 import time
 import tempfile
 import logging
+import uuid
+import asyncio
 from pathlib import Path
 from typing import Optional, Dict, Any, List, Tuple
 
@@ -103,6 +105,16 @@ def get_db_functions():
     except Exception:
         return None, None, None
 
+# WebSocket progress helper
+async def broadcast_progress(job_id: str, stage: str, progress: int, message: str, error: str = None):
+    """Broadcast progress to WebSocket clients if available."""
+    try:
+        from app.main import update_ocr_progress
+        await update_ocr_progress(job_id, stage, progress, message, error)
+    except Exception as e:
+        # WebSocket not critical - log and continue
+        logger.debug(f"Could not broadcast progress: {e}")
+
 # Knowledge base path
 KB_PATH = Path(__file__).parent.parent.parent.parent / 'knowledge_base.md'
 
@@ -174,6 +186,7 @@ class UploadResponse(BaseModel):
     success: bool
     data: Optional[Dict[str, Any]] = None
     error: Optional[str] = None
+    job_id: Optional[str] = None  # For WebSocket progress tracking
     
     class Config:
         from_attributes = True
@@ -371,11 +384,18 @@ async def upload_transcript(
             detail=f"File too large. Maximum size is {settings.MAX_UPLOAD_SIZE_MB}MB."
         )
     
-    logger.info(f"File uploaded: {safe_filename}, size: {len(content)} bytes")
+    # Generate job ID for WebSocket progress tracking
+    job_id = str(uuid.uuid4())[:8]
+    
+    logger.info(f"File uploaded: {safe_filename}, size: {len(content)} bytes, job: {job_id}")
+    
+    # Broadcast initial progress
+    await broadcast_progress(job_id, "upload", 10, "File received, validating...")
     
     # Check if required modules are available
     analysis_available, run_analysis = get_analysis_engine()
     if not analysis_available:
+        await broadcast_progress(job_id, "error", 0, "Analysis engine not available", "Analysis engine not available")
         raise HTTPException(
             status_code=503,
             detail="Analysis engine not available"
@@ -387,13 +407,19 @@ async def upload_transcript(
         
         # Handle CSV files directly (no OCR needed)
         if ext == 'csv':
+            await broadcast_progress(job_id, "parse", 30, "Parsing CSV file...")
+            
             courses, csv_error = parse_csv_transcript(content)
             
             if csv_error:
-                return UploadResponse(success=False, error=csv_error)
+                await broadcast_progress(job_id, "error", 0, csv_error, csv_error)
+                return UploadResponse(success=False, error=csv_error, job_id=job_id)
             
             if not courses:
-                return UploadResponse(success=False, error="No valid courses found in CSV")
+                await broadcast_progress(job_id, "error", 0, "No valid courses found", "No valid courses found in CSV")
+                return UploadResponse(success=False, error="No valid courses found in CSV", job_id=job_id)
+            
+            await broadcast_progress(job_id, "analyze", 60, "Running degree audit analysis...")
             
             # Run analysis on parsed courses
             result = run_analysis(courses, kb_path=str(KB_PATH))
@@ -410,8 +436,11 @@ async def upload_transcript(
             }
         else:
             # OCR Processing for PDF/images
+            await broadcast_progress(job_id, "ocr", 25, "Starting OCR processing...")
+            
             ocr_available, OCRClass = get_ocr_engine()
             if not ocr_available:
+                await broadcast_progress(job_id, "error", 0, "OCR engine not available", "OCR engine not available")
                 raise HTTPException(
                     status_code=503,
                     detail="OCR engine not available"
@@ -433,21 +462,29 @@ async def upload_transcript(
                 # Write file
                 filepath.write_bytes(content)
                 
+                await broadcast_progress(job_id, "ocr", 40, f"Running OCR with {ocr_engine} engine...")
+                
                 # OCR Processing with selected engine
                 ocr = OCRClass(engine=ocr_engine)
                 ocr_result = ocr.extract(str(filepath))
                 
                 if not ocr_result.success:
                     logger.error(f"OCR failed: {ocr_result.error}")
+                    await broadcast_progress(job_id, "error", 0, f"OCR failed: {ocr_result.error}", ocr_result.error)
                     return UploadResponse(
                         success=False, 
-                        error=ocr_result.error or 'OCR extraction failed'
+                        error=ocr_result.error or 'OCR extraction failed',
+                        job_id=job_id
                     )
                 
+                await broadcast_progress(job_id, "ocr", 60, f"Found {ocr_result.course_count} courses")
+                
                 if ocr_result.course_count == 0:
+                    await broadcast_progress(job_id, "error", 0, "No courses found", "No courses found in document")
                     return UploadResponse(
                         success=False, 
-                        error="No courses found in document"
+                        error="No courses found in document",
+                        job_id=job_id
                     )
                 
                 # Check for valid department from student ID
@@ -463,9 +500,12 @@ async def upload_transcript(
                             if dept_check.get('department_code'):
                                 error_msg += f" (Detected code: {dept_check.get('department_code')})"
                             logger.warning(f"Invalid department detected: {ocr_result.student_id}")
-                            return UploadResponse(success=False, error=error_msg)
+                            await broadcast_progress(job_id, "error", 0, "Invalid department", error_msg)
+                            return UploadResponse(success=False, error=error_msg, job_id=job_id)
                     except ImportError:
                         pass  # Skip department check if function not available
+                
+                await broadcast_progress(job_id, "analyze", 70, "Running degree audit analysis...")
                 
                 # Prepare courses data
                 courses = [
@@ -540,13 +580,16 @@ async def upload_transcript(
         elif not DB_MODULE_AVAILABLE:
             logger.warning("Database not available, skipping history save")
         
+        await broadcast_progress(job_id, "complete", 100, f"Analysis complete! {len(courses)} courses processed")
+        
         logger.info(f"Analysis complete: {len(courses)} courses processed")
-        return UploadResponse(success=True, data=result)
+        return UploadResponse(success=True, data=result, job_id=job_id)
     
     except HTTPException:
         raise
     except Exception as e:
         logger.exception(f"Error processing upload: {str(e)}")
+        await broadcast_progress(job_id, "error", 0, "Processing error", str(e))
         raise HTTPException(
             status_code=500,
             detail="Error processing file. Please try again."

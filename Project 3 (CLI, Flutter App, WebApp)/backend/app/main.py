@@ -5,8 +5,11 @@ High-performance async backend for OCR-based degree auditing.
 """
 import os
 import logging
+import asyncio
+from typing import Dict, Set
+import json
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import JSONResponse
@@ -96,3 +99,122 @@ try:
     logger.info("✅ API router loaded successfully")
 except Exception as e:
     logger.error(f"❌ Failed to load API router: {e}")
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# WEBSOCKET: Real-time OCR Progress Updates
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class ConnectionManager:
+    """Manage WebSocket connections for real-time progress updates."""
+    
+    def __init__(self):
+        # Map of job_id -> set of WebSocket connections
+        self.active_connections: Dict[str, Set[WebSocket]] = {}
+        # Map of job_id -> progress data
+        self.progress_data: Dict[str, dict] = {}
+    
+    async def connect(self, websocket: WebSocket, job_id: str):
+        """Accept WebSocket connection and track it by job_id."""
+        await websocket.accept()
+        if job_id not in self.active_connections:
+            self.active_connections[job_id] = set()
+        self.active_connections[job_id].add(websocket)
+        logger.info(f"WebSocket connected for job {job_id}")
+        
+        # Send current progress if available
+        if job_id in self.progress_data:
+            await websocket.send_json(self.progress_data[job_id])
+    
+    def disconnect(self, websocket: WebSocket, job_id: str):
+        """Remove WebSocket connection."""
+        if job_id in self.active_connections:
+            self.active_connections[job_id].discard(websocket)
+            if not self.active_connections[job_id]:
+                del self.active_connections[job_id]
+        logger.info(f"WebSocket disconnected for job {job_id}")
+    
+    async def broadcast_progress(self, job_id: str, progress: dict):
+        """Broadcast progress update to all connections for a job."""
+        self.progress_data[job_id] = progress
+        
+        if job_id in self.active_connections:
+            dead_connections = set()
+            for connection in self.active_connections[job_id]:
+                try:
+                    await connection.send_json(progress)
+                except Exception:
+                    dead_connections.add(connection)
+            
+            # Clean up dead connections
+            for conn in dead_connections:
+                self.active_connections[job_id].discard(conn)
+    
+    def clear_job(self, job_id: str):
+        """Clear job data after completion."""
+        if job_id in self.progress_data:
+            del self.progress_data[job_id]
+
+
+# Global connection manager instance
+ws_manager = ConnectionManager()
+
+
+@app.websocket("/ws/ocr/{job_id}")
+async def websocket_ocr_progress(websocket: WebSocket, job_id: str):
+    """
+    WebSocket endpoint for real-time OCR progress updates.
+    
+    Connect to receive progress updates for a specific OCR job.
+    Messages are JSON objects with:
+    - stage: Current processing stage (upload, ocr, analyze, complete)
+    - progress: Percentage complete (0-100)
+    - message: Human-readable status message
+    - error: Error message if failed
+    """
+    await ws_manager.connect(websocket, job_id)
+    try:
+        # Keep connection alive and wait for client messages
+        while True:
+            # Wait for any client message (ping/pong or disconnect)
+            try:
+                data = await asyncio.wait_for(websocket.receive_text(), timeout=60.0)
+                # Handle ping
+                if data == "ping":
+                    await websocket.send_text("pong")
+            except asyncio.TimeoutError:
+                # Send heartbeat
+                try:
+                    await websocket.send_json({"type": "heartbeat"})
+                except Exception:
+                    break
+    except WebSocketDisconnect:
+        ws_manager.disconnect(websocket, job_id)
+    except Exception as e:
+        logger.warning(f"WebSocket error for job {job_id}: {e}")
+        ws_manager.disconnect(websocket, job_id)
+
+
+# Export manager for use in upload endpoint
+def get_ws_manager():
+    """Get the WebSocket manager instance."""
+    return ws_manager
+
+
+# Update progress function for OCR module to call
+async def update_ocr_progress(job_id: str, stage: str, progress: int, message: str, error: str = None):
+    """
+    Update OCR progress for a specific job.
+    
+    Called by OCR processing code to broadcast updates to connected clients.
+    """
+    progress_data = {
+        "job_id": job_id,
+        "stage": stage,
+        "progress": progress,
+        "message": message,
+    }
+    if error:
+        progress_data["error"] = error
+    
+    await ws_manager.broadcast_progress(job_id, progress_data)
