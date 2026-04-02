@@ -109,11 +109,14 @@ def get_settings() -> Settings:
         return Settings()
     except Exception:
         # Return settings with defaults for graceful degradation
+        jwt_secret = os.environ.get('SUPABASE_JWT_SECRET', os.environ.get('JWT_SECRET_KEY', ''))
+        if not jwt_secret:
+            raise ValueError("JWT_SECRET_KEY must be set in production")
         return Settings(
             SUPABASE_URL=os.environ.get('SUPABASE_URL', ''),
             SUPABASE_ANON_KEY=os.environ.get('SUPABASE_KEY', os.environ.get('SUPABASE_ANON_KEY', '')),
             SUPABASE_SERVICE_ROLE_KEY=os.environ.get('SUPABASE_SERVICE_ROLE_KEY', ''),
-            JWT_SECRET_KEY=os.environ.get('SUPABASE_JWT_SECRET', os.environ.get('JWT_SECRET_KEY', 'dev-secret')),
+            JWT_SECRET_KEY=jwt_secret,
         )
 
 

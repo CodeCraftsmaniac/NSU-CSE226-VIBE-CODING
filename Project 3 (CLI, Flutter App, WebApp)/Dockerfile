@@ -19,7 +19,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # Backend API and shared logic
 COPY backend/ ./backend/
-COPY knowledge_base.md .
+COPY docs/knowledge_base.md .
 
 # Create uploads directory
 RUN mkdir -p uploads && chmod 777 uploads

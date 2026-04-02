@@ -322,6 +322,15 @@ async function loadHistory() {
         });
         clearTimeout(timeoutId);
         
+        if (!response.ok) {
+            if (response.status === 401) {
+                document.getElementById('history-content').innerHTML = '<p class="error-text">Session expired. Please sign in again.</p>';
+                signOut();
+                return;
+            }
+            throw new Error(`HTTP ${response.status}`);
+        }
+        
         const data = await response.json();
         
         if (data.success && data.history) {

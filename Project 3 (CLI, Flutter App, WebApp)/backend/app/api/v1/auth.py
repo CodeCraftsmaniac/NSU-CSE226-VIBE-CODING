@@ -108,14 +108,16 @@ def generate_device_code() -> str:
     return ''.join(secrets.choice(chars) for _ in range(8))
 
 
-def get_secret_key() -> str:
-    """Get secret key for token signing."""
+def get_secret_key() -> bytes:
+    """Get secret key for token signing (SHA256 hash of service key)."""
     _, SUPABASE_SERVICE_ROLE_KEY = get_auth_functions()
     settings = get_settings_safe()
     if SUPABASE_SERVICE_ROLE_KEY:
-        return SUPABASE_SERVICE_ROLE_KEY[:32]
-    jwt_key = getattr(settings, 'JWT_SECRET_KEY', None) or 'fallback-secret-key'
-    return jwt_key[:32]
+        return hashlib.sha256(SUPABASE_SERVICE_ROLE_KEY.encode()).digest()
+    jwt_key = getattr(settings, 'JWT_SECRET_KEY', None)
+    if not jwt_key:
+        raise HTTPException(status_code=503, detail="JWT secret not configured")
+    return hashlib.sha256(jwt_key.encode()).digest()
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -268,8 +270,8 @@ async def auth_google(request: Request, auth_data: GoogleAuthRequest):
         }
         payload_b64 = base64.urlsafe_b64encode(json.dumps(payload).encode()).decode()
         
-        # Sign the payload
-        signature = hmac.new(SECRET_KEY.encode(), payload_b64.encode(), hashlib.sha256).hexdigest()
+        # Sign the payload with SHA256 hash of secret
+        signature = hmac.new(SECRET_KEY, payload_b64.encode(), hashlib.sha256).hexdigest()
         token = f"{payload_b64}.{signature}"
         
         return TokenResponse(
@@ -483,7 +485,7 @@ async def verify_device_code(request: Request, verify_data: DeviceVerifyRequest)
     }
     
     payload_bytes = base64.urlsafe_b64encode(json.dumps(payload).encode()).decode()
-    signature = hmac.new(SECRET_KEY.encode(), payload_bytes.encode(), hashlib.sha256).hexdigest()[:16]
+    signature = hmac.new(SECRET_KEY, payload_bytes.encode(), hashlib.sha256).hexdigest()
     cli_token = f"{payload_bytes}.{signature}"
     
     # Mark code as complete

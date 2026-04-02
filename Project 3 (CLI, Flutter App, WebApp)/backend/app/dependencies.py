@@ -4,6 +4,7 @@ Shared Dependencies
 Common dependencies for FastAPI dependency injection.
 Integrates with existing auth.py module for token verification.
 """
+import os
 import sys
 import logging
 from typing import Optional, Dict, Any
@@ -68,14 +69,34 @@ async def get_api_key(x_api_key: Optional[str] = Header(None)) -> Optional[str]:
 
 
 async def verify_api_key(api_key: Optional[str] = Depends(get_api_key)) -> str:
-    """Verify that a valid API key was provided."""
+    """Verify that a valid API key was provided against database."""
     if not api_key:
         raise HTTPException(
             status_code=401,
             detail="API key required"
         )
-    # TODO: Add actual API key validation against database
-    return api_key
+    
+    # Validate API key against database
+    if DB_MODULE_AVAILABLE:
+        try:
+            from database import get_supabase
+            supabase = get_supabase()
+            if supabase:
+                result = supabase.table('cse226_ocr_api_keys').select('*').eq('key', api_key).eq('revoked', False).execute()
+                if result.data:
+                    return api_key
+        except Exception:
+            pass
+    
+    # If no database or key not found, check against env var as fallback
+    valid_keys = os.environ.get('API_KEYS', '').split(',')
+    if api_key in valid_keys and api_key:
+        return api_key
+    
+    raise HTTPException(
+        status_code=401,
+        detail="Invalid or revoked API key"
+    )
 
 
 async def get_current_user_optional(

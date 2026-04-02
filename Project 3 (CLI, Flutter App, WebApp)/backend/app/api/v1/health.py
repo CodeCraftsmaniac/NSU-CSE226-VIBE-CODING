@@ -104,8 +104,7 @@ async def health_check():
     
     # Environment
     env_info = {
-        'environment': getattr(settings, 'ENVIRONMENT', 'development') if settings else 'development',
-        'debug_mode': getattr(settings, 'DEBUG', False) if settings else False,
+        'environment': getattr(settings, 'ENVIRONMENT', 'production') if settings else 'production',
         'log_level': getattr(settings, 'LOG_LEVEL', 'INFO') if settings else 'INFO',
         'max_upload_mb': getattr(settings, 'MAX_UPLOAD_SIZE_MB', 16) if settings else 16,
         'port': os.getenv('PORT', '8080')
@@ -190,14 +189,12 @@ async def readiness():
     # Check database connection
     db_ready = check_db_connection()
     
-    # If DB check fails but we're in development, still consider ready
-    settings = get_settings_safe()
-    is_dev = getattr(settings, 'DEBUG', True) if settings else True
-    
-    if not db_ready and not is_dev:
+    # In production, DB is optional (graceful degradation)
+    if not db_ready:
         return {
-            "status": "not_ready",
-            "reason": "Database connection failed"
+            "status": "ready",
+            "database": "unavailable",
+            "note": "Running without database persistence"
         }
     
     return {"status": "ready"}

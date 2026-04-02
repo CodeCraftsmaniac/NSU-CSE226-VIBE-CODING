@@ -106,6 +106,64 @@ def get_db_functions():
 # Knowledge base path
 KB_PATH = Path(__file__).parent.parent.parent.parent / 'knowledge_base.md'
 
+# Allowed file types and MIME types
+ALLOWED_EXTENSIONS = {'.pdf', '.png', '.jpg', '.jpeg', '.csv'}
+ALLOWED_MIME_TYPES = {
+    'application/pdf': '.pdf',
+    'image/png': '.png',
+    'image/jpeg': '.jpg',
+    'image/jpg': '.jpg',
+    'text/csv': '.csv',
+    'application/csv': '.csv',
+    'text/plain': '.csv',  # Some systems report CSV as text/plain
+}
+
+def validate_upload_file(file: UploadFile) -> str:
+    """
+    Validate uploaded file for security.
+    
+    Args:
+        file: The uploaded file
+        
+    Returns:
+        Sanitized filename
+        
+    Raises:
+        HTTPException: If file is invalid
+    """
+    if not file.filename:
+        raise HTTPException(status_code=400, detail="No filename provided")
+    
+    # Sanitize filename - extract just the filename, no path components
+    filename = Path(file.filename).name
+    
+    # Prevent path traversal
+    if '..' in filename or '/' in filename or '\\' in filename:
+        raise HTTPException(status_code=400, detail="Invalid filename")
+    
+    # Check filename length
+    if len(filename) > 255:
+        raise HTTPException(status_code=400, detail="Filename too long")
+    
+    # Get file extension
+    ext = Path(filename).suffix.lower()
+    if ext not in ALLOWED_EXTENSIONS:
+        raise HTTPException(
+            status_code=400, 
+            detail=f"Invalid file type. Allowed: {', '.join(ALLOWED_EXTENSIONS)}"
+        )
+    
+    # Validate MIME type if provided
+    if file.content_type:
+        mime = file.content_type.lower()
+        if mime not in ALLOWED_MIME_TYPES and not mime.startswith('image/') and mime != 'application/octet-stream':
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid content type: {mime}"
+            )
+    
+    return filename
+
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # Response Models
@@ -273,6 +331,9 @@ async def upload_transcript(
     get_current_user_optional, get_db_user_id, DB_MODULE_AVAILABLE = get_dependencies()
     settings = get_settings_safe()
     
+    # Validate file security (path traversal, extension, MIME type)
+    safe_filename = validate_upload_file(file)
+    
     # Get user from auth header
     user = None
     auth_header = request.headers.get('Authorization')
@@ -285,15 +346,8 @@ async def upload_transcript(
     else:
         logger.info("Upload request from unauthenticated user (guest mode)")
     
-    # Validate file type
-    allowed = {'pdf', 'csv', 'png', 'jpg', 'jpeg'}
-    ext = file.filename.rsplit('.', 1)[-1].lower() if file.filename and '.' in file.filename else ''
-    
-    if ext not in allowed:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Invalid file type. Allowed: {', '.join(allowed)}"
-        )
+    # Get file extension
+    ext = Path(safe_filename).suffix.lower().lstrip('.')
     
     # Read file content
     content = await file.read()
@@ -306,7 +360,7 @@ async def upload_transcript(
             detail=f"File too large. Maximum size is {settings.MAX_UPLOAD_SIZE_MB}MB."
         )
     
-    logger.info(f"File uploaded: {file.filename}, size: {len(content)} bytes")
+    logger.info(f"File uploaded: {safe_filename}, size: {len(content)} bytes")
     
     # Check if required modules are available
     analysis_available, run_analysis = get_analysis_engine()
