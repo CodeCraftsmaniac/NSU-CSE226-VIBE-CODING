@@ -5,14 +5,19 @@
       "src": "web_app/app.py",
       "use": "@vercel/python",
       "config": {
-        "maxLambdaSize": "15mb"
+        "maxLambdaSize": "15mb",
+        "runtime": "python3.11"
       }
+    },
+    {
+      "src": "web_app/static/**",
+      "use": "@vercel/static"
     }
   ],
   "routes": [
     {
       "src": "/static/(.*)",
-      "dest": "/web_app/app.py"
+      "dest": "/web_app/static/$1"
     },
     {
       "src": "/(.*)",
