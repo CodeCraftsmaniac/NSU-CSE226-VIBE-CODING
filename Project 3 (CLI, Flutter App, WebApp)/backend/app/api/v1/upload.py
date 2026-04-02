@@ -628,6 +628,8 @@ async def export_scan(
     Formats:
     - json: Full JSON data
     - csv: Course list as CSV
+    - excel: Excel workbook with multiple sheets
+    - pdf: PDF report with summary
     """
     get_current_user_optional, get_db_user_id, DB_MODULE_AVAILABLE = get_dependencies()
     
@@ -653,19 +655,21 @@ async def export_scan(
             raise HTTPException(status_code=404, detail="Scan not found")
         
         analysis_data = scan.get('analysis_data', {})
+        level1 = analysis_data.get('level1', {})
+        level2 = analysis_data.get('level2', {})
+        level3 = analysis_data.get('level3', {})
+        courses = level1.get('valid_entries', [])
+        
+        from fastapi.responses import Response
+        import io
         
         if format == "csv":
             # Generate CSV
-            import io
             output = io.StringIO()
             writer = csv.writer(output)
             
             # Header
             writer.writerow(['Course Code', 'Credits', 'Grade', 'Quality Points', 'Semester'])
-            
-            # Get courses from level1
-            level1 = analysis_data.get('level1', {})
-            courses = level1.get('valid_entries', [])
             
             for course in courses:
                 writer.writerow([
@@ -677,17 +681,197 @@ async def export_scan(
                 ])
             
             # Summary row
-            level2 = analysis_data.get('level2', {})
             writer.writerow([])
             writer.writerow(['Summary'])
             writer.writerow(['Total Credits', level2.get('gpa_credits', 0)])
             writer.writerow(['CGPA', level2.get('cgpa', 0)])
             
-            from fastapi.responses import Response
             return Response(
                 content=output.getvalue(),
                 media_type="text/csv",
                 headers={"Content-Disposition": f"attachment; filename=transcript_{scan_id}.csv"}
+            )
+        
+        elif format == "excel":
+            # Generate Excel with openpyxl
+            try:
+                from openpyxl import Workbook
+                from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
+                from openpyxl.utils import get_column_letter
+            except ImportError:
+                raise HTTPException(status_code=503, detail="Excel export not available")
+            
+            wb = Workbook()
+            
+            # Sheet 1: Summary
+            ws_summary = wb.active
+            ws_summary.title = "Summary"
+            
+            # Styles
+            header_font = Font(bold=True, size=14)
+            header_fill = PatternFill(start_color="4472C4", end_color="4472C4", fill_type="solid")
+            header_font_white = Font(bold=True, size=12, color="FFFFFF")
+            thin_border = Border(
+                left=Side(style='thin'),
+                right=Side(style='thin'),
+                top=Side(style='thin'),
+                bottom=Side(style='thin')
+            )
+            
+            # Title
+            ws_summary['A1'] = "NSU Degree Audit Report"
+            ws_summary['A1'].font = Font(bold=True, size=18)
+            ws_summary.merge_cells('A1:D1')
+            
+            # Summary data
+            summary_data = [
+                ("", ""),  # Empty row
+                ("File", scan.get('filename', 'N/A')),
+                ("Date", scan.get('created_at', 'N/A')),
+                ("", ""),
+                ("Academic Summary", ""),
+                ("Total Credits", level2.get('gpa_credits', 0)),
+                ("Quality Points", level2.get('quality_points', 0)),
+                ("CGPA", level2.get('cgpa', 0)),
+                ("", ""),
+                ("Waiver Status", level3.get('waiver_status', 'N/A')),
+                ("Waiver Percentage", f"{level3.get('waiver_percentage', 0)}%"),
+            ]
+            
+            for idx, (label, value) in enumerate(summary_data, start=2):
+                ws_summary[f'A{idx}'] = label
+                ws_summary[f'B{idx}'] = value
+                if label:
+                    ws_summary[f'A{idx}'].font = Font(bold=True)
+            
+            ws_summary.column_dimensions['A'].width = 25
+            ws_summary.column_dimensions['B'].width = 40
+            
+            # Sheet 2: Courses
+            ws_courses = wb.create_sheet("Courses")
+            
+            # Header
+            headers = ['Course Code', 'Course Name', 'Credits', 'Grade', 'Quality Points', 'Semester']
+            for col, header in enumerate(headers, start=1):
+                cell = ws_courses.cell(row=1, column=col, value=header)
+                cell.font = header_font_white
+                cell.fill = header_fill
+                cell.alignment = Alignment(horizontal='center')
+                cell.border = thin_border
+            
+            # Data rows
+            for row_idx, course in enumerate(courses, start=2):
+                ws_courses.cell(row=row_idx, column=1, value=course.get('code', ''))
+                ws_courses.cell(row=row_idx, column=2, value=course.get('name', ''))
+                ws_courses.cell(row=row_idx, column=3, value=course.get('credits', 0))
+                ws_courses.cell(row=row_idx, column=4, value=course.get('grade', ''))
+                ws_courses.cell(row=row_idx, column=5, value=course.get('quality_points', 0))
+                ws_courses.cell(row=row_idx, column=6, value=course.get('semester', ''))
+                
+                for col in range(1, 7):
+                    ws_courses.cell(row=row_idx, column=col).border = thin_border
+            
+            # Auto-adjust column widths
+            for col in range(1, 7):
+                ws_courses.column_dimensions[get_column_letter(col)].width = 15
+            
+            # Save to bytes
+            output = io.BytesIO()
+            wb.save(output)
+            output.seek(0)
+            
+            return Response(
+                content=output.getvalue(),
+                media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                headers={"Content-Disposition": f"attachment; filename=transcript_{scan_id}.xlsx"}
+            )
+        
+        elif format == "pdf":
+            # Generate PDF with reportlab
+            try:
+                from reportlab.lib import colors
+                from reportlab.lib.pagesizes import letter
+                from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+                from reportlab.lib.units import inch
+                from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+            except ImportError:
+                raise HTTPException(status_code=503, detail="PDF export not available")
+            
+            output = io.BytesIO()
+            doc = SimpleDocTemplate(output, pagesize=letter, topMargin=0.5*inch)
+            elements = []
+            styles = getSampleStyleSheet()
+            
+            # Title
+            title_style = ParagraphStyle(
+                'CustomTitle',
+                parent=styles['Heading1'],
+                fontSize=20,
+                alignment=1,  # Center
+                spaceAfter=20
+            )
+            elements.append(Paragraph("NSU Degree Audit Report", title_style))
+            elements.append(Spacer(1, 0.2*inch))
+            
+            # Summary section
+            elements.append(Paragraph("Academic Summary", styles['Heading2']))
+            summary_data = [
+                ["Metric", "Value"],
+                ["Filename", scan.get('filename', 'N/A')],
+                ["Total Credits", str(level2.get('gpa_credits', 0))],
+                ["Quality Points", str(level2.get('quality_points', 0))],
+                ["CGPA", str(level2.get('cgpa', 0))],
+                ["Waiver Status", level3.get('waiver_status', 'N/A')],
+            ]
+            
+            summary_table = Table(summary_data, colWidths=[2.5*inch, 3*inch])
+            summary_table.setStyle(TableStyle([
+                ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#4472C4')),
+                ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+                ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                ('FONTSIZE', (0, 0), (-1, 0), 12),
+                ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+                ('GRID', (0, 0), (-1, -1), 1, colors.black),
+                ('BACKGROUND', (0, 1), (-1, -1), colors.HexColor('#E7E6E6')),
+            ]))
+            elements.append(summary_table)
+            elements.append(Spacer(1, 0.3*inch))
+            
+            # Courses section
+            elements.append(Paragraph("Course Details", styles['Heading2']))
+            
+            course_data = [["Course Code", "Credits", "Grade", "Quality Pts"]]
+            for course in courses[:50]:  # Limit to 50 courses for PDF
+                course_data.append([
+                    course.get('code', ''),
+                    str(course.get('credits', 0)),
+                    course.get('grade', ''),
+                    str(course.get('quality_points', 0))
+                ])
+            
+            if len(courses) > 50:
+                course_data.append(["...", f"+{len(courses)-50} more", "", ""])
+            
+            course_table = Table(course_data, colWidths=[2*inch, 1.2*inch, 1.2*inch, 1.2*inch])
+            course_table.setStyle(TableStyle([
+                ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#4472C4')),
+                ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+                ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                ('FONTSIZE', (0, 0), (-1, -1), 10),
+                ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+                ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+                ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#F2F2F2')]),
+            ]))
+            elements.append(course_table)
+            
+            # Build PDF
+            doc.build(elements)
+            output.seek(0)
+            
+            return Response(
+                content=output.getvalue(),
+                media_type="application/pdf",
+                headers={"Content-Disposition": f"attachment; filename=transcript_{scan_id}.pdf"}
             )
         
         # Default: JSON
