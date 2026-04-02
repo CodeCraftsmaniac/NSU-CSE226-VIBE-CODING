@@ -70,13 +70,16 @@ All 3 frontends call the **same backend API** — only the UI differs:
 Project 3/
 │
 ├── backend/                    # 🚀 SINGLE BACKEND (Cloud Run: ocrapi.nsunexus.app)
-│   ├── api.py                  #   REST API entry point - /health, /upload
+│   ├── app/                    #   FastAPI application
+│   │   ├── main.py             #   App entry point
+│   │   ├── config.py           #   Configuration with Pydantic
+│   │   └── api/v1/             #   API endpoints
 │   ├── core.py                 #   Grade mapping, CGPA, credit logic
 │   ├── ocr_web.py              #   OCR via Google Vision / OCR.space
 │   └── ocr_engine.py           #   PDF text extraction
 │
 ├── web_app/                    # 🌐 WEB FRONTEND (ocr.nsunexus.app)
-│   ├── app.py                  #   Flask server (Vercel)
+│   ├── app.py                  #   FastAPI server (Vercel)
 │   ├── templates/index.html    #   Main page
 │   └── static/                 #   CSS, JS, SVG assets
 │
@@ -87,7 +90,21 @@ Project 3/
 │   ├── lib/main.dart           #   Full Flutter app
 │   └── pubspec.yaml            #   Dependencies
 │
-├── knowledge_base.md           # 📚 Program requirements (CSE/LLB)
+├── mcp_server/                 # 🔌 MCP SERVER (Model Context Protocol)
+│   ├── server.py               #   MCP server for AI assistants
+│   └── tools.py                #   Available tools
+│
+├── docs/                       # 📚 DOCUMENTATION
+│   ├── API_DOCUMENTATION.md    #   API reference
+│   ├── backend_migration.md    #   Migration guide
+│   └── knowledge_base.md       #   Program requirements
+│
+├── samples/                    # 📄 SAMPLE FILES
+│   └── *.pdf                   #   Sample transcript PDFs
+│
+├── supabase/                   # 🗄️ DATABASE
+│   └── migrations/             #   SQL migrations
+│
 ├── Dockerfile                  # 🐳 Cloud Run container config
 ├── requirements.txt            # Python dependencies
 └── .env.example                # Environment variable template
@@ -113,7 +130,7 @@ flutter run                       # Connects to ocrapi.nsunexus.app
 ### Local Development (Optional)
 ```bash
 cp .env.example .env              # Add your OCR API keys
-python backend/api.py             # Local API at localhost:8080
+uvicorn backend.app.main:app --reload  # Local API at localhost:8000
 ```
 
 <br/>

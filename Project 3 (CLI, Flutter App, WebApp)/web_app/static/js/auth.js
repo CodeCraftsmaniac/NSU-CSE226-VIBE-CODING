@@ -336,8 +336,12 @@ async function loadHistory() {
         console.error('Load history error:', error);
         if (error.name === 'AbortError') {
             document.getElementById('history-content').innerHTML = '<p class="error-text">Request timed out. Please try again.</p>';
+        } else if (error.message?.includes('401') || error.message?.includes('Unauthorized')) {
+            document.getElementById('history-content').innerHTML = '<p class="error-text">Session expired. Please sign in again.</p>';
+            // Trigger re-auth
+            signOut();
         } else {
-            document.getElementById('history-content').innerHTML = '<p class="error-text">Failed to load history</p>';
+            document.getElementById('history-content').innerHTML = '<p class="error-text">Failed to load history. Please try again.</p>';
         }
     }
 }
