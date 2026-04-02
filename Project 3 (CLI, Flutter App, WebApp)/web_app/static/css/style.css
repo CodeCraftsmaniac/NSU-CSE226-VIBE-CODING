@@ -716,8 +716,8 @@ body.scanning-active .upload-card {
     border: 1px solid rgba(139, 92, 246, 0.4);
     border-radius: 20px;
     color: #a78bfa;
-    font-size: 0.875rem;
-    font-weight: 600;
+    font-size: 0.9rem;  /* Match student-info text size */
+    font-weight: 500;   /* Match student-info font weight */
 }
 
 .dept-badge svg {

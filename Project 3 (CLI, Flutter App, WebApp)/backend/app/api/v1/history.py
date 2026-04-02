@@ -28,19 +28,36 @@ def get_dependencies():
     """Lazy load dependency functions."""
     try:
         from app.dependencies import (
-            get_current_user, get_db_user_id, 
-            DB_MODULE_AVAILABLE, require_db
+            get_current_user_optional, get_db_user_id, 
+            DB_MODULE_AVAILABLE
         )
-        return get_current_user, get_db_user_id, DB_MODULE_AVAILABLE, require_db
+        
+        async def require_auth(authorization):
+            """Wrapper to require authentication."""
+            user = await get_current_user_optional(authorization)
+            if not user:
+                raise HTTPException(
+                    status_code=401,
+                    detail="Authentication required",
+                    headers={"WWW-Authenticate": "Bearer"}
+                )
+            return user
+        
+        def require_db():
+            """Wrapper to require database."""
+            if not DB_MODULE_AVAILABLE:
+                raise HTTPException(503, "Database not available")
+        
+        return require_auth, get_db_user_id, DB_MODULE_AVAILABLE, require_db
     except Exception as e:
         logger.warning(f"Could not load dependencies: {e}")
-        async def _get_current_user(authorization = None):
+        async def _require_auth(authorization = None):
             raise HTTPException(401, "Auth not available")
         async def _get_db_user_id(user):
             return None
         def _require_db():
             raise HTTPException(503, "Database not available")
-        return _get_current_user, _get_db_user_id, False, _require_db
+        return _require_auth, _get_db_user_id, False, _require_db
 
 
 def get_db_functions():
