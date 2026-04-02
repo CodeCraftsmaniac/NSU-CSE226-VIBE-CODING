@@ -12,6 +12,7 @@ from datetime import datetime
 from pathlib import Path
 
 from fastapi import APIRouter
+from fastapi.responses import JSONResponse
 
 from app.config import get_settings
 
@@ -180,7 +181,9 @@ async def health_check():
 @router.get("/health/live")
 async def liveness():
     """Kubernetes liveness probe - is the service running?"""
-    return {"status": "live"}
+    response = JSONResponse(content={"status": "live"})
+    response.headers["Cache-Control"] = "no-cache, max-age=0"
+    return response
 
 
 @router.get("/health/ready")

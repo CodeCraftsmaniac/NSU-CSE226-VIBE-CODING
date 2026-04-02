@@ -260,13 +260,28 @@ async def clear_history(
     if not db_user_id:
         raise HTTPException(status_code=404, detail="User not found")
     
-    # Get all scans and delete them
-    scans = get_user_scans(db_user_id, limit=1000)
-    deleted_count = 0
-    
-    for scan in scans:
-        if delete_scan(scan['id'], db_user_id):
-            deleted_count += 1
+    # Batch delete all scans for user (performance optimization)
+    try:
+        from database import get_supabase
+        supabase = get_supabase()
+        if supabase:
+            result = supabase.table('cse226_ocr_scans').delete().eq('user_id', db_user_id).execute()
+            deleted_count = len(result.data) if result.data else 0
+        else:
+            # Fallback to individual deletes if direct access not available
+            scans = get_user_scans(db_user_id, limit=1000)
+            deleted_count = 0
+            for scan in scans:
+                if delete_scan(scan['id'], db_user_id):
+                    deleted_count += 1
+    except Exception as e:
+        logger.error(f"Batch delete error: {e}")
+        # Fallback to individual deletes
+        scans = get_user_scans(db_user_id, limit=1000)
+        deleted_count = 0
+        for scan in scans:
+            if delete_scan(scan['id'], db_user_id):
+                deleted_count += 1
     
     logger.info(f"Cleared {deleted_count} scans for user {user.get('email')}")
     

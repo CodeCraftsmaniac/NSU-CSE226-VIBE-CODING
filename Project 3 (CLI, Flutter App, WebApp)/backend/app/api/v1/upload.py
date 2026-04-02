@@ -579,3 +579,189 @@ async def validate_file(
         filename=file.filename,
         type=ext
     )
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# NEW FEATURES: Export, GPA Predictor
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class ExportRequest(BaseModel):
+    """Export format options."""
+    format: str = "json"  # json, csv
+
+class GPAPredictorRequest(BaseModel):
+    """GPA prediction request."""
+    current_cgpa: float
+    current_credits: int
+    planned_courses: List[Dict[str, Any]]  # [{credits: 3, expected_grade: "A"}]
+
+class GPAPredictorResponse(BaseModel):
+    """GPA prediction response."""
+    current_cgpa: float
+    predicted_cgpa: float
+    scenarios: List[Dict[str, Any]]
+    credits_after: int
+
+
+@router.get("/export/{scan_id}")
+@limiter.limit("10/minute")
+async def export_scan(
+    request: Request,
+    scan_id: str,
+    format: str = "json",
+    authorization: Optional[str] = None
+):
+    """
+    Export a scan result in various formats.
+    
+    Formats:
+    - json: Full JSON data
+    - csv: Course list as CSV
+    """
+    get_current_user_optional, get_db_user_id, DB_MODULE_AVAILABLE = get_dependencies()
+    
+    if not DB_MODULE_AVAILABLE:
+        raise HTTPException(status_code=503, detail="Database not available")
+    
+    # Get user
+    user = None
+    auth_header = request.headers.get('Authorization')
+    if auth_header:
+        user = await get_current_user_optional(auth_header)
+    
+    if not user:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    
+    # Get scan from database
+    try:
+        from database import get_scan_by_id
+        db_user_id = await get_db_user_id(user)
+        scan = get_scan_by_id(scan_id, db_user_id)
+        
+        if not scan:
+            raise HTTPException(status_code=404, detail="Scan not found")
+        
+        analysis_data = scan.get('analysis_data', {})
+        
+        if format == "csv":
+            # Generate CSV
+            import io
+            output = io.StringIO()
+            writer = csv.writer(output)
+            
+            # Header
+            writer.writerow(['Course Code', 'Credits', 'Grade', 'Quality Points', 'Semester'])
+            
+            # Get courses from level1
+            level1 = analysis_data.get('level1', {})
+            courses = level1.get('valid_entries', [])
+            
+            for course in courses:
+                writer.writerow([
+                    course.get('code', ''),
+                    course.get('credits', 0),
+                    course.get('grade', ''),
+                    course.get('quality_points', 0),
+                    course.get('semester', '')
+                ])
+            
+            # Summary row
+            level2 = analysis_data.get('level2', {})
+            writer.writerow([])
+            writer.writerow(['Summary'])
+            writer.writerow(['Total Credits', level2.get('gpa_credits', 0)])
+            writer.writerow(['CGPA', level2.get('cgpa', 0)])
+            
+            from fastapi.responses import Response
+            return Response(
+                content=output.getvalue(),
+                media_type="text/csv",
+                headers={"Content-Disposition": f"attachment; filename=transcript_{scan_id}.csv"}
+            )
+        
+        # Default: JSON
+        return {
+            "success": True,
+            "scan_id": scan_id,
+            "filename": scan.get('filename'),
+            "created_at": scan.get('created_at'),
+            "analysis": analysis_data
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception(f"Export error: {e}")
+        raise HTTPException(status_code=500, detail="Export failed")
+
+
+@router.post("/predict-gpa", response_model=GPAPredictorResponse)
+@limiter.limit("30/minute")
+async def predict_gpa(
+    request: Request,
+    data: GPAPredictorRequest
+):
+    """
+    Predict future CGPA based on planned courses and expected grades.
+    
+    Provides multiple scenarios (optimistic, realistic, conservative).
+    """
+    # Grade points mapping
+    grade_points = {
+        'A': 4.0, 'A-': 3.7,
+        'B+': 3.3, 'B': 3.0, 'B-': 2.7,
+        'C+': 2.3, 'C': 2.0, 'C-': 1.7,
+        'D+': 1.3, 'D': 1.0,
+        'F': 0.0
+    }
+    
+    current_quality_points = data.current_cgpa * data.current_credits
+    
+    # Calculate for planned courses
+    planned_credits = 0
+    planned_points = 0
+    
+    for course in data.planned_courses:
+        credits = course.get('credits', 3)
+        grade = course.get('expected_grade', 'B').upper()
+        points = grade_points.get(grade, 3.0)
+        
+        planned_credits += credits
+        planned_points += credits * points
+    
+    total_credits = data.current_credits + planned_credits
+    total_points = current_quality_points + planned_points
+    predicted_cgpa = total_points / total_credits if total_credits > 0 else 0
+    
+    # Generate scenarios
+    scenarios = []
+    
+    # Optimistic (all A/A-)
+    opt_points = current_quality_points + (planned_credits * 3.85)
+    scenarios.append({
+        "name": "Optimistic (All A/A-)",
+        "cgpa": round(opt_points / total_credits, 2),
+        "description": "Best case scenario with all A and A- grades"
+    })
+    
+    # Realistic (as predicted)
+    scenarios.append({
+        "name": "Realistic (As Expected)",
+        "cgpa": round(predicted_cgpa, 2),
+        "description": "Based on your expected grades"
+    })
+    
+    # Conservative (all B/B-)
+    cons_points = current_quality_points + (planned_credits * 2.85)
+    scenarios.append({
+        "name": "Conservative (All B/B-)",
+        "cgpa": round(cons_points / total_credits, 2),
+        "description": "Conservative estimate with B-range grades"
+    })
+    
+    return GPAPredictorResponse(
+        current_cgpa=data.current_cgpa,
+        predicted_cgpa=round(predicted_cgpa, 2),
+        scenarios=scenarios,
+        credits_after=total_credits
+    )
