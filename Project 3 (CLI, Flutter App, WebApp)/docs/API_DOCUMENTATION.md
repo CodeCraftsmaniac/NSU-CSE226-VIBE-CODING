@@ -37,7 +37,7 @@ Returns API status, OCR engine availability, and system info.
   },
   "ocr_engines": {
     "google_vision": { "configured": true },
-    "ocr_space": { "configured": true }
+    "azure_doc_intelligence": { "configured": true }
   }
 }
 ```
@@ -427,6 +427,6 @@ print(f"Graduation Ready: {result['data']['level3']['graduation_ready']}")
 
 ## Rate Limits
 
-- OCR.space: 500 requests/month (free tier)
-- Google Vision: 1000 requests/month (free tier)
+- Azure Document Intelligence: 500 pages/month (free tier, 99%+ accuracy)
+- Google Vision: 1000 requests/month (free tier, 98%+ accuracy)
 - No limit on API requests (fair use policy)

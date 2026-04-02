@@ -45,7 +45,8 @@ This is a **multi-platform degree audit system** with OCR transcript scanning.
 │   backend/                                                        │
 │   ├── api.py          Flask REST API (/health, /upload)         │
 │   ├── core.py         CGPA calculation, grade mapping, audit    │
-│   ├── ocr_web.py      Google Vision API + OCR.space fallback    │
+│   ├── ocr_web.py      Google Vision API + Azure Doc Intelligence   │
+│   ├── ocr_azure.py    Azure Document Intelligence module           │
 │   └── ocr_engine.py   Local PDF text extraction                 │
 └───────────────────────────┬─────────────────────────────────────┘
                             │
@@ -73,7 +74,7 @@ This is a **multi-platform degree audit system** with OCR transcript scanning.
 |------|---------|---------------|
 | `api.py` | REST API entry | `create_app()`, `/health`, `/upload` |
 | `core.py` | Core engine (1000+ lines) | `run_full_analysis()`, `GRADE_POINTS`, `PASSING_GRADES`, `validate_grade()`, `detect_program()` |
-| `ocr_web.py` | Cloud OCR | `WebOCR.extract()`, Google Vision, OCR.space |
+| `ocr_web.py` | Cloud OCR | `WebOCR.extract()`, Google Vision, Azure Doc Intelligence |
 | `ocr_engine.py` | Local OCR fallback | `TranscriptOCR.extract()` |
 
 ### Flutter Mobile — `flutter_app/lib/`
@@ -185,7 +186,7 @@ Full health check with OCR limits, system info.
   "status": "healthy",
   "ocr_engines": {
     "google_vision": {"configured": true, "free_tier": "1,000/month"},
-    "ocr_space": {"configured": true, "free_tier": "25,000/month"}
+    "azure_doc_intelligence": {"configured": true, "free_tier": "500 pages/month"}
   },
   "grading_scale": {"A": 4.00, "A-": 3.70, ...},
   "waivers": {...}
@@ -284,7 +285,7 @@ When you must make a choice, use these defaults:
 | Documentation | Update if directly related to changes |
 | Database | None — keep stateless API design |
 | Authentication | None — public academic tool |
-| OCR engine preference | Google Vision first, OCR.space fallback |
+| OCR engine preference | Google Vision first, Azure Doc Intelligence fallback |
 | Grade handling | Always use `validate_grade()` from core.py |
 
 ---
@@ -352,10 +353,11 @@ docker run -p 8080:8080 nsu-audit
 ```env
 # OCR APIs (at least one required)
 GOOGLE_CLOUD_VISION_KEY=your_google_key
-OCR_SPACE_API_KEY=your_ocrspace_key
+AZURE_DOC_INTELLIGENCE_KEY=your_azure_key
+AZURE_DOC_INTELLIGENCE_ENDPOINT=https://your-instance.cognitiveservices.azure.com/
 
 # Optional
-FLASK_ENV=production
+ENVIRONMENT=production
 DEBUG=false
 LOG_LEVEL=INFO
 PORT=8080

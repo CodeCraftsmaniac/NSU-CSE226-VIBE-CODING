@@ -440,7 +440,7 @@ class WebOCR:
             if len(img_data) > 900000:
                 img_data = self._compress_image(img_data)
 
-            # Try Google Vision first, then OCR.space
+            # Try Google Vision first, then Azure Document Intelligence
             page_text, error = self._ocr_image(img_data, "page.png")
             pages_processed += 1
 
@@ -456,12 +456,12 @@ class WebOCR:
             if last_error:
                 error_msg = f"OCR failed on {pages_processed} page(s): {last_error}"
             else:
-                error_msg = f"OCR processed {pages_processed} page(s) but found no text. APIs configured: Google={bool(self.google_api_key)}, OCR.space={bool(self.ocr_space_key)}"
+                error_msg = f"OCR processed {pages_processed} page(s) but found no text. APIs configured: Google Vision={bool(self.google_api_key)}, Azure={bool(self.azure)}"
             return OCRResult(success=False, error=error_msg)
 
         self._report("parse", 85, "Parsing extracted text...")
         result = self._parse_transcript_text(ocr_text)
-        result.engine_used = "Google Vision" if self.google_api_key else "OCR.space"
+        result.engine_used = "Google Vision" if self.google_api_key else ("Azure" if self.azure else "None")
         result.confidence_score = 0.85
 
         self._report("complete", 100, "Done!")
@@ -1229,7 +1229,7 @@ def main():
         print("Usage: python ocr_web.py <file.pdf|image.png>")
         print("\nOCR Engines:")
         print(f"  Google Vision: {'Configured' if GOOGLE_VISION_API_KEY else 'Not configured'}")
-        print(f"  OCR.space: Available (free tier)")
+        print(f"  Azure Document Intelligence: {'Configured' if AZURE_DOC_INTELLIGENCE_KEY else 'Not configured'}")
         print("\nTo use Google Vision (most accurate):")
         print("  set GOOGLE_VISION_API_KEY=your_key")
         sys.exit(1)

@@ -56,7 +56,8 @@ jobs:
             --set-env-vars SUPABASE_JWT_SECRET=${{ secrets.SUPABASE_JWT_SECRET }} \
             --set-env-vars GOOGLE_CLIENT_ID=${{ secrets.GOOGLE_CLIENT_ID }} \
             --set-env-vars GOOGLE_CLIENT_SECRET=${{ secrets.GOOGLE_CLIENT_SECRET }} \
-            --set-env-vars OCR_SPACE_API_KEY=${{ secrets.OCR_SPACE_API_KEY }} \
+            --set-env-vars AZURE_DOC_INTELLIGENCE_KEY=${{ secrets.AZURE_DOC_INTELLIGENCE_KEY }} \
+            --set-env-vars AZURE_DOC_INTELLIGENCE_ENDPOINT=${{ secrets.AZURE_DOC_INTELLIGENCE_ENDPOINT }} \
             --set-env-vars GOOGLE_CLOUD_VISION_KEY=${{ secrets.GOOGLE_CLOUD_VISION_KEY }}
       
       - name: Get service URL

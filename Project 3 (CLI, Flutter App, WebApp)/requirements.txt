@@ -31,7 +31,7 @@ gunicorn>=21.0.0       # Production server (with uvicorn workers)
 # Load Testing (for 20 concurrent users verification)
 locust>=2.20.0         # Load testing framework
 
-# Note: OCR.space API is used for OCR (free, no downloads needed)
+# Note: Uses Google Cloud Vision (primary) and Azure Document Intelligence (fallback)
 # Optional heavy OCR (if you want local processing):
 # paddleocr>=2.7.0     # Uncomment for heavy local OCR
 # easyocr>=1.7.0       # Uncomment for fallback local OCR

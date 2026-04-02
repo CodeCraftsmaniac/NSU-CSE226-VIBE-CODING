@@ -75,7 +75,8 @@ Project 3/
 │   │   ├── config.py           #   Configuration with Pydantic
 │   │   └── api/v1/             #   API endpoints
 │   ├── core.py                 #   Grade mapping, CGPA, credit logic
-│   ├── ocr_web.py              #   OCR via Google Vision / OCR.space
+│   ├── ocr_web.py              #   OCR via Google Vision / Azure Doc Intelligence
+│   ├── ocr_azure.py            #   Azure Document Intelligence module
 │   └── ocr_engine.py           #   PDF text extraction
 │
 ├── web_app/                    # 🌐 WEB FRONTEND (ocr.nsunexus.app)
@@ -140,8 +141,9 @@ uvicorn backend.app.main:app --reload  # Local API at localhost:8000
 Create `.env` file (see `.env.example`):
 
 ```env
-GOOGLE_VISION_API_KEY=your_key_here
-OCR_SPACE_API_KEY=your_key_here
+GOOGLE_CLOUD_VISION_KEY=your_key_here
+AZURE_DOC_INTELLIGENCE_KEY=your_key_here
+AZURE_DOC_INTELLIGENCE_ENDPOINT=https://your-instance.cognitiveservices.azure.com/
 ```
 
 <br/>

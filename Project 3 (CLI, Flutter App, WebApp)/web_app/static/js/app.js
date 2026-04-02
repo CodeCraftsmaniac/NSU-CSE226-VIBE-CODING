@@ -871,7 +871,7 @@ function showResults(data) {
     const ocrConfidence = document.getElementById('ocr-confidence-value');
 
     if (ocrMeta && data.ocr_info) {
-        ocrMeta.textContent = `Engine: ${data.ocr_info.engine || 'OCR.space'}`;
+        ocrMeta.textContent = `Engine: ${data.ocr_info.engine || 'Google Vision'}`;
     }
     if (ocrCoursesCount) {
         ocrCoursesCount.textContent = data.courses.length;
