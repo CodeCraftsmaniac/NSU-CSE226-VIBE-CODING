@@ -36,26 +36,73 @@ document.addEventListener('DOMContentLoaded', () => {
     initParticles();
     initRestartButton();
     initCancelButton();
-    initOcrEnginePills();
+    initModelSelector();
 });
 
-// ─── OCR Engine Pills ──────────────────────────────────────────────────────────
-function initOcrEnginePills() {
-    const pills = document.querySelectorAll('.engine-pill');
-    const hiddenInput = document.getElementById('ocr-engine');
-    
-    pills.forEach(pill => {
-        pill.addEventListener('click', () => {
-            // Remove active from all
-            pills.forEach(p => p.classList.remove('active'));
-            // Add active to clicked
-            pill.classList.add('active');
-            // Update hidden input
-            if (hiddenInput) {
-                hiddenInput.value = pill.dataset.engine;
-            }
-        });
+// ─── Model Selector (Header Dropdown) ──────────────────────────────────────────
+function initModelSelector() {
+    // Close dropdown when clicking outside
+    document.addEventListener('click', (e) => {
+        const selector = document.getElementById('model-selector');
+        if (selector && !selector.contains(e.target)) {
+            selector.classList.remove('open');
+        }
     });
+    
+    // Load saved preference
+    const savedEngine = localStorage.getItem('ocr_engine') || 'auto';
+    selectModel(savedEngine, false);
+}
+
+function toggleModelMenu() {
+    const selector = document.getElementById('model-selector');
+    if (selector) {
+        selector.classList.toggle('open');
+    }
+}
+
+function selectModel(engine, persist = true) {
+    const selector = document.getElementById('model-selector');
+    const hiddenInput = document.getElementById('ocr-engine');
+    const label = document.getElementById('model-label');
+    const options = document.querySelectorAll('.model-option');
+    const btn = document.getElementById('model-btn');
+    
+    // Update active state
+    options.forEach(opt => {
+        opt.classList.toggle('active', opt.dataset.engine === engine);
+    });
+    
+    // Update label text
+    const labels = {
+        'auto': 'Auto',
+        'azure': 'Azure DI',
+        'google_vision': 'Google Vision'
+    };
+    if (label) label.textContent = labels[engine] || 'Auto';
+    
+    // Update hidden input
+    if (hiddenInput) hiddenInput.value = engine;
+    
+    // Persist selection
+    if (persist) {
+        localStorage.setItem('ocr_engine', engine);
+    }
+    
+    // Close dropdown
+    if (selector) selector.classList.remove('open');
+    
+    // Update button icon color based on selection
+    const modelIcon = btn?.querySelector('.model-icon');
+    if (modelIcon) {
+        if (engine === 'azure') {
+            modelIcon.style.color = '#0078d4';
+        } else if (engine === 'google_vision') {
+            modelIcon.style.color = '#4285f4';
+        } else {
+            modelIcon.style.color = 'var(--accent)';
+        }
+    }
 }
 
 // ─── Export Report Function ────────────────────────────────────────────────────
