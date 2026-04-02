@@ -484,7 +484,7 @@ async def upload_transcript(
         logger.exception(f"Error processing upload: {str(e)}")
         raise HTTPException(
             status_code=500,
-            detail=str(e)
+            detail="Error processing file. Please try again."
         )
 
 
