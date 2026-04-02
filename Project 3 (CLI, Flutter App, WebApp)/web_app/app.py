@@ -98,11 +98,12 @@ else:
 async def index(request: Request):
     """Render main page."""
     try:
-        # Debug: log before attempting render
         logger.info(f"Attempting to render index.html from {TEMPLATES_DIR}")
-        resp = templates.TemplateResponse("index.html", {"request": request})
+        # Use jinja_env directly to avoid Starlette's caching issues
+        template = jinja_env.get_template("index.html")
+        content = template.render(request=request)
         logger.info("Template rendered successfully")
-        return resp
+        return HTMLResponse(content=content)
     except Exception as e:
         import traceback
         error_tb = traceback.format_exc()
@@ -121,7 +122,8 @@ async def cli_callback(request: Request):
     This page receives OAuth tokens from Supabase and forwards them
     to the local CLI server running on the specified port.
     """
-    return templates.TemplateResponse("cli_callback.html", {"request": request})
+    template = jinja_env.get_template("cli_callback.html")
+    return HTMLResponse(content=template.render(request=request))
 
 
 @app.get("/cli-auth", response_class=HTMLResponse)
@@ -134,7 +136,8 @@ async def cli_auth(request: Request):
     3. User signs in with Google
     4. CLI polls and receives token
     """
-    return templates.TemplateResponse("cli_auth.html", {"request": request})
+    template = jinja_env.get_template("cli_auth.html")
+    return HTMLResponse(content=template.render(request=request))
 
 
 @app.get("/debug/paths")
