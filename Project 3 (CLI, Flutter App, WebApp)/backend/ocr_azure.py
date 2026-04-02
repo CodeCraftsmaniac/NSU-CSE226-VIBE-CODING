@@ -110,7 +110,8 @@ class AzureDocIntelligence:
         
         try:
             # Step 1: Submit document for analysis
-            analyze_url = f"{self.endpoint}/documentintelligence/documentModels/prebuilt-document:analyze?api-version=2024-02-29-preview"
+            # Use Form Recognizer API (GA version)
+            analyze_url = f"{self.endpoint}/formrecognizer/documentModels/prebuilt-document:analyze?api-version=2023-07-31"
             
             headers = {
                 'Ocp-Apim-Subscription-Key': self.api_key,

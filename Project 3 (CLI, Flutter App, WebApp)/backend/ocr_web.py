@@ -443,6 +443,7 @@ class WebOCR:
         ocr_text = ""
         last_error = None
         pages_processed = 0
+        actual_engine = None  # Track which engine was actually used
 
         for i, page in enumerate(doc):
             self._report("page", 30 + (i / len(doc)) * 50, f"OCR page {i+1}/{len(doc)}...")
@@ -455,9 +456,13 @@ class WebOCR:
             if len(img_data) > 900000:
                 img_data = self._compress_image(img_data)
 
-            # Try Google Vision first, then Azure Document Intelligence
-            page_text, error = self._ocr_image(img_data, "page.png")
+            # Run OCR with selected engine
+            page_text, error, page_engine = self._ocr_image(img_data, "page.png")
             pages_processed += 1
+            
+            # Track which engine was used (use first successful page's engine)
+            if page_text and not actual_engine:
+                actual_engine = page_engine
 
             if page_text:
                 ocr_text += page_text + "\n"
@@ -476,8 +481,8 @@ class WebOCR:
 
         self._report("parse", 85, "Parsing extracted text...")
         result = self._parse_transcript_text(ocr_text)
-        result.engine_used = "Google Vision" if self.google_api_key else ("Azure" if self.azure else "None")
-        result.confidence_score = 0.85
+        result.engine_used = actual_engine or ("Google Vision" if self.google_api_key else ("Azure" if self.azure else "None"))
+        result.confidence_score = 0.95 if "Azure" in (actual_engine or "") else 0.92
 
         self._report("complete", 100, "Done!")
         return result
@@ -495,7 +500,7 @@ class WebOCR:
             img_data = self._compress_image(img_data)
 
         self._report("ocr", 40, "Running OCR...")
-        text, error = self._ocr_image(img_data, path.name)
+        text, error, engine_used = self._ocr_image(img_data, path.name)
 
         if not text:
             if error:
@@ -506,13 +511,7 @@ class WebOCR:
 
         self._report("parse", 80, "Parsing...")
         result = self._parse_transcript_text(text)
-        # Determine which engine was used
-        if self.engine == 'azure':
-            result.engine_used = "Azure Document Intelligence"
-        elif self.engine == 'google_vision' or self.google_api_key:
-            result.engine_used = "Google Cloud Vision"
-        else:
-            result.engine_used = "Azure Document Intelligence"
+        result.engine_used = engine_used or "Unknown"
         result.confidence_score = 0.95 if 'Azure' in result.engine_used else 0.92
 
         self._report("complete", 100, "Done!")
@@ -522,12 +521,14 @@ class WebOCR:
         """Run OCR on image data using selected or available API.
 
         Returns:
-            tuple: (text, error) - text is the extracted text, error is the error message if any
+            tuple: (text, error, engine_used) - text is the extracted text, 
+                   error is the error message if any, engine_used is the name of the engine
         """
         google_error = None
         azure_error = None
         google_tried = False
         azure_tried = False
+        engine_used = None
 
         # Determine engine order based on selection
         if self.engine == 'google_vision':
@@ -543,12 +544,12 @@ class WebOCR:
                 google_tried = True
                 text, google_error = self._google_vision_ocr(img_data)
                 if text:
-                    return text, None
+                    return text, None, "Google Cloud Vision"
             elif engine == 'azure' and self.azure_client and self.azure_client.is_configured:
                 azure_tried = True
                 text, azure_error = self.azure_client.extract_text(img_data, filename)
                 if text:
-                    return text, None
+                    return text, None, "Azure Document Intelligence"
 
         # Build error message
         error_msg = ""
@@ -568,7 +569,7 @@ class WebOCR:
         else:
             error_msg = "No OCR API keys configured. Set GOOGLE_CLOUD_VISION_KEY or AZURE_DOC_INTELLIGENCE_KEY in .env"
         
-        return "", error_msg
+        return "", error_msg, None
 
     def _google_vision_ocr(self, img_data: bytes) -> tuple:
         """
