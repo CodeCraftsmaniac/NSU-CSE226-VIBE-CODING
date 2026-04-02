@@ -44,13 +44,39 @@ logging.basicConfig(level=log_level, format='%(asctime)s [%(levelname)s] %(messa
 logger = logging.getLogger(__name__)
 
 # Get the directory where app.py is located
-BASE_DIR = Path(__file__).parent
+try:
+    BASE_DIR = Path(__file__).parent.resolve()
+except Exception:
+    BASE_DIR = Path.cwd()
 
-# Setup templates
-templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
+logger.info(f"BASE_DIR resolved to: {BASE_DIR}")
 
-# Mount static files
-app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="static")
+# Setup templates with absolute path
+TEMPLATES_DIR = BASE_DIR / "templates"
+STATIC_DIR = BASE_DIR / "static"
+
+if not TEMPLATES_DIR.exists():
+    # Try alternative paths for Vercel
+    alt_paths = [
+        Path.cwd() / "web_app" / "templates",
+        Path.cwd() / "templates",
+        Path("/var/task/web_app/templates"),
+        Path("/var/task/templates"),
+    ]
+    for alt in alt_paths:
+        if alt.exists():
+            TEMPLATES_DIR = alt
+            STATIC_DIR = alt.parent / "static"
+            logger.info(f"Using alternative template path: {TEMPLATES_DIR}")
+            break
+
+templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
+
+# Mount static files only if directory exists
+if STATIC_DIR.exists():
+    app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
+else:
+    logger.warning(f"Static directory not found: {STATIC_DIR}")
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # Routes - Pure Frontend (no OCR logic)
@@ -59,7 +85,18 @@ app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="stat
 @app.get("/", response_class=HTMLResponse)
 async def index(request: Request):
     """Render main page."""
-    return templates.TemplateResponse("index.html", {"request": request})
+    try:
+        return templates.TemplateResponse("index.html", {"request": request})
+    except Exception as e:
+        logger.error(f"Failed to render index.html: {e}")
+        logger.error(f"Templates directory: {TEMPLATES_DIR}")
+        logger.error(f"Templates exists: {TEMPLATES_DIR.exists()}")
+        if TEMPLATES_DIR.exists():
+            logger.error(f"Templates contents: {list(TEMPLATES_DIR.iterdir())}")
+        return HTMLResponse(
+            content=f"<html><body><h1>Error loading page</h1><p>Template path: {TEMPLATES_DIR}</p><p>Error: {e}</p></body></html>",
+            status_code=500
+        )
 
 
 @app.get("/cli-callback", response_class=HTMLResponse)
