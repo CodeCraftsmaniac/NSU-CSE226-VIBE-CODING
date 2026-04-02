@@ -776,3 +776,231 @@ async def predict_gpa(
         scenarios=scenarios,
         credits_after=total_credits
     )
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# BATCH UPLOAD: Process multiple transcripts at once
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class BatchUploadResultItem(BaseModel):
+    """Individual file result in batch upload."""
+    filename: str
+    success: bool
+    error: Optional[str] = None
+    data: Optional[Dict[str, Any]] = None
+
+class BatchUploadResponse(BaseModel):
+    """Batch upload response with all results."""
+    success: bool
+    total_files: int
+    processed: int
+    failed: int
+    results: List[BatchUploadResultItem]
+
+
+@router.post("/upload/batch", response_model=BatchUploadResponse)
+@limiter.limit("5/minute")
+async def batch_upload_transcripts(
+    request: Request,
+    files: List[UploadFile] = File(...),
+    ocr_engine: Optional[str] = Form(None),
+    authorization: Optional[str] = None
+):
+    """
+    Upload and process multiple transcript files in a single request.
+    
+    Supports up to 10 files at once.
+    Each file is processed independently - failures don't affect other files.
+    
+    Parameters:
+    - files: List of transcript files (PDF, PNG, JPG, JPEG, CSV)
+    - ocr_engine: OCR engine to use (auto, google_vision, azure)
+    
+    Returns results for each file with success/failure status.
+    """
+    MAX_BATCH_SIZE = 10
+    
+    if len(files) > MAX_BATCH_SIZE:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Maximum {MAX_BATCH_SIZE} files allowed per batch"
+        )
+    
+    if len(files) == 0:
+        raise HTTPException(
+            status_code=400,
+            detail="No files provided"
+        )
+    
+    # Get auth and settings
+    get_current_user_optional, get_db_user_id, DB_MODULE_AVAILABLE = get_dependencies()
+    settings = get_settings_safe()
+    max_size = settings.MAX_UPLOAD_SIZE_MB * 1024 * 1024
+    
+    # Get user if authenticated
+    user = None
+    db_user_id = None
+    auth_header = request.headers.get('Authorization')
+    if auth_header:
+        user = await get_current_user_optional(auth_header)
+        if user and DB_MODULE_AVAILABLE:
+            db_user_id = await get_db_user_id(user)
+    
+    results = []
+    processed = 0
+    failed = 0
+    
+    for file in files:
+        try:
+            # Validate file
+            if not file.filename:
+                results.append(BatchUploadResultItem(
+                    filename="unknown",
+                    success=False,
+                    error="No filename provided"
+                ))
+                failed += 1
+                continue
+            
+            # Check extension
+            ext = Path(file.filename).suffix.lower()
+            if ext not in ALLOWED_EXTENSIONS:
+                results.append(BatchUploadResultItem(
+                    filename=file.filename,
+                    success=False,
+                    error=f"Invalid file type: {ext}. Allowed: {', '.join(ALLOWED_EXTENSIONS)}"
+                ))
+                failed += 1
+                continue
+            
+            # Read content
+            content = await file.read()
+            if len(content) > max_size:
+                results.append(BatchUploadResultItem(
+                    filename=file.filename,
+                    success=False,
+                    error=f"File too large (max {settings.MAX_UPLOAD_SIZE_MB}MB)"
+                ))
+                failed += 1
+                continue
+            
+            # Process CSV directly
+            if ext == '.csv':
+                csv_text = content.decode('utf-8', errors='replace')
+                ANALYSIS_AVAILABLE, run_analysis = get_analysis_engine()
+                
+                if ANALYSIS_AVAILABLE and run_analysis:
+                    analysis = run_analysis(csv_text)
+                    
+                    # Save to history if authenticated
+                    if db_user_id and DB_MODULE_AVAILABLE:
+                        save_scan, _, _ = get_db_functions()
+                        if save_scan:
+                            try:
+                                save_scan(db_user_id, file.filename, analysis)
+                            except Exception as e:
+                                logger.warning(f"Batch save_scan failed: {e}")
+                    
+                    results.append(BatchUploadResultItem(
+                        filename=file.filename,
+                        success=True,
+                        data=analysis
+                    ))
+                    processed += 1
+                else:
+                    results.append(BatchUploadResultItem(
+                        filename=file.filename,
+                        success=False,
+                        error="Analysis engine not available"
+                    ))
+                    failed += 1
+                continue
+            
+            # Process PDF/Image with OCR
+            OCR_AVAILABLE, OCRClass = get_ocr_engine()
+            if not OCR_AVAILABLE or not OCRClass:
+                results.append(BatchUploadResultItem(
+                    filename=file.filename,
+                    success=False,
+                    error="OCR engine not available"
+                ))
+                failed += 1
+                continue
+            
+            # Save to temp file
+            with tempfile.NamedTemporaryFile(delete=False, suffix=ext) as tmp:
+                tmp.write(content)
+                tmp_path = tmp.name
+            
+            try:
+                # Run OCR with engine selection
+                ocr = OCRClass(engine=ocr_engine) if ocr_engine else OCRClass()
+                ocr_result = ocr.extract(tmp_path)
+                
+                if not ocr_result.success:
+                    results.append(BatchUploadResultItem(
+                        filename=file.filename,
+                        success=False,
+                        error=f"OCR failed: {ocr_result.error}"
+                    ))
+                    failed += 1
+                    continue
+                
+                # Get analysis
+                ANALYSIS_AVAILABLE, run_analysis = get_analysis_engine()
+                if ANALYSIS_AVAILABLE and run_analysis:
+                    analysis = run_analysis(ocr_result.text)
+                    
+                    # Add OCR info
+                    analysis['ocr_info'] = {
+                        'engine': ocr_result.engine_used,
+                        'confidence': ocr_result.confidence_score,
+                        'source': 'batch_upload'
+                    }
+                    
+                    # Save to history if authenticated
+                    if db_user_id and DB_MODULE_AVAILABLE:
+                        save_scan, _, _ = get_db_functions()
+                        if save_scan:
+                            try:
+                                save_scan(db_user_id, file.filename, analysis)
+                            except Exception as e:
+                                logger.warning(f"Batch save_scan failed: {e}")
+                    
+                    results.append(BatchUploadResultItem(
+                        filename=file.filename,
+                        success=True,
+                        data=analysis
+                    ))
+                    processed += 1
+                else:
+                    results.append(BatchUploadResultItem(
+                        filename=file.filename,
+                        success=False,
+                        error="Analysis engine not available"
+                    ))
+                    failed += 1
+                    
+            finally:
+                # Clean up temp file
+                try:
+                    os.unlink(tmp_path)
+                except Exception:
+                    pass
+                    
+        except Exception as e:
+            logger.exception(f"Batch upload error for {file.filename}: {e}")
+            results.append(BatchUploadResultItem(
+                filename=file.filename if file.filename else "unknown",
+                success=False,
+                error=str(e)
+            ))
+            failed += 1
+    
+    return BatchUploadResponse(
+        success=processed > 0,
+        total_files=len(files),
+        processed=processed,
+        failed=failed,
+        results=results
+    )
