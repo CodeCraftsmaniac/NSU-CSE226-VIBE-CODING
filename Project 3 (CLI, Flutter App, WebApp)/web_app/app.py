@@ -140,23 +140,6 @@ async def cli_auth(request: Request):
     return HTMLResponse(content=template.render(request=request))
 
 
-@app.get("/debug/paths")
-async def debug_paths():
-    """Debug endpoint to check path resolution on Vercel."""
-    import os
-    cwd = os.getcwd()
-    return {
-        'cwd': cwd,
-        'base_dir': str(BASE_DIR),
-        'templates_dir': str(TEMPLATES_DIR),
-        'templates_exists': TEMPLATES_DIR.exists(),
-        'static_dir': str(STATIC_DIR),
-        'static_exists': STATIC_DIR.exists(),
-        'cwd_contents': os.listdir(cwd)[:20] if os.path.exists(cwd) else [],
-        'templates_contents': list(TEMPLATES_DIR.iterdir()) if TEMPLATES_DIR.exists() else [],
-    }
-
-
 @app.get("/health")
 async def health():
     """Health check endpoint."""
@@ -166,7 +149,7 @@ async def health():
         'framework': 'FastAPI',
         'backend': 'https://ocrapi.nsunexus.app',
         'timestamp': datetime.utcnow().isoformat(),
-        'version': '2.2.0'
+        'version': '2.2.1'
     }
 
 
@@ -181,19 +164,11 @@ async def not_found(request: Request, exc):
 
 @app.exception_handler(500)
 async def server_error(request: Request, exc):
-    """Handle 500 errors with details for debugging."""
-    import traceback
-    error_detail = str(exc) if exc else "Unknown error"
-    tb = traceback.format_exc() if exc else "No traceback available"
-    logger.error(f"500 Error: {error_detail}")
-    logger.error(f"Traceback: {tb}")
+    """Handle 500 errors."""
+    logger.error(f"500 Error on {request.url.path}: {exc}")
     return JSONResponse(
         status_code=500,
-        content={
-            'error': 'Internal server error',
-            'detail': error_detail,
-            'path': str(request.url.path) if request else None,
-        }
+        content={'error': 'Internal server error'}
     )
 
 
