@@ -164,6 +164,11 @@ async function handleFile(file) {
 
     const formData = new FormData();
     formData.append('file', file);
+    
+    // Add OCR engine selection
+    const ocrEngineSelect = document.getElementById('ocr-engine');
+    const ocrEngine = ocrEngineSelect ? ocrEngineSelect.value : 'auto';
+    formData.append('ocr_engine', ocrEngine);
 
     // Create abort controller for cancel functionality
     currentUploadController = new AbortController();

@@ -73,6 +73,11 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
               type: "string",
               description: "Full path to the transcript file (PDF, PNG, JPG, or CSV)",
             },
+            ocr_engine: {
+              type: "string",
+              description: "OCR engine to use: 'auto' (default), 'google_vision', or 'azure'",
+              enum: ["auto", "google_vision", "azure"],
+            },
           },
           required: ["file_path"],
         },
@@ -163,6 +168,62 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
             },
           },
           required: ["program", "courses"],
+        },
+      },
+      {
+        name: "export_scan",
+        description: "Export a scan result to JSON or CSV format",
+        inputSchema: {
+          type: "object",
+          properties: {
+            scan_id: {
+              type: "string",
+              description: "The scan ID to export (use 'last' for the most recent scan)",
+            },
+            format: {
+              type: "string",
+              description: "Export format: 'json' or 'csv'",
+              enum: ["json", "csv"],
+            },
+          },
+          required: ["scan_id"],
+        },
+      },
+      {
+        name: "predict_gpa",
+        description: "Predict future GPA based on current performance and planned courses",
+        inputSchema: {
+          type: "object",
+          properties: {
+            current_cgpa: {
+              type: "number",
+              description: "Current CGPA",
+            },
+            current_credits: {
+              type: "number",
+              description: "Current total earned credits",
+            },
+            planned_courses: {
+              type: "array",
+              description: "Planned courses with expected grades",
+              items: {
+                type: "object",
+                properties: {
+                  credits: { type: "number" },
+                  expected_grade: { type: "string" },
+                },
+              },
+            },
+          },
+          required: ["current_cgpa", "current_credits", "planned_courses"],
+        },
+      },
+      {
+        name: "get_ocr_engines",
+        description: "Get available OCR engines and their status",
+        inputSchema: {
+          type: "object",
+          properties: {},
         },
       },
     ],
@@ -270,7 +331,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         return await handleHealthCheck();
 
       case "scan_transcript":
-        return await handleScanTranscript(args.file_path);
+        return await handleScanTranscript(args.file_path, args.ocr_engine || "auto");
 
       case "login":
         return await handleLogin(args.email, args.name);
@@ -295,6 +356,15 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
       case "check_graduation":
         return handleCheckGraduation(args.program, args.courses);
+
+      case "export_scan":
+        return await handleExportScan(args.scan_id, args.format || "json");
+
+      case "predict_gpa":
+        return handlePredictGPA(args.current_cgpa, args.current_credits, args.planned_courses);
+
+      case "get_ocr_engines":
+        return await handleGetOCREngines();
 
       default:
         throw new Error(`Unknown tool: ${name}`);
@@ -331,7 +401,7 @@ Version: ${data.version}
 Database: ${data.database?.connected ? "✓ Connected" : "✗ Disconnected"}
 OCR Engines:
   - Google Vision: ${data.ocr_engines?.google_vision?.configured ? "✓" : "✗"} (${data.ocr_engines?.google_vision?.free_tier})
-  - OCR.space: ${data.ocr_engines?.ocr_space?.configured ? "✓" : "✗"} (${data.ocr_engines?.ocr_space?.free_tier})
+  - Azure Doc Intelligence: ${data.ocr_engines?.azure_doc_intelligence?.configured ? "✓" : "✗"} (${data.ocr_engines?.azure_doc_intelligence?.accuracy})
 
 Analysis Capabilities:
   - Level 1: Credit Tally (earned/failed credits, retakes)
@@ -356,7 +426,7 @@ Analysis Capabilities:
 /**
  * Scan transcript handler
  */
-async function handleScanTranscript(filePath) {
+async function handleScanTranscript(filePath, ocrEngine = "auto") {
   // Resolve path
   const resolvedPath = path.resolve(filePath);
 
@@ -387,6 +457,7 @@ async function handleScanTranscript(filePath) {
     const form = new FormData();
     form.append("file", fs.createReadStream(resolvedPath));
     form.append("source", "mcp");
+    form.append("ocr_engine", ocrEngine);
 
     const headers = { ...form.getHeaders() };
     if (authToken) {
@@ -657,6 +728,142 @@ function handleCheckGraduation(program, courses) {
   return {
     content: [{ type: "text", text: output }],
   };
+}
+
+/**
+ * Export scan handler
+ */
+async function handleExportScan(scanId, format = "json") {
+  try {
+    const id = scanId === "last" ? (lastScanResult?.scan_id || "") : scanId;
+    
+    if (!id) {
+      return {
+        content: [{ type: "text", text: "No scan ID available. Perform a scan first or provide a scan_id." }],
+        isError: true,
+      };
+    }
+
+    const headers = {};
+    if (authToken) {
+      headers["Authorization"] = `Bearer ${authToken}`;
+    }
+
+    const response = await axios.get(`${API_BASE_URL}/export/${id}?format=${format}`, {
+      headers,
+      timeout: 30000,
+    });
+
+    if (format === "csv") {
+      return {
+        content: [{ type: "text", text: `CSV Export:\n\n${response.data}` }],
+      };
+    }
+
+    return {
+      content: [{ type: "text", text: JSON.stringify(response.data, null, 2) }],
+    };
+  } catch (error) {
+    return {
+      content: [{ type: "text", text: `Export failed: ${error.message}` }],
+      isError: true,
+    };
+  }
+}
+
+/**
+ * Predict GPA handler
+ */
+function handlePredictGPA(currentCGPA, currentCredits, plannedCourses) {
+  const gradePoints = {
+    A: 4.0, "A-": 3.7,
+    "B+": 3.3, B: 3.0, "B-": 2.7,
+    "C+": 2.3, C: 2.0, "C-": 1.7,
+    "D+": 1.3, D: 1.0,
+    F: 0.0,
+  };
+
+  let currentQP = currentCGPA * currentCredits;
+  let totalCredits = currentCredits;
+  let plannedCredits = 0;
+
+  const predictions = plannedCourses.map((c) => {
+    const grade = c.expected_grade.toUpperCase();
+    const credits = parseFloat(c.credits) || 0;
+    const points = gradePoints[grade];
+
+    if (points !== undefined && credits > 0) {
+      currentQP += points * credits;
+      totalCredits += credits;
+      plannedCredits += credits;
+      return { credits, grade, points };
+    }
+    return { credits, grade, points: "N/A" };
+  });
+
+  const predictedCGPA = totalCredits > 0 ? currentQP / totalCredits : 0;
+
+  let output = `GPA PREDICTION\n━━━━━━━━━━━━━━━━━━━━\n\n`;
+  output += `Current CGPA: ${currentCGPA.toFixed(2)}\n`;
+  output += `Current Credits: ${currentCredits}\n\n`;
+  output += `Planned Courses:\n`;
+  predictions.forEach((p, i) => {
+    output += `  Course ${i + 1}: ${p.credits} credits, Grade ${p.grade} (${p.points} points)\n`;
+  });
+  output += `\nPlanned Credits: ${plannedCredits}\n`;
+  output += `Total Credits After: ${totalCredits}\n`;
+  output += `Predicted CGPA: ${predictedCGPA.toFixed(2)}\n`;
+  
+  // Check waiver eligibility
+  if (predictedCGPA >= 3.97) {
+    output += `\n🎓 Eligible for: Chancellor's Award (100% waiver)`;
+  } else if (predictedCGPA >= 3.75) {
+    output += `\n🎓 Eligible for: VC's Scholarship (50% waiver)`;
+  } else if (predictedCGPA >= 3.50) {
+    output += `\n🎓 Eligible for: Dean's Scholarship (25% waiver)`;
+  }
+
+  return {
+    content: [{ type: "text", text: output }],
+  };
+}
+
+/**
+ * Get OCR engines handler
+ */
+async function handleGetOCREngines() {
+  try {
+    const response = await axios.get(`${API_BASE_URL}/health`, { timeout: 10000 });
+    const data = response.data;
+    const ocr = data.ocr_engines || {};
+
+    let output = `OCR ENGINES STATUS\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n`;
+    
+    output += `Google Cloud Vision:\n`;
+    output += `  Status: ${ocr.google_vision?.configured ? "✓ Configured" : "✗ Not Configured"}\n`;
+    output += `  Accuracy: 98%+\n`;
+    output += `  Free Tier: ${ocr.google_vision?.free_tier || "1,000 requests/month"}\n`;
+    output += `  Best For: General documents, fast processing\n\n`;
+    
+    output += `Azure Document Intelligence:\n`;
+    output += `  Status: ${ocr.azure_doc_intelligence?.configured ? "✓ Configured" : "✗ Not Configured"}\n`;
+    output += `  Accuracy: ${ocr.azure_doc_intelligence?.accuracy || "99%+"}\n`;
+    output += `  Free Tier: ${ocr.azure_doc_intelligence?.free_tier || "500 pages/month"}\n`;
+    output += `  Best For: Complex tables, academic transcripts\n\n`;
+    
+    output += `Usage:\n`;
+    output += `  Use 'auto' to let the system choose the best available engine.\n`;
+    output += `  Use 'google_vision' or 'azure' to force a specific engine.`;
+
+    return {
+      content: [{ type: "text", text: output }],
+    };
+  } catch (error) {
+    return {
+      content: [{ type: "text", text: `Failed to get OCR status: ${error.message}` }],
+      isError: true,
+    };
+  }
 }
 
 /**

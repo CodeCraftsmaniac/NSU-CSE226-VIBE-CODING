@@ -67,7 +67,7 @@ async def health_check():
     
     # OCR API keys status
     google_key = getattr(settings, 'GOOGLE_VISION_API_KEY', '') if settings else os.getenv('GOOGLE_VISION_API_KEY', '')
-    ocrspace_key = getattr(settings, 'OCR_SPACE_API_KEY', '') if settings else os.getenv('OCR_SPACE_API_KEY', '')
+    azure_key = getattr(settings, 'AZURE_DOC_INTELLIGENCE_KEY', '') if settings else os.getenv('AZURE_DOC_INTELLIGENCE_KEY', '')
     
     # System info
     uptime_info = {
@@ -84,12 +84,12 @@ async def health_check():
             'max_file_size': '20 MB',
             'supported_formats': ['PDF', 'PNG', 'JPG', 'JPEG', 'GIF', 'BMP', 'WEBP', 'TIFF']
         },
-        'ocr_space': {
-            'configured': bool(ocrspace_key),
-            'free_tier': '25,000 requests/month',
-            'rate_limit': '500 requests/day (free)',
-            'max_file_size': '1 MB (free) / 5 MB (pro)',
-            'supported_formats': ['PDF', 'PNG', 'JPG', 'JPEG', 'GIF', 'BMP', 'TIFF']
+        'azure_doc_intelligence': {
+            'configured': bool(azure_key),
+            'accuracy': '99%+',
+            'free_tier': '500 pages/month',
+            'max_file_size': '50 MB',
+            'supported_formats': ['PDF', 'PNG', 'JPG', 'JPEG', 'TIFF', 'BMP']
         }
     }
     

@@ -21,7 +21,8 @@ os.environ.setdefault("SUPABASE_ANON_KEY", "test-anon-key")
 os.environ.setdefault("SUPABASE_SERVICE_ROLE_KEY", "test-service-role-key")
 os.environ.setdefault("JWT_SECRET_KEY", "test-jwt-secret-key-for-testing-only")
 os.environ.setdefault("GOOGLE_VISION_API_KEY", "test-google-vision-key")
-os.environ.setdefault("OCR_SPACE_API_KEY", "test-ocr-space-key")
+os.environ.setdefault("AZURE_DOC_INTELLIGENCE_KEY", "")
+os.environ.setdefault("AZURE_DOC_INTELLIGENCE_ENDPOINT", "")
 
 
 @pytest.fixture(scope="session")

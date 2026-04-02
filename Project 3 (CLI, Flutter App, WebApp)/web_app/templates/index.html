@@ -233,6 +233,20 @@
                             <span class="file-type"><svg viewBox="0 0 16 16" fill="currentColor" width="12" height="12"><path d="M6.002 5.5a1.5 1.5 0 11-3 0 1.5 1.5 0 013 0z"/><path d="M2.002 1a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V3a2 2 0 00-2-2h-12z"/></svg> PNG</span>
                             <span class="file-type"><svg viewBox="0 0 16 16" fill="currentColor" width="12" height="12"><path d="M6.002 5.5a1.5 1.5 0 11-3 0 1.5 1.5 0 013 0z"/><path d="M2.002 1a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V3a2 2 0 00-2-2h-12z"/></svg> JPG</span>
                         </div>
+                        <!-- OCR Engine Selector -->
+                        <div class="ocr-engine-selector">
+                            <label for="ocr-engine" class="engine-label">
+                                <svg viewBox="0 0 20 20" fill="currentColor" width="14" height="14">
+                                    <path fill-rule="evenodd" d="M11.3 1.046A1 1 0 0112 2v5h4a1 1 0 01.82 1.573l-7 10A1 1 0 018 18v-5H4a1 1 0 01-.82-1.573l7-10a1 1 0 011.12-.38z" clip-rule="evenodd"/>
+                                </svg>
+                                OCR Engine
+                            </label>
+                            <select id="ocr-engine" class="engine-select">
+                                <option value="auto" selected>Auto (Best Available)</option>
+                                <option value="google_vision">Google Cloud Vision</option>
+                                <option value="azure">Azure Document Intelligence</option>
+                            </select>
+                        </div>
                         <div class="upload-limit">Max file size: 16MB</div>
                         <input type="file" id="file-input" accept=".pdf,.png,.jpg,.jpeg" hidden>
                     </div>

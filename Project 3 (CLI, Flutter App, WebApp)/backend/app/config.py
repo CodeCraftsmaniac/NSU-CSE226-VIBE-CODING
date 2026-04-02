@@ -33,8 +33,10 @@ class Settings(BaseSettings):
     JWT_EXPIRE_DAYS: int = 30
     
     # === OCR APIs (at least one required for OCR functionality) ===
-    GOOGLE_VISION_API_KEY: str = ""  # Optional, can use OCR.space instead
-    OCR_SPACE_API_KEY: str = ""  # Optional, can use Google instead
+    GOOGLE_VISION_API_KEY: str = ""  # Primary OCR engine
+    # Azure Document Intelligence (premium, 99%+ accuracy)
+    AZURE_DOC_INTELLIGENCE_KEY: str = ""
+    AZURE_DOC_INTELLIGENCE_ENDPOINT: str = ""
     
     # === CORS - Specific origins only (no wildcard) ===
     CORS_ORIGINS: List[str] = [
@@ -91,7 +93,7 @@ class Settings(BaseSettings):
     
     def has_ocr_provider(self) -> bool:
         """Check if at least one OCR provider is configured."""
-        return bool(self.GOOGLE_VISION_API_KEY or self.OCR_SPACE_API_KEY)
+        return bool(self.GOOGLE_VISION_API_KEY or self.AZURE_DOC_INTELLIGENCE_KEY)
     
     def get_supabase_key(self) -> str:
         """Get the appropriate Supabase key for backend operations."""
@@ -135,7 +137,7 @@ def validate_settings_on_startup() -> dict:
         
         # Check OCR providers
         if not settings.has_ocr_provider():
-            errors.append("No OCR provider configured (need GOOGLE_VISION_API_KEY or OCR_SPACE_API_KEY)")
+            errors.append("No OCR provider configured (need GOOGLE_VISION_API_KEY or AZURE_DOC_INTELLIGENCE_KEY)")
         
         return {
             'valid': len(errors) == 0,
@@ -143,7 +145,7 @@ def validate_settings_on_startup() -> dict:
             'settings': {
                 'supabase_url': settings.SUPABASE_URL[:30] + '...' if settings.SUPABASE_URL else None,
                 'has_google_vision': bool(settings.GOOGLE_VISION_API_KEY),
-                'has_ocr_space': bool(settings.OCR_SPACE_API_KEY),
+                'has_azure_doc': bool(settings.AZURE_DOC_INTELLIGENCE_KEY),
                 'cors_origins': settings.CORS_ORIGINS,
                 'rate_limit': settings.RATE_LIMIT_PER_MINUTE,
                 'debug': settings.DEBUG

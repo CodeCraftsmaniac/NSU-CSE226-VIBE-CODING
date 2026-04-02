@@ -314,6 +314,7 @@ async def upload_transcript(
     request: Request,
     file: UploadFile = File(...),
     source: str = Form(default="web"),
+    ocr_engine: str = Form(default="auto"),
     authorization: Optional[str] = None
 ):
     """
@@ -324,6 +325,11 @@ async def upload_transcript(
     - CSV files (direct parsing)
     - Image files (PNG, JPG, JPEG - OCR processing)
     
+    Args:
+        file: The file to upload
+        source: Source of upload ('web', 'cli', 'api')
+        ocr_engine: OCR engine selection ('auto', 'google_vision', 'azure')
+    
     Returns processed transcript data with courses and audit results.
     Standard response format for backward compatibility.
     """
@@ -333,6 +339,11 @@ async def upload_transcript(
     
     # Validate file security (path traversal, extension, MIME type)
     safe_filename = validate_upload_file(file)
+    
+    # Validate OCR engine selection
+    valid_engines = {'auto', 'google_vision', 'azure'}
+    if ocr_engine.lower() not in valid_engines:
+        ocr_engine = 'auto'
     
     # Get user from auth header
     user = None
@@ -422,8 +433,8 @@ async def upload_transcript(
                 # Write file
                 filepath.write_bytes(content)
                 
-                # OCR Processing
-                ocr = OCRClass()
+                # OCR Processing with selected engine
+                ocr = OCRClass(engine=ocr_engine)
                 ocr_result = ocr.extract(str(filepath))
                 
                 if not ocr_result.success:

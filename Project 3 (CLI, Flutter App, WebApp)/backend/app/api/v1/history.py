@@ -116,17 +116,21 @@ async def get_history(
     
     # Get user
     user = await get_current_user(authorization)
+    logger.info(f"History request for user: {user.get('email')}")
     
     if not get_user_scans:
         raise HTTPException(status_code=503, detail="Database not available")
     
     # Get db_id for queries
     db_user_id = await get_db_user_id(user)
+    logger.info(f"User db_id: {db_user_id}")
     
     if not db_user_id:
+        logger.warning(f"Could not get db_user_id for {user.get('email')}")
         return HistoryListResponse(count=0, history=[])
     
     scans = get_user_scans(db_user_id, limit=min(limit, 100))
+    logger.info(f"Found {len(scans)} scans for user {db_user_id}")
     
     # Simplify scan data for listing
     history = []
