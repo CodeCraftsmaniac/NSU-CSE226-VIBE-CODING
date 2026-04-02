@@ -93,8 +93,12 @@ def verify_cli_token(token: str) -> Optional[Dict[str, Any]]:
         
         payload_b64, signature = parts
         
-        # Verify signature
-        SECRET_KEY = SUPABASE_SERVICE_ROLE_KEY[:32] if SUPABASE_SERVICE_ROLE_KEY else 'fallback-secret-key'
+        # Verify signature - require actual secret key (no fallback)
+        if not SUPABASE_SERVICE_ROLE_KEY:
+            logger.warning("CLI token verification failed: SUPABASE_SERVICE_ROLE_KEY not configured")
+            return None
+        
+        SECRET_KEY = SUPABASE_SERVICE_ROLE_KEY[:32]
         expected_sig = hmac.new(SECRET_KEY.encode(), payload_b64.encode(), hashlib.sha256).hexdigest()
         
         if not hmac.compare_digest(signature, expected_sig):

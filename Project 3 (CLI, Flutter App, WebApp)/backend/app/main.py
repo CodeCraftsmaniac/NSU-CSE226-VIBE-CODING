@@ -14,18 +14,29 @@ from fastapi.middleware.cors import CORSMiddleware
 logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
 logger = logging.getLogger(__name__)
 
+# CORS allowed origins - load from config or use defaults
+CORS_ORIGINS = os.getenv("CORS_ORIGINS", "").split(",") if os.getenv("CORS_ORIGINS") else [
+    "https://ocr.nsunexus.app",
+    "https://ocrapi.nsunexus.app",
+    "http://localhost:3000",
+    "http://localhost:5000",
+    "http://localhost:5173",
+    "http://127.0.0.1:3000",
+    "http://127.0.0.1:5000",
+]
+
 # Create app
 app = FastAPI(
     title="NSU Degree Audit API",
-    version="2.4.0",
+    version="2.4.1",
 )
 
-# CORS
+# CORS - Use specific origins (not wildcard) for security
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=CORS_ORIGINS,
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["*"],
 )
 
@@ -34,7 +45,7 @@ app.add_middleware(
 def root():
     return {
         "name": "NSU Degree Audit API",
-        "version": "2.4.0",
+        "version": "2.4.1",
         "framework": "FastAPI",
         "status": "running",
     }

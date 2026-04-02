@@ -16,6 +16,7 @@ pydantic[email]>=2.0.0 # Data validation with email support
 pydantic-settings>=2.0.0  # Settings management
 python-multipart>=0.0.6   # File upload handling
 slowapi>=0.1.9         # Rate limiting for FastAPI
+jinja2>=3.1.0          # Template engine for web frontend
 
 # Environment
 python-dotenv>=1.0.0   # Environment variable management
