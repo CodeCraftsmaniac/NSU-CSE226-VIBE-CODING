@@ -137,8 +137,13 @@ CSE_COURSES = {
         ("CSE311", "Database Systems", 3),
         ("CSE311L", "Database Systems Lab", 0),
         ("CSE323", "Operating Systems Design", 3),
+        ("CSE323L", "Operating Systems Design Lab", 0),
         ("CSE327", "Software Engineering", 3),
         ("CSE425", "Concepts of Programming Language", 3),
+        
+        # Theory & Computation
+        ("CSE226", "Discrete Structures", 3),  # Additional discrete math
+        ("CSE340", "Computer Networking", 3),  # Networking fundamentals
         
         # Electrical/Electronics Foundation (from EEE)
         ("EEE141", "Electrical Circuits I", 3),
@@ -225,6 +230,7 @@ EEE_COURSES = {
     "foundation": [
         ("CSE115", "Programming Language I", 3),
         ("CSE115L", "Programming Language I Lab", 1),
+        ("CSE173", "Discrete Mathematics", 3),  # Also required for EEE
     ],
     
     "core": [
@@ -245,6 +251,7 @@ EEE_COURSES = {
         # Digital Systems
         ("EEE211", "Digital Logic Design", 3),
         ("EEE211L", "Digital Logic Design Lab", 0),
+        ("EEE212", "Digital Systems Design", 3),  # Advanced digital
         
         # Signals & Systems
         ("EEE221", "Signals and Systems", 3),
@@ -261,6 +268,10 @@ EEE_COURSES = {
         # Control
         ("EEE342", "Control Engineering", 3),
         ("EEE342L", "Control Engineering Lab", 1),
+        
+        # Additional Core
+        ("EEE154", "Engineering Drawing", 1),  # Required for engineering
+        ("EEE452", "Engineering Economics", 3),  # Professional course
     ],
     
     "capstone": [
