@@ -67,6 +67,21 @@ Use these in Copilot Chat:
 3. Check my graduation requirements for CSE
 4. Show my scan history
 
+## 4.1) One-command terminal proof test
+
+From mcp_server folder:
+
+```powershell
+node demo_live_test.js
+```
+
+This runs a real MCP client against your local MCP server and prints:
+
+- total tools count
+- tool names
+- CGPA test output
+- real transcript scan summary
+
 ## 5) What to explain in presentation
 
 - MCP is the bridge that lets AI assistants call your backend tools.
