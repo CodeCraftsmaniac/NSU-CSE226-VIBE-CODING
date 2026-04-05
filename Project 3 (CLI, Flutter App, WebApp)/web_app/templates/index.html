@@ -87,6 +87,16 @@
                     </div>
                     <input type="hidden" id="ocr-engine" value="auto">
                 </div>
+
+                <button class="mcp-entry-btn" id="mcp-entry-btn" onclick="scrollToMcpShowcase()" title="Open MCP Server Showcase">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="16" height="16" aria-hidden="true">
+                        <path d="M8 11a4 4 0 015.66 0l2.83 2.83a4 4 0 11-5.66 5.66l-1.42-1.42" stroke-linecap="round" stroke-linejoin="round"/>
+                        <path d="M16 13a4 4 0 00-5.66 0l-2.83 2.83a4 4 0 105.66 5.66l1.42-1.42" opacity="0"/>
+                        <path d="M10 15L14 11" stroke-linecap="round"/>
+                        <path d="M6.2 9.2l-1.4 1.4a4 4 0 105.66 5.66l.54-.54" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                    <span>MCP Server</span>
+                </button>
                 
                 <!-- Auth Button -->
                 <button class="btn-auth" id="auth-button" onclick="currentUser ? toggleUserMenu() : signInWithGoogle()">
@@ -612,8 +622,70 @@
         </section>
     </main>
 
+    <!-- MCP Showcase Section -->
+    <section id="mcp-showcase" class="mcp-showcase">
+        <div class="container">
+            <div class="mcp-panel">
+                <div class="mcp-panel-head">
+                    <div class="mcp-badge">MCP</div>
+                    <div>
+                        <h2>Model Context Protocol Server</h2>
+                        <p>Live bridge between AI assistants and your NSU Degree Audit system.</p>
+                    </div>
+                </div>
+
+                <div class="mcp-grid">
+                    <div class="mcp-card-block">
+                        <h3>What This MCP Server Does</h3>
+                        <ul class="mcp-tool-list">
+                            <li><strong>scan_transcript:</strong> Scan PDF/image and return full degree audit analysis</li>
+                            <li><strong>get_health_status:</strong> Check API and OCR capability status</li>
+                            <li><strong>login / get_scan_history:</strong> Sign in and sync historical scans</li>
+                            <li><strong>calculate_cgpa:</strong> Compute CGPA from course list and grades</li>
+                            <li><strong>check_graduation:</strong> Validate requirement completion by program</li>
+                            <li><strong>export_scan / predict_gpa:</strong> Export reports and predict outcomes</li>
+                        </ul>
+                    </div>
+
+                    <div class="mcp-card-block">
+                        <h3>Demo Prompts You Can Show</h3>
+                        <div class="mcp-command-list">
+                            <div class="mcp-command">Scan my transcript at D:/Transcripts/my_transcript.pdf</div>
+                            <div class="mcp-command">Calculate my CGPA with CSE115 A, CSE173 B+, MAT120 A-</div>
+                            <div class="mcp-command">Check my graduation requirements for CSE</div>
+                            <div class="mcp-command">Show my scan history</div>
+                        </div>
+                    </div>
+
+                    <div class="mcp-card-block mcp-card-wide">
+                        <h3>How To Run MCP Server</h3>
+                        <ol class="mcp-steps">
+                            <li>Open terminal and go to mcp_server folder</li>
+                            <li>Install dependencies with npm install</li>
+                            <li>Run server with node server.js</li>
+                            <li>For VS Code Copilot, configure mcp.servers with this server path</li>
+                            <li>Reload VS Code and use prompts from Copilot Chat</li>
+                        </ol>
+                        <div class="mcp-note">Tip: Use the key icon button to jump back to this section during your presentation.</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
     <!-- Error Toast -->
     <div class="toast" id="toast"></div>
+
+    <!-- Floating MCP Key -->
+    <button class="mcp-key-fab" id="mcp-key-fab" onclick="scrollToMcpShowcase()" title="MCP Server Showcase">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18" aria-hidden="true">
+            <circle cx="8" cy="12" r="3"></circle>
+            <path d="M11 12h10"></path>
+            <path d="M17 12v3"></path>
+            <path d="M20 12v2"></path>
+        </svg>
+        <span>MCP</span>
+    </button>
 
     <!-- History Modal -->
     <div class="modal-overlay" id="history-modal">

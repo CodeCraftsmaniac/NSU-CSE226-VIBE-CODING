@@ -1472,6 +1472,20 @@ function delay(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
 }
 
+function scrollToMcpShowcase() {
+    const showcase = document.getElementById('mcp-showcase');
+    if (!showcase) return;
+
+    showcase.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    showcase.classList.remove('pulse');
+    void showcase.offsetWidth;
+    showcase.classList.add('pulse');
+
+    setTimeout(() => {
+        showcase.classList.remove('pulse');
+    }, 900);
+}
+
 function showToast(message) {
     toast.textContent = message;
     toast.classList.add('show');
@@ -1550,3 +1564,5 @@ function toggleOcrBanner() {
 window.resetAnalysis = function() {
     resetToInitial();
 };
+
+window.scrollToMcpShowcase = scrollToMcpShowcase;
