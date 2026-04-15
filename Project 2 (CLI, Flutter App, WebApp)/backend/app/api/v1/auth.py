@@ -46,7 +46,7 @@ def get_settings_safe():
                 SUPABASE_URL = os.getenv('SUPABASE_URL', '')
                 SUPABASE_ANON_KEY = os.getenv('SUPABASE_ANON_KEY', '')
                 GOOGLE_CLIENT_ID = os.getenv('GOOGLE_CLIENT_ID', '')
-                JWT_SECRET_KEY = os.getenv('JWT_SECRET_KEY', 'dev-secret-key')
+                JWT_SECRET_KEY = os.getenv('JWT_SECRET_KEY', '')
             _settings = MinimalSettings()
     return _settings
 

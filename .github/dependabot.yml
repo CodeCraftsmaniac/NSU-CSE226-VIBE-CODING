@@ -1,0 +1,54 @@
+# Dependabot configuration
+# https://docs.github.com/en/code-security/dependabot/dependabot-version-updates
+
+version: 2
+updates:
+  # Python dependencies (pip)
+  - package-ecosystem: "pip"
+    directory: "/Project 2 (CLI, Flutter App, WebApp)"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+      - "python"
+
+  # GitHub Actions
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+      - "github-actions"
+
+  # npm - root (Supabase JS client)
+  - package-ecosystem: "npm"
+    directory: "/Project 2 (CLI, Flutter App, WebApp)"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 3
+    labels:
+      - "dependencies"
+      - "javascript"
+
+  # npm - MCP server
+  - package-ecosystem: "npm"
+    directory: "/Project 2 (CLI, Flutter App, WebApp)/mcp_server"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 3
+    labels:
+      - "dependencies"
+      - "javascript"
+
+  # Flutter/Dart (pub)
+  - package-ecosystem: "pub"
+    directory: "/Project 2 (CLI, Flutter App, WebApp)/flutter_app"
+    schedule:
+      interval: "monthly"
+    open-pull-requests-limit: 3
+    labels:
+      - "dependencies"
+      - "dart"

@@ -682,7 +682,7 @@ def parse_knowledge_base(md_path):
 def classify_credit(grade, credits):
     """Classify a course → (earned_credits, status_label, colour)."""
     if grade == "" or grade is None:
-        return 0.0, "IN PROGRESS", C.ELECTRIC
+        return 0.0, "IN PROGRESS", C.GOLD
     if grade in NON_GPA_GRADES:
         if grade in ("P", "TR") and credits > 0:
             return credits, "EARNED (P/TR)", C.LAVENDER

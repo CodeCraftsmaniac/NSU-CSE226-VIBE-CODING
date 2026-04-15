@@ -521,12 +521,12 @@ class WebOCR:
             if last_error:
                 error_msg = f"OCR failed on {pages_processed} page(s): {last_error}"
             else:
-                error_msg = f"OCR processed {pages_processed} page(s) but found no text. APIs configured: Google Vision={bool(self.google_api_key)}, Azure={bool(self.azure)}"
+                error_msg = f"OCR processed {pages_processed} page(s) but found no text. APIs configured: Google Vision={bool(self.google_api_key)}, Azure={bool(self.azure_client)}"
             return OCRResult(success=False, error=error_msg)
 
         self._report("parse", 85, "Parsing extracted text...")
         result = self._parse_transcript_text(ocr_text)
-        result.engine_used = actual_engine or ("Google Vision" if self.google_api_key else ("Azure" if self.azure else "None"))
+        result.engine_used = actual_engine or ("Google Vision" if self.google_api_key else ("Azure" if self.azure_client else "None"))
         
         # Use real average confidence across all pages
         if confidence_count > 0:

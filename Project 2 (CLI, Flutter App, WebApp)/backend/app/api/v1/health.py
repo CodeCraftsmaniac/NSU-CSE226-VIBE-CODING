@@ -141,7 +141,7 @@ async def health_check():
     return {
         'status': 'healthy',
         'service': 'NSU Degree Audit API',
-        'version': '2.4.0',
+        'version': '2.5.0',
         'framework': 'FastAPI',
         'uptime': uptime_info,
         'ocr_engines': ocr_info,
