@@ -875,6 +875,31 @@ class WebOCR:
                         total_credits_from_pdf = float(cr_match.group(1))
                         break
 
+        # ===== PASS 0: FULL-LINE MATCHES (highest confidence) =====
+        # FULL_LINE_PATTERN captures "CSE115 3 A-" on a single line — most reliable
+        pass0_matched_lines = set()  # Track lines already matched in pass 0
+        pass0_courses = []  # [(code, credits, grade, semester, line_num), ...]
+        
+        for i, line in enumerate(lines):
+            line_clean = line.strip()
+            if not line_clean:
+                continue
+            for match in FULL_LINE_PATTERN.finditer(line_clean):
+                prefix = match.group(1).upper()
+                number = match.group(2).upper()
+                code = prefix + number
+                if prefix not in ALL_COURSE_PREFIXES:
+                    continue
+                credits = float(match.group(3))
+                grade = match.group(4).upper()
+                if grade not in VALID_GRADES:
+                    continue
+                semester = get_semester_for_line(i)
+                pass0_courses.append((code, credits, grade, semester, i))
+                pass0_matched_lines.add(i)
+        
+        _logger.info(f"PASS 0: {len(pass0_courses)} full-line matches (highest confidence)")
+        
         # ===== PASS 1: COLLECT ALL DATA =====
         
         # Course code pattern
@@ -946,6 +971,10 @@ class WebOCR:
         seen_code_in_line = {}  # Track course codes per line to avoid duplicates
         
         for i, line in enumerate(lines):
+            # Skip lines already matched in PASS 0
+            if i in pass0_matched_lines:
+                continue
+            
             line_clean = line.strip()
             if not line_clean:
                 continue
@@ -973,6 +1002,10 @@ class WebOCR:
                     continue
                 seen_code_in_line[line_key] = True
                 
+                # Skip if already matched in PASS 0
+                if any(c[0] == code and c[4] == i for c in pass0_courses):
+                    continue
+                
                 semester = get_semester_for_line(i)
                 all_courses.append((code, i, semester))
                 if not semester:
@@ -998,8 +1031,8 @@ class WebOCR:
             if match:
                 grade_found = match.group(1).upper()
                 is_failed = True
-                # Look back for credits
-                for j in range(max(0, i-8), i):
+                # Look back for credits (reduced window to prevent cross-course)
+                for j in range(max(0, i-3), i):
                     cr_match = re.search(r'\b([123456])\.0\b', lines[j])
                     if cr_match:
                         credits_found = float(cr_match.group(1))
@@ -1017,8 +1050,8 @@ class WebOCR:
                 match = grade_patterns[1].match(line_clean)
                 if match:
                     grade_found = match.group(1).upper()
-                    # Look back for credits
-                    for j in range(max(0, i-8), i):
+                    # Look back for credits (reduced window)
+                    for j in range(max(0, i-3), i):
                         cr_match = re.search(r'\b([123456])\.0\b', lines[j])
                         if cr_match:
                             credits_found = float(cr_match.group(1))
@@ -1036,8 +1069,8 @@ class WebOCR:
                 match = grade_patterns[3].match(line_clean)
                 if match:
                     grade_found = match.group(1).upper()
-                    # Look back for credits
-                    for j in range(max(0, i-8), i):
+                    # Look back for credits (reduced window)
+                    for j in range(max(0, i-3), i):
                         cr_match = re.search(r'\b([123456])\.0\b', lines[j])
                         if cr_match:
                             credits_found = float(cr_match.group(1))
@@ -1048,8 +1081,8 @@ class WebOCR:
                 match = grade_patterns[5].search(line_clean)
                 if match:
                     grade_found = match.group(1).upper()
-                    # Look back for credits
-                    for j in range(max(0, i-8), i):
+                    # Look back for credits (reduced window)
+                    for j in range(max(0, i-3), i):
                         cr_match = re.search(r'\b([123456])\.0\b', lines[j])
                         if cr_match:
                             credits_found = float(cr_match.group(1))
@@ -1067,8 +1100,8 @@ class WebOCR:
                 match = grade_patterns[7].search(line_clean)
                 if match:
                     grade_found = match.group(1).upper()
-                    # Look back for credits
-                    for j in range(max(0, i-8), i):
+                    # Look back for credits (reduced window)
+                    for j in range(max(0, i-3), i):
                         cr_match = re.search(r'\b([123456])\.0\b', lines[j])
                         if cr_match:
                             credits_found = float(cr_match.group(1))
@@ -1189,59 +1222,38 @@ class WebOCR:
                 else:
                     still_unmatched.append((code, code_line, semester))
             
-            # LAST RESORT: Assign ANY remaining unused grade to unmatched courses
+            # DO NOT use "last resort" matching — assigning random grades is worse than reporting unmatched
             if still_unmatched:
-                _logger.info(f"LAST RESORT: {len(still_unmatched)} courses still need grades")
-                final_unmatched = []
-                
-                # Get all unused grades
-                unused_grades = [(g_idx, g) for g_idx, g in enumerate(all_grades) if g_idx not in used_grades]
-                unused_idx = 0
-                
-                for code, code_line, semester in still_unmatched:
-                    if unused_idx < len(unused_grades):
-                        g_idx, (grade, credits, grade_line, is_failed) = unused_grades[unused_idx]
-                        used_grades.add(g_idx)
-                        matched.append((code, credits, grade, semester, code_line, is_failed))
-                        _logger.debug(f"LAST RESORT matched: {code} -> {grade} ({credits} cr)")
-                        unused_idx += 1
-                    else:
-                        # ULTRA FALLBACK: Scan the course's own line and nearby lines for ANY grade letter
-                        found_grade = None
-                        search_range = range(max(0, code_line - 5), min(len(lines), code_line + 10))
-                        for scan_line in search_range:
-                            line_text = lines[scan_line].strip()
-                            # Look for standalone grade letters
-                            grade_match = re.search(r'\b([ABCDF][+-]?)\b', line_text)
-                            if grade_match:
-                                potential_grade = grade_match.group(1)
-                                # Verify it's a valid grade (not part of course code like "EEE")
-                                if potential_grade not in ('E', 'EE', 'EEE'):
-                                    found_grade = potential_grade
-                                    _logger.debug(f"ULTRA FALLBACK: Found {code} -> {found_grade} at line {scan_line}")
-                                    break
-                        
-                        if found_grade:
-                            matched.append((code, 3.0, found_grade, semester, code_line, False))
-                        else:
-                            final_unmatched.append((code, code_line, semester))
-                
-                still_unmatched = final_unmatched
-            
-            if still_unmatched:
-                _logger.warning(f"Still unmatched after fallback: {[c[0] for c in still_unmatched]}")
+                _logger.warning(f"Unmatched courses (no confident grade found): {[c[0] for c in still_unmatched]}")
         
-        _logger.info(f"Matched {len(matched)} courses total")
+        _logger.info(f"Matched {len(matched)} courses via multi-pass, {len(pass0_courses)} via PASS 0")
         
-        # Build final course list
+        # Build final course list — PASS 0 results first (highest confidence)
+        seen_course_keys = set()
+        for code, credits, grade, semester, line_num in pass0_courses:
+            key = (code, semester)
+            if key not in seen_course_keys:
+                seen_course_keys.add(key)
+                courses.append(CourseRecord(
+                    course_code=code,
+                    credits=credits,
+                    grade=grade,
+                    semester=semester,
+                    confidence=0.98  # Full-line match = highest confidence
+                ))
+        
+        # Then add multi-pass matches (lower confidence)
         for code, credits, grade, semester, line_num, is_failed in matched:
-            courses.append(CourseRecord(
-                course_code=code,
-                credits=credits,
-                grade=grade,
-                semester=semester,
-                confidence=0.90 if not is_failed else 0.85
-            ))
+            key = (code, semester)
+            if key not in seen_course_keys:
+                seen_course_keys.add(key)
+                courses.append(CourseRecord(
+                    course_code=code,
+                    credits=credits,
+                    grade=grade,
+                    semester=semester,
+                    confidence=0.90 if not is_failed else 0.85
+                ))
         
         # SORT CHRONOLOGICALLY by semester (year, then Spring->Summer->Fall)
         def semester_sort_key(course):

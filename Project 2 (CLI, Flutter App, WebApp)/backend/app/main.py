@@ -6,6 +6,7 @@ High-performance async backend for OCR-based degree auditing.
 import os
 import logging
 import asyncio
+import time as _time
 from typing import Dict, Set
 import json
 
@@ -122,11 +123,15 @@ except Exception as e:
 class ConnectionManager:
     """Manage WebSocket connections for real-time progress updates."""
     
+    _PROGRESS_TTL = 600  # 10 minutes
+    
     def __init__(self):
         # Map of job_id -> set of WebSocket connections
         self.active_connections: Dict[str, Set[WebSocket]] = {}
         # Map of job_id -> progress data
         self.progress_data: Dict[str, dict] = {}
+        # Map of job_id -> timestamp (for TTL cleanup)
+        self.progress_timestamps: Dict[str, float] = {}
     
     async def connect(self, websocket: WebSocket, job_id: str):
         """Accept WebSocket connection and track it by job_id."""
@@ -151,6 +156,7 @@ class ConnectionManager:
     async def broadcast_progress(self, job_id: str, progress: dict):
         """Broadcast progress update to all connections for a job."""
         self.progress_data[job_id] = progress
+        self.progress_timestamps[job_id] = _time.monotonic()
         
         if job_id in self.active_connections:
             dead_connections = set()
@@ -163,11 +169,22 @@ class ConnectionManager:
             # Clean up dead connections
             for conn in dead_connections:
                 self.active_connections[job_id].discard(conn)
+        
+        # Periodic TTL cleanup — purge stale progress data (>10 min)
+        self._cleanup_stale_jobs()
+    
+    def _cleanup_stale_jobs(self):
+        """Remove progress data older than TTL to prevent memory leaks."""
+        cutoff = _time.monotonic() - self._PROGRESS_TTL
+        stale = [jid for jid, ts in self.progress_timestamps.items() if ts < cutoff]
+        for jid in stale:
+            self.progress_data.pop(jid, None)
+            self.progress_timestamps.pop(jid, None)
     
     def clear_job(self, job_id: str):
         """Clear job data after completion."""
-        if job_id in self.progress_data:
-            del self.progress_data[job_id]
+        self.progress_data.pop(job_id, None)
+        self.progress_timestamps.pop(job_id, None)
 
 
 # Global connection manager instance
