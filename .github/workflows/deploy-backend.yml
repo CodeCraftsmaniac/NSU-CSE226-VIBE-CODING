@@ -4,10 +4,10 @@ on:
   push:
     branches: [main]
     paths:
-      - 'Project 3 (CLI, Flutter App, WebApp)/backend/**'
-      - 'Project 3 (CLI, Flutter App, WebApp)/src/**'
-      - 'Project 3 (CLI, Flutter App, WebApp)/Dockerfile'
-      - 'Project 3 (CLI, Flutter App, WebApp)/requirements.txt'
+      - 'Project 2 (CLI, Flutter App, WebApp)/backend/**'
+      - 'Project 2 (CLI, Flutter App, WebApp)/src/**'
+      - 'Project 2 (CLI, Flutter App, WebApp)/Dockerfile'
+      - 'Project 2 (CLI, Flutter App, WebApp)/requirements.txt'
   workflow_dispatch:
 
 env:
@@ -20,7 +20,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: 'Project 3 (CLI, Flutter App, WebApp)'
+        working-directory: 'Project 2 (CLI, Flutter App, WebApp)'
     
     permissions:
       contents: read

@@ -1,4 +1,4 @@
-﻿<p align="center">
+<p align="center">
   <img src="https://capsule-render.vercel.app/api?type=waving&color=0:0a0e1a,30:0d1b2e,60:0f2942,100:1F6FEB&height=260&section=header&text=NSU%20%E2%80%A2%20CSE226&fontSize=78&fontColor=FFFFFF&fontAlignY=38&fontStyle=bold&desc=Vibe%20Coding%20%E2%80%94%20AI-Powered%20Full-Stack%20Engineering%20%E2%80%A2%20Spring%202026&descSize=18&descAlignY=58&descColor=7DD3FC&animation=fadeIn&stroke=1F6FEB&strokeWidth=1" width="100%" alt="header"/>
 </p>
 
@@ -273,7 +273,7 @@ NSU-CSE226-VIBE-CODING/
 +-- Project 1 (Score 100 out of 100)/    <- P1 Version A  |  CSE + LLB programs
 +-- Project 1 (More Premium)/            <- P1 Version B  |  CSE + ARCH  (Enhanced TUI)
 +-- Project 2/                           <- Coming soon
-+-- Project 3/                           <- Coming soon
++-- Project 2 (CLI, Flutter App, WebApp)/                           <- Coming soon
 +-- Hackathon/                           <- Coming soon
 `-- README.md
 ```

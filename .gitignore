@@ -1,4 +1,4 @@
-﻿__pycache__/
+__pycache__/
 *.pyc
 Project 1 (Jubayer)/
 
@@ -14,3 +14,5 @@ flutter_app/android/.gradle/
 logs/
 uploads/
 *.log
+
+node_modules/

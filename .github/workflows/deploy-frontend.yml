@@ -4,8 +4,8 @@ on:
   push:
     branches: [main]
     paths:
-      - 'Project 3 (CLI, Flutter App, WebApp)/web_app/**'
-      - 'Project 3 (CLI, Flutter App, WebApp)/vercel.json'
+      - 'Project 2 (CLI, Flutter App, WebApp)/web_app/**'
+      - 'Project 2 (CLI, Flutter App, WebApp)/vercel.json'
   workflow_dispatch:
 
 jobs:

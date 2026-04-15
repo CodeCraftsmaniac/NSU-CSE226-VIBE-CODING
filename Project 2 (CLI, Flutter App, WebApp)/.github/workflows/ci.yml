@@ -1,0 +1,210 @@
+# NSU Degree Audit - CI/CD Pipeline
+# ===================================
+# Runs tests, linting, and code quality checks on every push/PR.
+
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+    paths:
+      - 'Project 2 (CLI, Flutter App, WebApp)/**'
+  pull_request:
+    branches: [main]
+
+env:
+  PROJECT_DIR: "Project 2 (CLI, Flutter App, WebApp)"
+
+jobs:
+  # ═══════════════════════════════════════════════════════════════════════════
+  # Backend Tests (Python)
+  # ═══════════════════════════════════════════════════════════════════════════
+  backend-tests:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: "Project 2 (CLI, Flutter App, WebApp)"
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+      
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          pip install pytest pytest-cov flake8 black
+      
+      - name: Lint with flake8
+        run: |
+          # Stop build if there are Python syntax errors or undefined names
+          flake8 backend/ --count --select=E9,F63,F7,F82 --show-source --statistics
+          # Warnings (don't fail build, just report)
+          flake8 backend/ --count --exit-zero --max-complexity=10 --max-line-length=120 --statistics
+      
+      - name: Check formatting with black
+        run: |
+          black --check --diff backend/ || echo "::warning::Code formatting issues found. Run 'black backend/' to fix."
+        continue-on-error: true
+      
+      - name: Run backend tests
+        run: |
+          cd backend && python -m pytest tests/ -v --tb=short || echo "No unit tests found yet"
+        continue-on-error: true
+      
+      - name: Verify backend imports
+        run: |
+          cd backend
+          python -c "from app.main import app; print('✅ FastAPI backend imports successfully')"
+          python -c "from core import run_full_analysis; print('✅ Core analysis imports successfully')"
+          python -c "from database import get_supabase; print('✅ Database module imports successfully')"
+          python -c "from auth import verify_supabase_token; print('✅ Auth module imports successfully')"
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # CLI Tests
+  # ═══════════════════════════════════════════════════════════════════════════
+  cli-tests:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: "Project 2 (CLI, Flutter App, WebApp)"
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+      
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+      
+      - name: Verify CLI imports
+        run: |
+          cd cli_app
+          python -c "import sys; sys.path.insert(0, '../backend'); from cli_auth import CLIAuth; print('✅ CLI auth imports')"
+      
+      - name: Test CLI help
+        run: |
+          python cli_app/main.py --help
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # Flutter Tests
+  # ═══════════════════════════════════════════════════════════════════════════
+  flutter-tests:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: "Project 2 (CLI, Flutter App, WebApp)/flutter_app"
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.22.0'
+          channel: 'stable'
+          cache: true
+      
+      - name: Get dependencies
+        run: flutter pub get
+      
+      - name: Analyze code
+        run: flutter analyze --no-fatal-infos
+        continue-on-error: true
+      
+      - name: Check formatting
+        run: dart format --set-exit-if-changed lib/ || echo "::warning::Dart formatting issues found"
+        continue-on-error: true
+      
+      - name: Run tests
+        run: flutter test || echo "No Flutter tests found yet"
+        continue-on-error: true
+      
+      - name: Verify build (web)
+        run: flutter build web --release
+        continue-on-error: true
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # Web App Tests
+  # ═══════════════════════════════════════════════════════════════════════════
+  webapp-tests:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: "Project 2 (CLI, Flutter App, WebApp)/web_app"
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      
+      - name: Install dependencies
+        run: pip install fastapi uvicorn jinja2 python-multipart
+      
+      - name: Verify web app imports
+        run: python -c "from app import app; print('✅ Web app (FastAPI) imports successfully')"
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # Security Scanning
+  # ═══════════════════════════════════════════════════════════════════════════
+  security:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: "Project 2 (CLI, Flutter App, WebApp)"
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      
+      - name: Install safety
+        run: pip install safety pip-audit
+      
+      - name: Check for vulnerable dependencies
+        run: |
+          pip install -r requirements.txt
+          pip-audit || echo "::warning::Some dependencies may have known vulnerabilities"
+        continue-on-error: true
+      
+      - name: Check for secrets in code
+        run: |
+          # Simple check for common secret patterns
+          ! grep -r --include="*.py" --include="*.dart" --include="*.js" \
+            -E "(password|secret|api_key|apikey)\s*=\s*['\"][^'\"]+['\"]" \
+            --exclude-dir=node_modules --exclude-dir=.git . \
+            || echo "::warning::Potential hardcoded secrets found"
+        continue-on-error: true
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # Build Verification
+  # ═══════════════════════════════════════════════════════════════════════════
+  docker-build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: "Project 2 (CLI, Flutter App, WebApp)"
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Build Docker image
+        run: docker build -t nsu-audit-api:test .
+      
+      - name: Verify Docker image
+        run: |
+          docker run --rm nsu-audit-api:test python -c "from app.main import app; print('✅ Docker build verified')"

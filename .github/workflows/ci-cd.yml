@@ -4,11 +4,11 @@ on:
   push:
     branches: [main]
     paths:
-      - 'Project 3 (CLI, Flutter App, WebApp)/**'
+      - 'Project 2 (CLI, Flutter App, WebApp)/**'
   pull_request:
     branches: [main]
     paths:
-      - 'Project 3 (CLI, Flutter App, WebApp)/**'
+      - 'Project 2 (CLI, Flutter App, WebApp)/**'
   workflow_dispatch:
 
 jobs:
@@ -19,7 +19,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: 'Project 3 (CLI, Flutter App, WebApp)'
+        working-directory: 'Project 2 (CLI, Flutter App, WebApp)'
     
     steps:
       - name: Checkout
@@ -73,7 +73,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: 'Project 3 (CLI, Flutter App, WebApp)'
+        working-directory: 'Project 2 (CLI, Flutter App, WebApp)'
     
     permissions:
       contents: read
