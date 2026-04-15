@@ -5,8 +5,10 @@ import 'package:flutter_animate/flutter_animate.dart';
 
 import '../models/analysis_model.dart';
 import '../models/course_model.dart';
+import '../services/auth_service.dart' hide ApiException;
 import '../services/api_service.dart';
 import '../widgets/glass_widgets.dart';
+import 'auth_screen.dart';
 
 class CoursesScreen extends StatefulWidget {
   const CoursesScreen({super.key});
@@ -24,6 +26,7 @@ class _CoursesScreenState extends State<CoursesScreen>
   AnalysisModel? _analysis;
   bool _isLoading = true;
   String? _error;
+  bool _isGuest = false;
 
   // ── Filter state ──
   String _searchQuery = '';
@@ -62,8 +65,19 @@ class _CoursesScreenState extends State<CoursesScreen>
   Future<void> _loadData() async {
     setState(() {
       _isLoading = true;
+      _isGuest = false;
       _error = null;
     });
+
+    if (authService.isGuestMode) {
+      setState(() {
+        _analysis = null;
+        _isGuest = true;
+        _isLoading = false;
+      });
+      return;
+    }
+
     try {
       final raw = await apiService.getAnalysis();
       if (!mounted) return;
@@ -84,6 +98,12 @@ class _CoursesScreenState extends State<CoursesScreen>
         _isLoading = false;
       });
     }
+  }
+
+  void _navigateToAuth() {
+    Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => const AuthScreen()),
+    );
   }
 
   // ─────────────────────────────────────────────
@@ -287,6 +307,10 @@ class _CoursesScreenState extends State<CoursesScreen>
                   sliver: SliverList(
                     delegate: SliverChildListDelegate(_buildShimmer()),
                   ),
+                )
+              else if (_isGuest)
+                SliverFillRemaining(
+                  child: _buildGuestState(),
                 )
               else if (_error != null)
                 SliverFillRemaining(
@@ -628,6 +652,19 @@ class _CoursesScreenState extends State<CoursesScreen>
         subtitle:
             'Upload your NSU transcript to see your course history here.',
         accent: const Color(0xFF818CF8),
+      );
+
+  Widget _buildGuestState() => EmptyState(
+        icon: Icons.lock_outline_rounded,
+        title: 'Guest mode is active',
+        subtitle: 'Sign in with Google to view your personalized course history.',
+        accent: kPrimary,
+        action: GradientButton(
+          label: 'Sign In with Google',
+          icon: Icons.login_rounded,
+          onPressed: _navigateToAuth,
+          width: 230,
+        ),
       );
 }
 

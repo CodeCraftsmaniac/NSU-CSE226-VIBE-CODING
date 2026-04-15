@@ -7,8 +7,10 @@ import 'package:percent_indicator/percent_indicator.dart';
 
 import '../models/analysis_model.dart';
 import '../models/course_model.dart';
+import '../services/auth_service.dart' hide ApiException;
 import '../services/api_service.dart';
 import '../widgets/glass_widgets.dart';
+import 'auth_screen.dart';
 import 'courses_screen.dart';
 import 'upload_screen.dart';
 
@@ -27,6 +29,7 @@ class _DashboardScreenState extends State<DashboardScreen>
   AnalysisModel? _analysis;
   bool _isLoading = true;
   String? _error;
+  bool _isGuest = false;
 
   @override
   void initState() {
@@ -37,8 +40,19 @@ class _DashboardScreenState extends State<DashboardScreen>
   Future<void> _loadAnalysis() async {
     setState(() {
       _isLoading = true;
+      _isGuest = false;
       _error = null;
     });
+
+    if (authService.isGuestMode) {
+      setState(() {
+        _analysis = null;
+        _isGuest = true;
+        _isLoading = false;
+      });
+      return;
+    }
+
     try {
       final raw = await apiService.getAnalysis();
       if (!mounted) return;
@@ -77,6 +91,12 @@ class _DashboardScreenState extends State<DashboardScreen>
     );
   }
 
+  void _navigateToAuth() {
+    Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => const AuthScreen()),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     super.build(context);
@@ -108,6 +128,8 @@ class _DashboardScreenState extends State<DashboardScreen>
                   delegate: SliverChildListDelegate(
                     _isLoading
                         ? _buildShimmer()
+                      : _isGuest
+                        ? [_buildGuestState()]
                         : _error != null
                             ? [_buildError()]
                             : _analysis == null
@@ -299,6 +321,23 @@ class _DashboardScreenState extends State<DashboardScreen>
             icon: Icons.upload_file_rounded,
             onPressed: _navigateToUpload,
             width: 220,
+          ),
+        ),
+      );
+
+  Widget _buildGuestState() => Padding(
+        padding: const EdgeInsets.only(top: 60),
+        child: EmptyState(
+          icon: Icons.lock_outline_rounded,
+          title: 'Guest mode is active',
+          subtitle:
+              'Sign in with Google to sync your profile and see your saved dashboard data.',
+          accent: kPrimary,
+          action: GradientButton(
+            label: 'Sign In with Google',
+            icon: Icons.login_rounded,
+            onPressed: _navigateToAuth,
+            width: 230,
           ),
         ),
       );

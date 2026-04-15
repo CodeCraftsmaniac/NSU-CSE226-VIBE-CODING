@@ -35,8 +35,8 @@ class _SplashScreenState extends State<SplashScreen> {
     Widget nextScreen;
     if (!hasCompletedOnboarding) {
       nextScreen = const OnboardingScreen();
-    } else if (authService.isAuthenticated) {
-      // User is already logged in — go straight to the main shell
+    } else if (authService.hasSession) {
+      // Authenticated or guest session — go straight to the main shell
       nextScreen = const MainShell();
     } else {
       // Not authenticated — show the single Google auth screen

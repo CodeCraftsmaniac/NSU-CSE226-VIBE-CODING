@@ -69,6 +69,36 @@ class _AuthScreenState extends State<AuthScreen>
     }
   }
 
+  Future<void> _handleGuestMode() async {
+    if (_isLoading) return;
+
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
+
+    try {
+      await authService.continueAsGuest();
+      if (!mounted) return;
+
+      Navigator.of(context).pushReplacement(
+        PageRouteBuilder(
+          pageBuilder: (_, animation, _) => const MainShell(),
+          transitionsBuilder: (_, animation, _, child) =>
+              FadeTransition(opacity: animation, child: child),
+          transitionDuration: const Duration(milliseconds: 500),
+        ),
+      );
+    } catch (_) {
+      if (mounted) {
+        setState(
+            () => _errorMessage = 'Could not start guest mode. Please try again.');
+      }
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final size = MediaQuery.of(context).size;
@@ -192,6 +222,16 @@ class _AuthScreenState extends State<AuthScreen>
                         .fadeIn(delay: 600.ms, duration: 500.ms)
                         .slideY(begin: 0.3, end: 0, duration: 500.ms, curve: Curves.easeOut),
 
+                    const SizedBox(height: 14),
+
+                    _GuestModeButton(
+                      isLoading: _isLoading,
+                      onPressed: _isLoading ? null : _handleGuestMode,
+                    )
+                        .animate()
+                        .fadeIn(delay: 650.ms, duration: 500.ms)
+                        .slideY(begin: 0.3, end: 0, duration: 500.ms, curve: Curves.easeOut),
+
                     const SizedBox(height: 20),
 
                     // ── Privacy note ──
@@ -305,6 +345,44 @@ class _AuthScreenState extends State<AuthScreen>
           curve: Curves.elasticOut,
         )
         .fadeIn(duration: 500.ms);
+  }
+}
+
+class _GuestModeButton extends StatelessWidget {
+  const _GuestModeButton({
+    required this.isLoading,
+    required this.onPressed,
+  });
+
+  final bool isLoading;
+  final VoidCallback? onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: double.infinity,
+      child: OutlinedButton.icon(
+        onPressed: onPressed,
+        icon: const Icon(Icons.person_outline_rounded, size: 20),
+        label: Text(
+          isLoading ? 'Please wait...' : 'Continue as Guest',
+          style: const TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.w600,
+            fontFamily: 'Outfit',
+          ),
+        ),
+        style: OutlinedButton.styleFrom(
+          minimumSize: const Size.fromHeight(54),
+          foregroundColor: kTextSecondary,
+          side: BorderSide(color: Colors.white.withValues(alpha: 0.24)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
+          ),
+          backgroundColor: Colors.white.withValues(alpha: 0.03),
+        ),
+      ),
+    );
   }
 }
 

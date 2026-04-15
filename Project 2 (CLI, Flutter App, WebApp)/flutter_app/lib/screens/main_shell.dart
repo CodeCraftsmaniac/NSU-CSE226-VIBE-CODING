@@ -118,21 +118,32 @@ class _MainShellState extends State<MainShell>
     if (confirm == true && mounted) {
       await authService.logout();
       if (!mounted) return;
-      Navigator.of(context).pushAndRemoveUntil(
-        PageRouteBuilder(
-          pageBuilder: (_, animation, _) => const AuthScreen(),
-          transitionsBuilder: (_, animation, _, child) =>
-              FadeTransition(opacity: animation, child: child),
-          transitionDuration: const Duration(milliseconds: 500),
-        ),
-        (_) => false,
-      );
+      _navigateToAuthScreen();
     }
+  }
+
+  Future<void> _handleExitGuestMode() async {
+    await authService.exitGuestMode();
+    if (!mounted) return;
+    _navigateToAuthScreen();
+  }
+
+  void _navigateToAuthScreen() {
+    Navigator.of(context).pushAndRemoveUntil(
+      PageRouteBuilder(
+        pageBuilder: (_, animation, _) => const AuthScreen(),
+        transitionsBuilder: (_, animation, _, child) =>
+            FadeTransition(opacity: animation, child: child),
+        transitionDuration: const Duration(milliseconds: 500),
+      ),
+      (_) => false,
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     final user = authService.currentUser;
+    final isGuest = authService.isGuestMode;
 
     return ChangeNotifierProvider.value(
       value: authService,
@@ -196,59 +207,115 @@ class _MainShellState extends State<MainShell>
                 borderRadius: BorderRadius.circular(16),
                 side: const BorderSide(color: kBorder),
               ),
-              itemBuilder: (ctx) => [
-                PopupMenuItem(
-                  enabled: false,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        user?.displayName ?? 'Student',
-                        style: const TextStyle(
-                            color: kTextPrimary,
-                            fontWeight: FontWeight.w700,
-                            fontSize: 14),
+              itemBuilder: (ctx) {
+                if (isGuest) {
+                  return [
+                    const PopupMenuItem(
+                      enabled: false,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Guest Mode',
+                            style: TextStyle(
+                              color: kTextPrimary,
+                              fontWeight: FontWeight.w700,
+                              fontSize: 14,
+                            ),
+                          ),
+                          Text(
+                            'Sign in to sync history and profile',
+                            style: TextStyle(color: kTextSecondary, fontSize: 12),
+                          ),
+                        ],
                       ),
-                      Text(
-                        user?.email ?? '',
-                        style: const TextStyle(
-                            color: kTextSecondary, fontSize: 12),
+                    ),
+                    const PopupMenuDivider(),
+                    const PopupMenuItem(
+                      value: 'signin',
+                      child: Row(
+                        children: [
+                          Icon(Icons.login_rounded, color: kPrimary, size: 18),
+                          SizedBox(width: 12),
+                          Text(
+                            'Sign In with Google',
+                            style: TextStyle(color: kTextPrimary, fontSize: 14),
+                          ),
+                        ],
                       ),
-                    ],
+                    ),
+                    const PopupMenuItem(
+                      value: 'exit_guest',
+                      child: Row(
+                        children: [
+                          Icon(Icons.logout_rounded, color: kError, size: 18),
+                          SizedBox(width: 12),
+                          Text(
+                            'Exit Guest Mode',
+                            style: TextStyle(color: kError, fontSize: 14),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ];
+                }
+
+                return [
+                  PopupMenuItem(
+                    enabled: false,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          user?.displayName ?? 'Student',
+                          style: const TextStyle(
+                              color: kTextPrimary,
+                              fontWeight: FontWeight.w700,
+                              fontSize: 14),
+                        ),
+                        Text(
+                          user?.email ?? '',
+                          style: const TextStyle(
+                              color: kTextSecondary, fontSize: 12),
+                        ),
+                      ],
+                    ),
                   ),
-                ),
-                const PopupMenuDivider(),
-                const PopupMenuItem(
-                  value: 'profile',
-                  child: Row(
-                    children: [
-                      Icon(Icons.person_outline_rounded,
-                          color: kTextSecondary, size: 18),
-                      SizedBox(width: 12),
-                      Text('Profile',
-                          style: TextStyle(color: kTextPrimary, fontSize: 14)),
-                    ],
+                  const PopupMenuDivider(),
+                  const PopupMenuItem(
+                    value: 'profile',
+                    child: Row(
+                      children: [
+                        Icon(Icons.person_outline_rounded,
+                            color: kTextSecondary, size: 18),
+                        SizedBox(width: 12),
+                        Text('Profile',
+                            style: TextStyle(color: kTextPrimary, fontSize: 14)),
+                      ],
+                    ),
                   ),
-                ),
-                const PopupMenuItem(
-                  value: 'logout',
-                  child: Row(
-                    children: [
-                      Icon(Icons.logout_rounded, color: kError, size: 18),
-                      SizedBox(width: 12),
-                      Text('Sign Out',
-                          style: TextStyle(color: kError, fontSize: 14)),
-                    ],
+                  const PopupMenuItem(
+                    value: 'logout',
+                    child: Row(
+                      children: [
+                        Icon(Icons.logout_rounded, color: kError, size: 18),
+                        SizedBox(width: 12),
+                        Text('Sign Out',
+                            style: TextStyle(color: kError, fontSize: 14)),
+                      ],
+                    ),
                   ),
-                ),
-              ],
+                ];
+              },
               onSelected: (value) {
                 if (value == 'logout') _handleLogout();
+                if (value == 'signin') _navigateToAuthScreen();
+                if (value == 'exit_guest') _handleExitGuestMode();
               },
               child: Padding(
                 padding: const EdgeInsets.only(right: 16),
                 child: _UserAvatar(
-                  name: user?.displayName ?? '?',
+                  name: isGuest ? 'Guest' : user?.displayName ?? '?',
                 ),
               ),
             ),

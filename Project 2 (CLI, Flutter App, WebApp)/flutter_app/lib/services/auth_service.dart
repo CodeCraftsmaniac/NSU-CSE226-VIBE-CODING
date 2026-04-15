@@ -4,6 +4,7 @@ import 'dart:developer' as developer;
 import 'package:flutter/foundation.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../models/user_model.dart';
@@ -36,6 +37,9 @@ class AuthService extends ChangeNotifier {
   bool _isLoading = false;
   bool _authConfigFetched = false;
   bool _supabaseInitialized = false;
+  bool _guestMode = false;
+
+  static const String _guestModePrefKey = 'guest_mode';
 
   static const String _apiBaseUrl = String.fromEnvironment(
     'API_BASE_URL',
@@ -61,12 +65,24 @@ class AuthService extends ChangeNotifier {
   String _supabaseAnonKey = _defaultSupabaseAnonKey;
 
   bool get isAuthenticated => _currentUser != null;
+  bool get isGuestMode => _guestMode && !isAuthenticated;
+  bool get hasSession => isAuthenticated || isGuestMode;
   bool get initialized => _initialized;
   bool get isLoading => _isLoading;
   UserModel? get currentUser => _currentUser;
 
   Future<void> initialize() async {
     try {
+      _guestMode = await _readGuestModeFromPrefs();
+      if (_guestMode) {
+        _currentUser = null;
+        apiService.setToken(null);
+        await storageService.clear();
+        developer.log('Guest mode restored from previous session.',
+            name: 'AuthService');
+        return;
+      }
+
       var restoredFromSupabase = false;
 
       final providerError = await _ensureAuthProvidersReady();
@@ -118,6 +134,10 @@ class AuthService extends ChangeNotifier {
           );
         }
       }
+
+      if (_currentUser != null) {
+        await _setGuestMode(false);
+      }
     } catch (e) {
       developer.log('Session restore failed: $e', name: 'AuthService');
       await storageService.clear();
@@ -128,6 +148,10 @@ class AuthService extends ChangeNotifier {
   }
 
   Future<String?> signInWithGoogle() async {
+    if (_isLoading) {
+      return 'Sign-in is already in progress. Please wait a moment.';
+    }
+
     _isLoading = true;
     notifyListeners();
 
@@ -137,14 +161,71 @@ class AuthService extends ChangeNotifier {
         return configError;
       }
 
+      final primaryClientId = _googleWebClientId.trim().isNotEmpty
+          ? _googleWebClientId.trim()
+          : _defaultGoogleWebClientId.trim();
+      final fallbackClientId = _defaultGoogleWebClientId.trim();
+      final attemptedClientIds = <String>{};
+
+      String? lastError;
+      for (final clientId in [primaryClientId, fallbackClientId]) {
+        if (clientId.isEmpty || attemptedClientIds.contains(clientId)) {
+          continue;
+        }
+
+        attemptedClientIds.add(clientId);
+        final result = await _signInWithClientId(clientId);
+        if (result.error == null) {
+          if (result.authenticated) {
+            _googleWebClientId = clientId;
+            await _setGuestMode(false);
+          }
+          return null;
+        }
+
+        lastError = result.error;
+        if (!result.retryWithDefaultClient) {
+          break;
+        }
+      }
+
+      return lastError ?? 'Google sign-in failed. Please try again.';
+    } on AuthException catch (e) {
+      developer.log('Google sign-in AuthException: ${e.message}',
+          name: 'AuthService');
+      return _friendlyGoogleError(e.message);
+    } catch (e, st) {
+      developer.log('signInWithGoogle unexpected error: $e',
+          name: 'AuthService', stackTrace: st);
+      return _friendlyGoogleRuntimeError(e.toString());
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  Future<_GoogleSignInResult> _signInWithClientId(String clientId) async {
+    try {
       final googleSignIn = GoogleSignIn(
-        serverClientId: _googleWebClientId.isEmpty ? null : _googleWebClientId,
+        serverClientId: clientId,
         scopes: const ['email', 'profile'],
       );
 
+      try {
+        if (await googleSignIn.isSignedIn()) {
+          await googleSignIn.signOut();
+        }
+      } catch (e) {
+        developer.log('Pre-sign-in Google session reset skipped: $e',
+            name: 'AuthService');
+      }
+
       final googleUser = await googleSignIn.signIn();
       if (googleUser == null) {
-        return null;
+        return const _GoogleSignInResult(
+          error: null,
+          authenticated: false,
+        );
       }
 
       final googleAuth = await googleUser.authentication;
@@ -152,7 +233,9 @@ class AuthService extends ChangeNotifier {
       final accessToken = googleAuth.accessToken;
 
       if (idToken == null || idToken.isEmpty) {
-        return 'Google sign-in failed: could not get ID token.';
+        return const _GoogleSignInResult(
+          error: 'Google sign-in failed: could not get ID token.',
+        );
       }
 
       final response = await Supabase.instance.client.auth.signInWithIdToken(
@@ -161,13 +244,23 @@ class AuthService extends ChangeNotifier {
         accessToken: accessToken,
       );
 
-      final session =
+      Session? session =
           response.session ?? Supabase.instance.client.auth.currentSession;
-      final supabaseUser =
+      User? supabaseUser =
           response.user ?? Supabase.instance.client.auth.currentUser;
 
       if (session == null || supabaseUser == null) {
-        return 'Google sign-in failed. Please try again.';
+        for (var i = 0; i < 3 && (session == null || supabaseUser == null); i++) {
+          await Future<void>.delayed(const Duration(milliseconds: 300));
+          session ??= Supabase.instance.client.auth.currentSession;
+          supabaseUser ??= Supabase.instance.client.auth.currentUser;
+        }
+      }
+
+      if (session == null || supabaseUser == null) {
+        return const _GoogleSignInResult(
+          error: 'Google sign-in failed. Could not create a secure session.',
+        );
       }
 
       final userJson = await _resolveAuthenticatedUser(
@@ -176,43 +269,57 @@ class AuthService extends ChangeNotifier {
         googleUser: googleUser,
       );
 
-      await storageService.saveToken(session.accessToken);
-      await storageService.saveUser(userJson);
-      apiService.setToken(session.accessToken);
-
       _currentUser = UserModel.fromJson(userJson);
+      apiService.setToken(session.accessToken);
+      await _persistSessionSafely(
+        token: session.accessToken,
+        userJson: userJson,
+      );
       notifyListeners();
 
       developer.log(
         'Native Google auth success for ${_currentUser?.email}',
         name: 'AuthService',
       );
-      return null;
-    } on AuthException catch (e) {
-      developer.log('Google sign-in AuthException: ${e.message}',
-          name: 'AuthService');
-      return _friendlyGoogleError(e.message);
-    } catch (e) {
+      return const _GoogleSignInResult(
+        error: null,
+        authenticated: true,
+      );
+    } catch (e, st) {
       final err = e.toString();
-      if (err.contains('ApiException: 10') || err.contains('DEVELOPER_ERROR')) {
-        return 'Google Sign-In configuration error (code 10). '
-            'Verify Android package and SHA-1 fingerprint in Google Cloud credentials.';
-      }
-      if (err.contains('ApiException: 12501') ||
-          err.contains('SIGN_IN_CANCELLED')) {
-        return null;
-      }
-      if (err.contains('ApiException: 7') || err.contains('NETWORK_ERROR')) {
-        return 'Network error. Check your internet connection and try again.';
-      }
-
-      developer.log('signInWithGoogle unexpected error: $e',
-          name: 'AuthService');
-      return 'Unexpected error during sign-in. Please try again.';
-    } finally {
-      _isLoading = false;
-      notifyListeners();
+      developer.log('Google sign-in failed for client ID $clientId: $err',
+          name: 'AuthService', stackTrace: st);
+      return _GoogleSignInResult(
+        error: _friendlyGoogleRuntimeError(err),
+        retryWithDefaultClient: _shouldRetryWithDefaultClient(err, clientId),
+      );
     }
+  }
+
+  Future<void> _persistSessionSafely({
+    required String token,
+    required Map<String, dynamic> userJson,
+  }) async {
+    try {
+      await storageService.saveToken(token);
+      await storageService.saveUser(userJson);
+    } catch (e) {
+      developer.log('Session persistence skipped: $e', name: 'AuthService');
+    }
+  }
+
+  bool _shouldRetryWithDefaultClient(String error, String attemptedClientId) {
+    if (attemptedClientId == _defaultGoogleWebClientId.trim()) {
+      return false;
+    }
+
+    final msg = error.toLowerCase();
+    return msg.contains('developer_error') ||
+        msg.contains('apiexception: 10') ||
+        msg.contains('12500') ||
+        msg.contains('invalid_audience') ||
+        msg.contains('id token') ||
+        msg.contains('oauth');
   }
 
   Future<Map<String, dynamic>> _resolveAuthenticatedUser({
@@ -359,7 +466,8 @@ class AuthService extends ChangeNotifier {
       if (remoteSupabaseKey.isNotEmpty) {
         _supabaseAnonKey = remoteSupabaseKey;
       }
-      if (remoteGoogleClientId.isNotEmpty) {
+      if (_googleWebClientId.isEmpty &&
+          _isLikelyGoogleClientId(remoteGoogleClientId)) {
         _googleWebClientId = remoteGoogleClientId;
       }
 
@@ -369,6 +477,11 @@ class AuthService extends ChangeNotifier {
     } catch (e) {
       developer.log('Failed to fetch auth config: $e', name: 'AuthService');
     }
+  }
+
+  bool _isLikelyGoogleClientId(String value) {
+    final trimmed = value.trim();
+    return trimmed.contains('.apps.googleusercontent.com');
   }
 
   String _pickString(Map<String, dynamic> source, List<String> keys) {
@@ -393,6 +506,89 @@ class AuthService extends ChangeNotifier {
       return 'Google sign-in is not enabled for this project.';
     }
     return 'Google sign-in failed. Please try again.';
+  }
+
+  String _friendlyGoogleRuntimeError(String message) {
+    final msg = message.toLowerCase();
+
+    if (msg.contains('apiexception: 10') || msg.contains('developer_error')) {
+      return 'Google Sign-In configuration error (code 10). '
+          'Please verify package name and SHA-1 in Google Cloud credentials.';
+    }
+    if (msg.contains('apiexception: 12501') ||
+        msg.contains('apiexception: 12502') ||
+        msg.contains('sign_in_cancelled')) {
+      return 'Google sign-in was cancelled.';
+    }
+    if (msg.contains('apiexception: 7') || msg.contains('network_error')) {
+      return 'Network error. Check your internet connection and try again.';
+    }
+    if (msg.contains('apiexception: 16') ||
+        msg.contains('sign_in_required') ||
+        msg.contains('google play services')) {
+      return 'Google Play Services is unavailable. Update Play Services and try again.';
+    }
+    if (msg.contains('encryptedsharedpreferences') ||
+        msg.contains('keystore') ||
+        msg.contains('flutter_secure_storage')) {
+      return 'Sign-in succeeded but secure session storage failed. '
+          'Restart the app and try again.';
+    }
+
+    return 'Unexpected error during sign-in. Please try again.';
+  }
+
+  Future<bool> _readGuestModeFromPrefs() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      return prefs.getBool(_guestModePrefKey) ?? false;
+    } catch (e) {
+      developer.log('Failed to read guest mode preference: $e',
+          name: 'AuthService');
+      return false;
+    }
+  }
+
+  Future<void> _setGuestMode(bool enabled) async {
+    _guestMode = enabled;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool(_guestModePrefKey, enabled);
+    } catch (e) {
+      developer.log('Failed to persist guest mode preference: $e',
+          name: 'AuthService');
+    }
+  }
+
+  Future<void> continueAsGuest() async {
+    if (_isLoading) {
+      return;
+    }
+
+    _isLoading = true;
+    notifyListeners();
+
+    try {
+      await _setGuestMode(true);
+      _currentUser = null;
+      apiService.setToken(null);
+
+      await _signOutProvidersSafely();
+      await storageService.clear();
+      developer.log('Guest mode enabled.', name: 'AuthService');
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> exitGuestMode() async {
+    if (!_guestMode) {
+      return;
+    }
+
+    await _setGuestMode(false);
+    notifyListeners();
   }
 
   Future<void> trySilentSignIn() async {
@@ -541,26 +737,12 @@ class AuthService extends ChangeNotifier {
     notifyListeners();
 
     try {
-      try {
-        final googleSignIn = GoogleSignIn(
-          serverClientId: _googleWebClientId.isEmpty ? null : _googleWebClientId,
-        );
-        if (await googleSignIn.isSignedIn()) {
-          await googleSignIn.signOut();
-        }
-      } catch (e) {
-        developer.log('Google sign-out skipped: $e', name: 'AuthService');
-      }
-
-      try {
-        await Supabase.instance.client.auth.signOut();
-      } catch (e) {
-        developer.log('Supabase sign-out skipped: $e', name: 'AuthService');
-      }
+      await _signOutProvidersSafely();
 
       await storageService.clear();
       apiService.setToken(null);
       _currentUser = null;
+      await _setGuestMode(false);
       developer.log('User signed out.', name: 'AuthService');
     } catch (e) {
       developer.log('Logout error: $e', name: 'AuthService');
@@ -570,6 +752,39 @@ class AuthService extends ChangeNotifier {
       notifyListeners();
     }
   }
+
+  Future<void> _signOutProvidersSafely() async {
+    try {
+      final googleSignIn = GoogleSignIn(
+        serverClientId: _googleWebClientId.isEmpty ? null : _googleWebClientId,
+      );
+      if (await googleSignIn.isSignedIn()) {
+        await googleSignIn.signOut();
+      }
+    } catch (e) {
+      developer.log('Google sign-out skipped: $e', name: 'AuthService');
+    }
+
+    if (_supabaseInitialized) {
+      try {
+        await Supabase.instance.client.auth.signOut();
+      } catch (e) {
+        developer.log('Supabase sign-out skipped: $e', name: 'AuthService');
+      }
+    }
+  }
 }
 
 final authService = AuthService();
+
+class _GoogleSignInResult {
+  const _GoogleSignInResult({
+    required this.error,
+    this.authenticated = false,
+    this.retryWithDefaultClient = false,
+  });
+
+  final String? error;
+  final bool authenticated;
+  final bool retryWithDefaultClient;
+}
