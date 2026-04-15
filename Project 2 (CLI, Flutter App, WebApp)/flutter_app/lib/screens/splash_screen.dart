@@ -3,10 +3,10 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../widgets/glass_widgets.dart';
-import '../services/supabase_service.dart';
+import '../services/auth_service.dart';
 import 'onboarding_screen.dart';
 import 'auth_screen.dart';
-import 'home_screen.dart';
+import 'main_shell.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -35,11 +35,11 @@ class _SplashScreenState extends State<SplashScreen> {
     Widget nextScreen;
     if (!hasCompletedOnboarding) {
       nextScreen = const OnboardingScreen();
-    } else if (authService.hasSession) {
-      // User is authenticated or chose guest mode previously
-      nextScreen = const HomeScreen();
+    } else if (authService.isAuthenticated) {
+      // User is already logged in — go straight to the main shell
+      nextScreen = const MainShell();
     } else {
-      // Show auth screen
+      // Not authenticated — show the single Google auth screen
       nextScreen = const AuthScreen();
     }
 

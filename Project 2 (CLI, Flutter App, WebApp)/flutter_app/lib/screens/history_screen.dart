@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 
 import '../services/supabase_service.dart';
@@ -434,9 +434,9 @@ class _HistoryScreenState extends State<HistoryScreen> {
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                         decoration: BoxDecoration(
-                          color: _getCgpaColor(cgpa).withOpacity(0.1),
+                          color: _getCgpaColor(cgpa).withValues(alpha: 0.1),
                           borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: _getCgpaColor(cgpa).withOpacity(0.3)),
+                          border: Border.all(color: _getCgpaColor(cgpa).withValues(alpha: 0.3)),
                         ),
                         child: Text(
                           cgpa.toStringAsFixed(2),
@@ -515,7 +515,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
+        color: color.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(4),
       ),
       child: Row(

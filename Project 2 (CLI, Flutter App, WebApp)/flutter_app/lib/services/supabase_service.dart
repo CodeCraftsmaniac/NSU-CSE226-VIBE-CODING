@@ -1,11 +1,12 @@
 /// NSU Degree Audit - Supabase Service
 /// ====================================
 /// Handles authentication and database operations via backend API.
+library;
 
 import 'dart:convert';
 import 'dart:developer' as developer;
 import 'package:http/http.dart' as http;
-import 'package:google_sign_in/google_sign_in.dart';
+
 import 'package:shared_preferences/shared_preferences.dart';
 
 // Backend API URL
@@ -15,14 +16,14 @@ const String apiBaseUrl = 'https://ocrapi.nsunexus.app';
 class ApiException implements Exception {
   final String message;
   final int? statusCode;
-  
+
   ApiException(this.message, [this.statusCode]);
-  
+
   @override
-  String toString() => statusCode != null 
-      ? 'ApiException($statusCode): $message' 
+  String toString() => statusCode != null
+      ? 'ApiException($statusCode): $message'
       : 'ApiException: $message';
-  
+
   bool get isNetworkError => statusCode == null;
   bool get isAuthError => statusCode == 401 || statusCode == 403;
   bool get isServerError => statusCode != null && statusCode! >= 500;
@@ -36,9 +37,6 @@ class AuthService {
   String? _sessionToken;
   Map<String, dynamic>? _currentUser;
   bool _isGuestMode = false;
-  final GoogleSignIn _googleSignIn = GoogleSignIn(
-    scopes: ['email', 'profile'],
-  );
 
   /// Check if user is authenticated
   bool get isAuthenticated => _sessionToken != null && _currentUser != null;
@@ -93,44 +91,13 @@ class AuthService {
     _isGuestMode = false;
   }
 
-  /// Sign in with Google - returns success boolean
+  /// Sign in with Google - disabled (google_sign_in package removed)
   Future<bool> signInWithGoogle() async {
-    try {
-      final GoogleSignInAccount? googleUser = await _googleSignIn.signIn();
-      if (googleUser == null) {
-        return false; // User cancelled
-      }
-
-      // Call backend to create/get user
-      final response = await http.post(
-        Uri.parse('$apiBaseUrl/auth/google'),
-        headers: {'Content-Type': 'application/json'},
-        body: json.encode({
-          'email': googleUser.email,
-          'name': googleUser.displayName ?? '',
-          'avatar_url': googleUser.photoUrl,
-        }),
-      );
-
-      final data = json.decode(response.body);
-
-      if (data['success'] == true) {
-        _currentUser = data['user'];
-        _sessionToken = data['token'];
-        _isGuestMode = false;
-        await _saveSession();
-        return true;
-      }
-
-      return false;
-    } catch (e) {
-      return false;
-    }
+    return false;
   }
 
   /// Sign out
   Future<void> signOut() async {
-    await _googleSignIn.signOut();
     _sessionToken = null;
     _currentUser = null;
     await _clearSession();
@@ -164,7 +131,7 @@ class AuthService {
         developer.log('History: Auth token expired or invalid', name: 'AuthService');
         throw ApiException('Session expired. Please sign in again.', 401);
       }
-      
+
       if (response.statusCode != 200) {
         developer.log('History failed: ${response.statusCode}', name: 'AuthService');
         throw ApiException('Failed to load history', response.statusCode);
@@ -202,12 +169,12 @@ class AuthService {
         developer.log('Scan details: Auth token expired', name: 'AuthService');
         throw ApiException('Session expired. Please sign in again.', 401);
       }
-      
+
       if (response.statusCode == 404) {
         developer.log('Scan not found: $scanId', name: 'AuthService');
         throw ApiException('Scan not found', 404);
       }
-      
+
       if (response.statusCode != 200) {
         throw ApiException('Failed to load scan details', response.statusCode);
       }
@@ -244,7 +211,7 @@ class AuthService {
         developer.log('Delete scan: Auth token expired', name: 'AuthService');
         throw ApiException('Session expired. Please sign in again.', 401);
       }
-      
+
       if (response.statusCode == 404) {
         throw ApiException('Scan not found or already deleted', 404);
       }
@@ -284,4 +251,3 @@ class AuthService {
 
 /// Global instance
 final authService = AuthService();
-

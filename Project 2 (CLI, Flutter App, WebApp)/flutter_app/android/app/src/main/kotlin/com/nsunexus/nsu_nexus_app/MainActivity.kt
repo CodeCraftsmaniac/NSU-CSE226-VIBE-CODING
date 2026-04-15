@@ -1,4 +1,4 @@
-package com.codecraftsmaniac.flutter_app
+package com.nsunexus.nsu_nexus_app
 
 import io.flutter.embedding.android.FlutterActivity
 

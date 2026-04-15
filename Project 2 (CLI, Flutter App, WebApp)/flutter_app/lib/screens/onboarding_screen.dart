@@ -216,8 +216,8 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                                 ),
                                 const SizedBox(width: 8),
                                 Icon(
-                                  _currentPage == _pages.length - 1 
-                                      ? Icons.rocket_launch 
+                                  _currentPage == _pages.length - 1
+                                      ? Icons.rocket_launch
                                       : Icons.arrow_forward,
                                   color: const Color(0xFF0A1628),
                                   size: 20,

@@ -464,41 +464,53 @@ async def verify_device_code(request: Request, verify_data: DeviceVerifyRequest)
     if not verify_data.access_token or not verify_data.user:
         raise HTTPException(status_code=400, detail="Missing token or user data")
     
-    # Get or create user in our database
-    user_data = verify_data.user
-    email = user_data.get('email')
-    name = (user_data.get('user_metadata', {}).get('full_name', '') or 
-            user_data.get('user_metadata', {}).get('name', ''))
-    
-    if DB_MODULE_AVAILABLE and email and create_user:
+    # Verify Supabase access token before accepting device verification.
+    try:
+        from auth import verify_supabase_token
+        verified_user = verify_supabase_token(verify_data.access_token)
+    except Exception as e:
+        logger.warning(f"Device verify: token verification import failed: {e}")
+        verified_user = None
+
+    if not verified_user:
+        raise HTTPException(status_code=401, detail="Invalid access token")
+
+    raw_user = verify_data.user if isinstance(verify_data.user, dict) else {}
+    user_metadata = raw_user.get('user_metadata', {}) if isinstance(raw_user.get('user_metadata', {}), dict) else {}
+
+    email = verified_user.get('email') or raw_user.get('email')
+    if not email:
+        raise HTTPException(status_code=400, detail="User email is missing")
+
+    name = (
+        verified_user.get('name')
+        or user_metadata.get('full_name', '')
+        or user_metadata.get('name', '')
+    )
+    avatar_url = (
+        verified_user.get('avatar_url')
+        or user_metadata.get('avatar_url', '')
+        or user_metadata.get('picture', '')
+    )
+
+    db_user_id = None
+    if DB_MODULE_AVAILABLE and create_user:
         db_user = create_user(email=email, name=name, provider='google')
         if db_user:
-            user_data['db_id'] = db_user['id']
-    
-    # Generate our own token for CLI
-    SECRET_KEY = get_secret_key()
-    
-    payload = {
-        'user_id': user_data.get('db_id') or user_data.get('id'),
-        'email': email,
-        'exp': int(time.time()) + (30 * 24 * 3600)  # 30 days
-    }
-    
-    payload_bytes = base64.urlsafe_b64encode(json.dumps(payload).encode()).decode()
-    signature = hmac.new(SECRET_KEY, payload_bytes.encode(), hashlib.sha256).hexdigest()
-    cli_token = f"{payload_bytes}.{signature}"
-    
-    # Mark code as complete
+            db_user_id = db_user.get('id')
+
+    # Mark code as complete. We return the verified Supabase access token so
+    # mobile/CLI use the same auth token type as the web app.
     _device_codes[device_code] = {
         'status': 'complete',
-        'token': cli_token,
+        'token': verify_data.access_token,
         'user': {
-            'id': user_data.get('id'),
-            'db_id': user_data.get('db_id'),
+            'id': verified_user.get('id') or raw_user.get('id'),
+            'db_id': db_user_id,
             'email': email,
             'name': name,
-            'avatar_url': user_data.get('user_metadata', {}).get('avatar_url', ''),
-            'provider': 'google'
+            'avatar_url': avatar_url,
+            'provider': verified_user.get('provider', 'google')
         },
         'expires_at': code_data['expires_at']
     }

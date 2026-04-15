@@ -37,7 +37,7 @@ enum UploadStage { idle, uploading, ready, failure }
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key, this.initialData});
-  
+
   /// Optional initial data from history screen
   final Map<String, dynamic>? initialData;
 
@@ -72,7 +72,7 @@ class _HomeScreenState extends State<HomeScreen> {
   void initState() {
     super.initState();
     endpointController = TextEditingController(text: apiBaseUrl);
-    
+
     // Load initial data from history if provided
     if (widget.initialData != null) {
       data = widget.initialData;
@@ -90,16 +90,16 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<void> _handleGoogleSignIn() async {
     if (_isSigningIn) return;
-    
+
     setState(() => _isSigningIn = true);
-    
+
     try {
-      final user = await authService.signInWithGoogle();
-      if (user != null && mounted) {
+      final success = await authService.signInWithGoogle();
+      if (success && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Welcome, ${user['name'] ?? user['email']}!'),
-            backgroundColor: const Color(0xFF0066CC),
+          const SnackBar(
+            content: Text('Signed in successfully!'),
+            backgroundColor: Color(0xFF0066CC),
           ),
         );
       }
