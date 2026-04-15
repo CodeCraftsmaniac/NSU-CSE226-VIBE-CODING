@@ -8,7 +8,7 @@
     "dev": "node server.js"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.26.0",
+    "@modelcontextprotocol/sdk": "^1.29.0",
     "axios": "^1.6.0"
   },
   "keywords": ["mcp", "nsu", "degree-audit", "transcript", "ocr"],
