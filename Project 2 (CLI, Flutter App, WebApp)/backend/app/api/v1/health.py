@@ -1,20 +1,19 @@
 """
 Health Check Endpoints
 ======================
-Liveness and readiness probes for container orchestration.
-Premium health endpoint with detailed system info.
-Real-time health monitoring for dashboard.
+Production-grade health monitoring with real metrics.
+Layer-by-layer health: Backend, Database, OCR engines.
+Lightweight /health/realtime excludes its own requests from counters.
 """
 import os
 import sys
 import time
 import platform
 import logging
-import asyncio
 from datetime import datetime, timezone
 from pathlib import Path
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
 from app.config import get_settings
@@ -23,51 +22,62 @@ router = APIRouter()
 logger = logging.getLogger(__name__)
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# Startup time tracking for accurate uptime
+# Accurate Metrics Tracking
 # ═══════════════════════════════════════════════════════════════════════════════
 _STARTUP_TIME = time.monotonic()
 _STARTUP_TIMESTAMP = datetime.now(timezone.utc)
-_REQUEST_COUNT = 0
+
+# Separate counters: user requests vs health check requests
+_USER_REQUEST_COUNT = 0
+_HEALTH_CHECK_COUNT = 0
 _ERROR_COUNT = 0
 
-def increment_request_count():
-    """Called from middleware to track request count."""
-    global _REQUEST_COUNT
-    _REQUEST_COUNT += 1
+# Cached DB latency (don't hammer DB on every 2s poll)
+_cached_db_latency = -1.0
+_cached_db_connected = False
+_db_cache_time = 0.0
+_DB_CACHE_TTL = 8.0  # Re-check DB every 8 seconds
+
+# Health check paths to exclude from user request count
+_HEALTH_PATHS = {'/health', '/health/', '/health/realtime', '/health/live', '/health/ready'}
+
+
+def count_request(path: str):
+    """Called from middleware. Separates user requests from health checks."""
+    global _USER_REQUEST_COUNT, _HEALTH_CHECK_COUNT
+    # Normalize path
+    clean = path.rstrip('/').lower()
+    if clean.startswith('/health'):
+        _HEALTH_CHECK_COUNT += 1
+    else:
+        _USER_REQUEST_COUNT += 1
+
 
 def increment_error_count():
-    """Called from middleware to track error count."""
+    """Called from exception handler."""
     global _ERROR_COUNT
     _ERROR_COUNT += 1
 
-# Lazy settings loading
-_settings = None
 
+# Lazy settings
+_settings = None
 def get_settings_safe():
-    """Get settings with fallback for missing config."""
     global _settings
     if _settings is None:
         try:
             _settings = get_settings()
-        except Exception as e:
-            logger.warning(f"Could not load settings: {e}")
+        except Exception:
             _settings = None
     return _settings
 
-# Database check function - lazy loaded
-def check_db_connection():
-    """Check database connection with lazy import."""
-    try:
-        backend_path = str(Path(__file__).parent.parent.parent.parent)
-        if backend_path not in sys.path:
-            sys.path.insert(0, backend_path)
-        from database import check_db_connection as _check_db
-        return _check_db()
-    except Exception:
-        return False
 
-def _measure_db_latency():
-    """Measure database round-trip latency in ms."""
+def _check_db():
+    """Check database connection (cached)."""
+    global _cached_db_connected, _cached_db_latency, _db_cache_time
+    now = time.monotonic()
+    if now - _db_cache_time < _DB_CACHE_TTL:
+        return _cached_db_connected, _cached_db_latency
+    
     try:
         backend_path = str(Path(__file__).parent.parent.parent.parent)
         if backend_path not in sys.path:
@@ -75,15 +85,28 @@ def _measure_db_latency():
         from database import get_supabase
         supabase = get_supabase()
         if not supabase:
-            return -1
+            _cached_db_connected = False
+            _cached_db_latency = -1
+            _db_cache_time = now
+            return False, -1
+        
         start = time.monotonic()
         supabase.table('cse226_ocr_users').select('id').limit(1).execute()
-        return round((time.monotonic() - start) * 1000, 1)
-    except Exception:
-        return -1
+        latency = round((time.monotonic() - start) * 1000, 1)
+        
+        _cached_db_connected = True
+        _cached_db_latency = latency
+        _db_cache_time = now
+        return True, latency
+    except Exception as e:
+        logger.warning(f"DB health check failed: {e}")
+        _cached_db_connected = False
+        _cached_db_latency = -1
+        _db_cache_time = now
+        return False, -1
+
 
 def _format_uptime(seconds):
-    """Format seconds into human-readable uptime string."""
     days = int(seconds // 86400)
     hours = int((seconds % 86400) // 3600)
     minutes = int((seconds % 3600) // 60)
@@ -99,7 +122,25 @@ def _format_uptime(seconds):
     return " ".join(parts)
 
 
-# Knowledge base path
+def _get_memory_mb():
+    """Get process memory usage in MB."""
+    try:
+        import resource
+        usage = resource.getrusage(resource.RUSAGE_SELF)
+        return round(usage.ru_maxrss / 1024, 1)  # Linux: KB -> MB
+    except Exception:
+        pass
+    try:
+        # Fallback: read /proc/self/status
+        with open('/proc/self/status', 'r') as f:
+            for line in f:
+                if line.startswith('VmRSS:'):
+                    return round(int(line.split()[1]) / 1024, 1)  # KB -> MB
+    except Exception:
+        pass
+    return -1
+
+
 KB_PATH = Path(__file__).parent.parent.parent.parent / 'knowledge_base.md'
 
 
@@ -111,42 +152,39 @@ KB_PATH = Path(__file__).parent.parent.parent.parent / 'knowledge_base.md'
 async def health_realtime():
     """
     Lightweight real-time health metrics for dashboard polling.
-    
-    Designed to be called every 2-3 seconds by the frontend dashboard.
-    Includes uptime, latency, request counts — no heavy computations.
+    This endpoint's own requests are NOT counted in user_requests.
     """
-    now = time.monotonic()
-    uptime_seconds = now - _STARTUP_TIME
+    now_mono = time.monotonic()
+    uptime_secs = now_mono - _STARTUP_TIME
     
-    # Measure API response latency (time for this request itself)
-    request_start = time.monotonic()
-    
-    # Quick DB check (cached result to avoid hammering DB)
-    db_connected = check_db_connection()
-    db_latency = _measure_db_latency() if db_connected else -1
-    
-    api_latency = round((time.monotonic() - request_start) * 1000, 1)
+    db_connected, db_latency = _check_db()
+    memory_mb = _get_memory_mb()
     
     return {
         'status': 'healthy',
         'timestamp': datetime.now(timezone.utc).isoformat(),
         'uptime': {
-            'seconds': round(uptime_seconds, 1),
-            'formatted': _format_uptime(uptime_seconds),
+            'seconds': round(uptime_secs, 1),
+            'formatted': _format_uptime(uptime_secs),
             'started_at': _STARTUP_TIMESTAMP.isoformat(),
         },
-        'latency': {
-            'api_ms': api_latency,
-            'db_ms': db_latency,
+        'layers': {
+            'backend': {
+                'status': 'operational',
+                'uptime_seconds': round(uptime_secs, 1),
+                'memory_mb': memory_mb,
+            },
+            'database': {
+                'status': 'connected' if db_connected else 'disconnected',
+                'latency_ms': db_latency,
+                'provider': 'Supabase',
+            },
         },
         'metrics': {
-            'total_requests': _REQUEST_COUNT,
-            'total_errors': _ERROR_COUNT,
-            'error_rate': round(_ERROR_COUNT / max(_REQUEST_COUNT, 1) * 100, 2),
-        },
-        'database': {
-            'connected': db_connected,
-            'provider': 'Supabase',
+            'user_requests': _USER_REQUEST_COUNT,
+            'health_checks': _HEALTH_CHECK_COUNT,
+            'errors': _ERROR_COUNT,
+            'error_rate': round(_ERROR_COUNT / max(_USER_REQUEST_COUNT, 1) * 100, 2),
         },
     }
 
@@ -158,144 +196,105 @@ async def health_realtime():
 @router.get("/health")
 async def health_check():
     """
-    Premium health endpoint with comprehensive system info.
-    
-    Returns detailed status including OCR engines, DB, system info,
-    analysis capabilities, grading scale, and waiver thresholds.
+    Comprehensive health endpoint with all layer details.
     """
     settings = get_settings_safe()
-    uptime_seconds = time.monotonic() - _STARTUP_TIME
+    uptime_secs = time.monotonic() - _STARTUP_TIME
     
-    # OCR API keys status
     google_key = getattr(settings, 'GOOGLE_VISION_API_KEY', '') if settings else os.getenv('GOOGLE_VISION_API_KEY', '')
     azure_key = getattr(settings, 'AZURE_DOC_INTELLIGENCE_KEY', '') if settings else os.getenv('AZURE_DOC_INTELLIGENCE_KEY', '')
+    azure_endpoint = getattr(settings, 'AZURE_DOC_INTELLIGENCE_ENDPOINT', '') if settings else os.getenv('AZURE_DOC_INTELLIGENCE_ENDPOINT', '')
     
-    # Measure latencies
-    db_connected = check_db_connection()
-    db_latency = _measure_db_latency() if db_connected else -1
+    db_connected, db_latency = _check_db()
+    memory_mb = _get_memory_mb()
     
-    # Uptime info
-    uptime_info = {
-        'timestamp': datetime.now(timezone.utc).isoformat(),
-        'timezone': 'UTC',
-        'started_at': _STARTUP_TIMESTAMP.isoformat(),
-        'uptime_seconds': round(uptime_seconds, 1),
-        'uptime_formatted': _format_uptime(uptime_seconds),
-    }
-    
-    # OCR limits info
-    ocr_info = {
-        'google_vision': {
-            'configured': bool(google_key),
-            'free_tier': '1,000 requests/month',
-            'rate_limit': '1,800 requests/minute',
-            'max_file_size': '20 MB',
-            'supported_formats': ['PDF', 'PNG', 'JPG', 'JPEG', 'GIF', 'BMP', 'WEBP', 'TIFF']
-        },
-        'azure_doc_intelligence': {
-            'configured': bool(azure_key),
-            'accuracy': '99%+',
-            'free_tier': '500 pages/month',
-            'max_file_size': '50 MB',
-            'supported_formats': ['PDF', 'PNG', 'JPG', 'JPEG', 'TIFF', 'BMP']
-        }
-    }
-    
-    # Server info
-    server_info = {
-        'platform': platform.system(),
-        'platform_version': platform.version(),
-        'python_version': platform.python_version(),
-        'architecture': platform.machine(),
-        'processor': platform.processor() or 'Cloud Run',
-        'hostname': platform.node()
-    }
-    
-    # Environment
-    env_info = {
-        'environment': getattr(settings, 'ENVIRONMENT', 'production') if settings else 'production',
-        'log_level': getattr(settings, 'LOG_LEVEL', 'INFO') if settings else 'INFO',
-        'max_upload_mb': getattr(settings, 'MAX_UPLOAD_SIZE_MB', 16) if settings else 16,
-        'port': os.getenv('PORT', '8080')
-    }
-    
-    # Knowledge base status
-    kb_info = {
-        'path': str(KB_PATH),
-        'exists': KB_PATH.exists(),
-        'size_kb': round(KB_PATH.stat().st_size / 1024, 2) if KB_PATH.exists() else 0
-    }
-    
-    # Analysis capabilities
-    capabilities = {
-        'level_1': {
-            'name': 'Credit Tally',
-            'features': ['Total credits', 'Earned credits', 'Failed credits', 'Retake detection']
-        },
-        'level_2': {
-            'name': 'CGPA Analysis',
-            'features': ['CGPA calculation', 'Academic standing', 'Grade distribution', 'Waiver eligibility']
-        },
-        'level_3': {
-            'name': 'Degree Audit',
-            'features': ['Program detection', 'Mandatory course check', 'Elective requirements', 'Graduation readiness']
-        }
-    }
-    
-    # Build response
     return {
         'status': 'healthy',
         'service': 'NSU Degree Audit API',
         'version': '2.5.0',
         'framework': 'FastAPI',
-        'uptime': uptime_info,
-        'latency': {
-            'db_ms': db_latency,
+        'uptime': {
+            'timestamp': datetime.now(timezone.utc).isoformat(),
+            'started_at': _STARTUP_TIMESTAMP.isoformat(),
+            'seconds': round(uptime_secs, 1),
+            'formatted': _format_uptime(uptime_secs),
+        },
+        'layers': {
+            'frontend': {
+                'status': 'operational',
+                'url': 'https://ocr.nsunexus.app',
+                'provider': 'Vercel',
+                'framework': 'FastAPI + Jinja2',
+                'note': 'Serverless edge deployment',
+            },
+            'backend': {
+                'status': 'operational',
+                'url': 'https://ocrapi.nsunexus.app',
+                'provider': 'Google Cloud Run',
+                'framework': 'FastAPI 2.5.0',
+                'python': platform.python_version(),
+                'platform': f"{platform.system()} {platform.machine()}",
+                'memory_mb': memory_mb,
+                'uptime_seconds': round(uptime_secs, 1),
+                'uptime_formatted': _format_uptime(uptime_secs),
+                'workers': 1,
+                'region': os.getenv('CLOUD_RUN_REGION', 'auto'),
+                'environment': getattr(settings, 'ENVIRONMENT', 'production') if settings else 'production',
+            },
+            'database': {
+                'status': 'connected' if db_connected else 'disconnected',
+                'provider': 'Supabase (PostgreSQL)',
+                'latency_ms': db_latency,
+                'features': ['user_auth', 'scan_history', 'api_keys'] if db_connected else [],
+                'tables': ['cse226_ocr_users', 'cse226_ocr_scans'] if db_connected else [],
+            },
+            'ocr': {
+                'google_vision': {
+                    'status': 'active' if google_key else 'not_configured',
+                    'configured': bool(google_key),
+                    'provider': 'Google Cloud Vision API',
+                    'accuracy': '98%+',
+                    'free_tier': '1,000 requests/month',
+                    'max_file_size': '20 MB',
+                },
+                'azure_di': {
+                    'status': 'active' if (azure_key and azure_endpoint) else 'not_configured',
+                    'configured': bool(azure_key and azure_endpoint),
+                    'provider': 'Azure Document Intelligence',
+                    'accuracy': '99%+',
+                    'free_tier': '500 pages/month',
+                    'max_file_size': '50 MB',
+                },
+            },
         },
         'metrics': {
-            'total_requests': _REQUEST_COUNT,
-            'total_errors': _ERROR_COUNT,
-            'error_rate': round(_ERROR_COUNT / max(_REQUEST_COUNT, 1) * 100, 2),
+            'user_requests': _USER_REQUEST_COUNT,
+            'health_checks': _HEALTH_CHECK_COUNT,
+            'errors': _ERROR_COUNT,
+            'error_rate': round(_ERROR_COUNT / max(_USER_REQUEST_COUNT, 1) * 100, 2),
         },
-        'ocr_engines': ocr_info,
-        'server': server_info,
-        'environment': env_info,
-        'knowledge_base': kb_info,
-        'analysis_capabilities': capabilities,
-        'endpoints': {
-            'root': '/',
-            'health': '/health',
-            'health_realtime': '/health/realtime',
-            'upload': '/api/upload (POST)',
-            'auth': '/auth/*',
-            'history': '/api/history',
-            'docs': '/docs',
+        'capabilities': {
+            'level_1': 'Credit Tally',
+            'level_2': 'CGPA Analysis',
+            'level_3': 'Degree Audit',
         },
-        'database': {
-            'enabled': True,
-            'connected': db_connected,
-            'latency_ms': db_latency,
-            'provider': 'Supabase',
-            'features': ['user_auth', 'scan_history', 'api_keys'] if db_connected else []
+        'server': {
+            'platform': platform.system(),
+            'architecture': platform.machine(),
+            'python_version': platform.python_version(),
+            'hostname': platform.node(),
+            'port': os.getenv('PORT', '8080'),
         },
-        'grading_scale': {
-            'A': 4.00, 'A-': 3.70,
-            'B+': 3.30, 'B': 3.00, 'B-': 2.70,
-            'C+': 2.30, 'C': 2.00, 'C-': 1.70,
-            'D+': 1.30, 'D': 1.00,
-            'F': 0.00
+        'knowledge_base': {
+            'exists': KB_PATH.exists(),
+            'size_kb': round(KB_PATH.stat().st_size / 1024, 2) if KB_PATH.exists() else 0,
         },
-        'waivers': {
-            'chancellors_award': {'cgpa': 3.97, 'waiver': '100%'},
-            'vc_scholarship': {'cgpa': 3.75, 'waiver': '50%'},
-            'deans_scholarship': {'cgpa': 3.50, 'waiver': '25%'}
-        }
     }
 
 
 @router.get("/health/live")
 async def liveness():
-    """Kubernetes liveness probe - is the service running?"""
+    """Kubernetes liveness probe."""
     response = JSONResponse(content={"status": "live"})
     response.headers["Cache-Control"] = "no-cache, max-age=0"
     return response
@@ -303,14 +302,8 @@ async def liveness():
 
 @router.get("/health/ready")
 async def readiness():
-    """Kubernetes readiness probe - is the service ready to accept traffic?"""
-    db_ready = check_db_connection()
-    
-    if not db_ready:
-        return {
-            "status": "ready",
-            "database": "unavailable",
-            "note": "Running without database persistence"
-        }
-    
+    """Kubernetes readiness probe."""
+    db_connected, _ = _check_db()
+    if not db_connected:
+        return {"status": "ready", "database": "unavailable", "note": "Running without DB"}
     return {"status": "ready"}

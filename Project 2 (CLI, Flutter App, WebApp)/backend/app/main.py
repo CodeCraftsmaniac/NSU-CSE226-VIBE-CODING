@@ -69,10 +69,11 @@ async def global_exception_handler(request: Request, exc: Exception):
 # Request counting middleware for health metrics
 @app.middleware("http")
 async def count_requests(request: Request, call_next):
-    """Count requests for real-time health dashboard."""
+    """Count requests for real-time health dashboard.
+    Separates user requests from health check polls."""
     try:
-        from app.api.v1.health import increment_request_count
-        increment_request_count()
+        from app.api.v1.health import count_request
+        count_request(request.url.path)
     except Exception:
         pass
     response = await call_next(request)

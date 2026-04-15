@@ -726,281 +726,448 @@
                 </div>
             </div>
             <div class="modal-body health-modal-body" id="health-content">
-                <!-- Row 1: Core Metrics -->
-                <div class="health-metrics-row">
-                    <div class="health-metric-card health-metric-uptime">
-                        <div class="hm-label">Uptime</div>
-                        <div class="hm-value" id="hm-uptime">—</div>
-                        <div class="hm-sub" id="hm-started-at">—</div>
-                    </div>
-                    <div class="health-metric-card health-metric-latency">
-                        <div class="hm-label">API Latency</div>
-                        <div class="hm-value"><span id="hm-api-latency">—</span><span class="hm-unit">ms</span></div>
-                        <div class="hm-latency-bar"><div class="hm-latency-fill" id="hm-latency-fill"></div></div>
-                    </div>
-                    <div class="health-metric-card health-metric-db">
-                        <div class="hm-label">Database</div>
-                        <div class="hm-value" id="hm-db-status">—</div>
-                        <div class="hm-sub"><span id="hm-db-latency">—</span> ms latency</div>
-                    </div>
-                    <div class="health-metric-card health-metric-requests">
-                        <div class="hm-label">Total Requests</div>
-                        <div class="hm-value" id="hm-requests">—</div>
-                        <div class="hm-sub">Error rate: <span id="hm-error-rate">—</span>%</div>
-                    </div>
-                </div>
 
-                <!-- Row 2: OCR Engines -->
-                <div class="health-section">
-                    <h3 class="health-section-title">
-                        <svg viewBox="0 0 20 20" fill="currentColor" width="16" height="16"><path d="M10 12a2 2 0 100-4 2 2 0 000 4z"/><path fill-rule="evenodd" d="M.458 10C1.732 5.943 5.522 3 10 3s8.268 2.943 9.542 7c-1.274 4.057-5.064 7-9.542 7S1.732 14.057.458 10zM14 10a4 4 0 11-8 0 4 4 0 018 0z" clip-rule="evenodd"/></svg>
-                        OCR Engines
-                    </h3>
-                    <div class="health-engines-grid" id="hm-engines">
-                        <div class="health-engine-card" id="hm-engine-google">
-                            <div class="engine-header">
-                                <span class="engine-dot" id="hm-google-dot"></span>
-                                <span class="engine-name">Google Vision</span>
-                            </div>
-                            <div class="engine-details">
-                                <span>Free: 1,000/mo</span>
-                                <span id="hm-google-status">Checking...</span>
-                            </div>
+                <!-- === LAYER 1: FRONTEND (Vercel) === -->
+                <div class="health-layer">
+                    <div class="health-layer-header">
+                        <div class="layer-status-row">
+                            <span class="layer-dot" id="hl-fe-dot"></span>
+                            <h3>Frontend Layer</h3>
+                            <span class="layer-provider">Vercel</span>
                         </div>
-                        <div class="health-engine-card" id="hm-engine-azure">
-                            <div class="engine-header">
-                                <span class="engine-dot" id="hm-azure-dot"></span>
-                                <span class="engine-name">Azure DI</span>
+                        <span class="layer-badge" id="hl-fe-badge">Checking...</span>
+                    </div>
+                    <div class="health-layer-body">
+                        <div class="layer-metrics">
+                            <div class="layer-metric">
+                                <span class="lm-label">URL</span>
+                                <span class="lm-value" id="hl-fe-url">ocr.nsunexus.app</span>
                             </div>
-                            <div class="engine-details">
-                                <span>Free: 500/mo</span>
-                                <span id="hm-azure-status">Checking...</span>
+                            <div class="layer-metric">
+                                <span class="lm-label">Latency</span>
+                                <span class="lm-value" id="hl-fe-latency">—</span>
+                            </div>
+                            <div class="layer-metric">
+                                <span class="lm-label">Framework</span>
+                                <span class="lm-value">FastAPI + Jinja2</span>
+                            </div>
+                            <div class="layer-metric">
+                                <span class="lm-label">Deployment</span>
+                                <span class="lm-value">Serverless Edge</span>
                             </div>
                         </div>
                     </div>
                 </div>
 
-                <!-- Row 3: Server Info + Capabilities -->
-                <div class="health-two-col">
-                    <div class="health-section">
-                        <h3 class="health-section-title">
-                            <svg viewBox="0 0 20 20" fill="currentColor" width="16" height="16"><path fill-rule="evenodd" d="M2 5a2 2 0 012-2h12a2 2 0 012 2v10a2 2 0 01-2 2H4a2 2 0 01-2-2V5zm3.293 1.293a1 1 0 011.414 0l3 3a1 1 0 010 1.414l-3 3a1 1 0 01-1.414-1.414L7.586 10 5.293 7.707a1 1 0 010-1.414zM11 12a1 1 0 100 2h3a1 1 0 100-2h-3z" clip-rule="evenodd"/></svg>
-                            Server Info
-                        </h3>
-                        <div class="health-info-list" id="hm-server-info">
-                            <div class="health-info-row"><span>Platform</span><span id="hm-platform">—</span></div>
-                            <div class="health-info-row"><span>Python</span><span id="hm-python">—</span></div>
-                            <div class="health-info-row"><span>Architecture</span><span id="hm-arch">—</span></div>
-                            <div class="health-info-row"><span>Framework</span><span id="hm-framework">—</span></div>
-                            <div class="health-info-row"><span>Version</span><span id="hm-version">—</span></div>
-                            <div class="health-info-row"><span>Environment</span><span id="hm-env">—</span></div>
+                <!-- === LAYER 2: BACKEND (Cloud Run) === -->
+                <div class="health-layer">
+                    <div class="health-layer-header">
+                        <div class="layer-status-row">
+                            <span class="layer-dot" id="hl-be-dot"></span>
+                            <h3>Backend Layer</h3>
+                            <span class="layer-provider">Google Cloud Run</span>
                         </div>
+                        <span class="layer-badge" id="hl-be-badge">Checking...</span>
                     </div>
-                    <div class="health-section">
-                        <h3 class="health-section-title">
-                            <svg viewBox="0 0 20 20" fill="currentColor" width="16" height="16"><path fill-rule="evenodd" d="M6.267 3.455a3.066 3.066 0 001.745-.723 3.066 3.066 0 013.976 0 3.066 3.066 0 001.745.723 3.066 3.066 0 012.812 2.812c.051.643.304 1.254.723 1.745a3.066 3.066 0 010 3.976 3.066 3.066 0 00-.723 1.745 3.066 3.066 0 01-2.812 2.812 3.066 3.066 0 00-1.745.723 3.066 3.066 0 01-3.976 0 3.066 3.066 0 00-1.745-.723 3.066 3.066 0 01-2.812-2.812 3.066 3.066 0 00-.723-1.745 3.066 3.066 0 010-3.976 3.066 3.066 0 00.723-1.745 3.066 3.066 0 012.812-2.812zm7.44 5.252a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/></svg>
-                            Analysis Capabilities
-                        </h3>
-                        <div class="health-capabilities" id="hm-capabilities">
-                            <div class="health-cap-item"><span class="cap-badge l1">L1</span> Credit Tally</div>
-                            <div class="health-cap-item"><span class="cap-badge l2">L2</span> CGPA Analysis</div>
-                            <div class="health-cap-item"><span class="cap-badge l3">L3</span> Degree Audit</div>
+                    <div class="health-layer-body">
+                        <div class="layer-metrics">
+                            <div class="layer-metric">
+                                <span class="lm-label">URL</span>
+                                <span class="lm-value" id="hl-be-url">ocrapi.nsunexus.app</span>
+                            </div>
+                            <div class="layer-metric">
+                                <span class="lm-label">Uptime</span>
+                                <span class="lm-value lm-mono" id="hl-be-uptime">—</span>
+                            </div>
+                            <div class="layer-metric">
+                                <span class="lm-label">API Latency</span>
+                                <span class="lm-value lm-mono" id="hl-be-latency">—</span>
+                            </div>
+                            <div class="layer-metric">
+                                <span class="lm-label">Memory</span>
+                                <span class="lm-value lm-mono" id="hl-be-memory">—</span>
+                            </div>
+                            <div class="layer-metric">
+                                <span class="lm-label">Version</span>
+                                <span class="lm-value" id="hl-be-version">—</span>
+                            </div>
+                            <div class="layer-metric">
+                                <span class="lm-label">Python</span>
+                                <span class="lm-value" id="hl-be-python">—</span>
+                            </div>
+                            <div class="layer-metric">
+                                <span class="lm-label">Platform</span>
+                                <span class="lm-value" id="hl-be-platform">—</span>
+                            </div>
+                            <div class="layer-metric">
+                                <span class="lm-label">Environment</span>
+                                <span class="lm-value" id="hl-be-env">—</span>
+                            </div>
                         </div>
-                        <h3 class="health-section-title" style="margin-top: 16px;">
-                            <svg viewBox="0 0 20 20" fill="currentColor" width="16" height="16"><path fill-rule="evenodd" d="M12.316 3.051a1 1 0 01.633 1.265l-4 12a1 1 0 11-1.898-.632l4-12a1 1 0 011.265-.633zM5.707 6.293a1 1 0 010 1.414L3.414 10l2.293 2.293a1 1 0 11-1.414 1.414l-3-3a1 1 0 010-1.414l3-3a1 1 0 011.414 0zm8.586 0a1 1 0 011.414 0l3 3a1 1 0 010 1.414l-3 3a1 1 0 11-1.414-1.414L16.586 10l-2.293-2.293a1 1 0 010-1.414z" clip-rule="evenodd"/></svg>
-                            API Endpoints
-                        </h3>
-                        <div class="health-info-list" id="hm-endpoints">
-                            <div class="health-info-row"><span class="ep-method get">GET</span><span>/health</span></div>
-                            <div class="health-info-row"><span class="ep-method post">POST</span><span>/api/upload</span></div>
-                            <div class="health-info-row"><span class="ep-method get">GET</span><span>/auth/*</span></div>
-                            <div class="health-info-row"><span class="ep-method get">GET</span><span>/api/history</span></div>
+                        <!-- Latency bar -->
+                        <div class="hm-latency-bar"><div class="hm-latency-fill" id="hl-be-latency-bar"></div></div>
+                    </div>
+                </div>
+
+                <!-- === LAYER 3: DATABASE (Supabase) === -->
+                <div class="health-layer">
+                    <div class="health-layer-header">
+                        <div class="layer-status-row">
+                            <span class="layer-dot" id="hl-db-dot"></span>
+                            <h3>Database Layer</h3>
+                            <span class="layer-provider">Supabase (PostgreSQL)</span>
+                        </div>
+                        <span class="layer-badge" id="hl-db-badge">Checking...</span>
+                    </div>
+                    <div class="health-layer-body">
+                        <div class="layer-metrics">
+                            <div class="layer-metric">
+                                <span class="lm-label">Connection</span>
+                                <span class="lm-value" id="hl-db-conn">—</span>
+                            </div>
+                            <div class="layer-metric">
+                                <span class="lm-label">Query Latency</span>
+                                <span class="lm-value lm-mono" id="hl-db-latency">—</span>
+                            </div>
+                            <div class="layer-metric">
+                                <span class="lm-label">Tables</span>
+                                <span class="lm-value" id="hl-db-tables">—</span>
+                            </div>
+                            <div class="layer-metric">
+                                <span class="lm-label">Features</span>
+                                <span class="lm-value" id="hl-db-features">—</span>
+                            </div>
                         </div>
                     </div>
                 </div>
 
-                <!-- Last Updated -->
+                <!-- === LAYER 4: OCR ENGINES === -->
+                <div class="health-layer">
+                    <div class="health-layer-header">
+                        <div class="layer-status-row">
+                            <span class="layer-dot" id="hl-ocr-dot"></span>
+                            <h3>OCR Engines</h3>
+                            <span class="layer-provider">Multi-Engine</span>
+                        </div>
+                        <span class="layer-badge" id="hl-ocr-badge">Checking...</span>
+                    </div>
+                    <div class="health-layer-body">
+                        <div class="health-engines-grid">
+                            <div class="health-engine-card">
+                                <div class="engine-header">
+                                    <span class="engine-dot" id="hl-gv-dot"></span>
+                                    <span class="engine-name">Google Cloud Vision</span>
+                                </div>
+                                <div class="engine-details">
+                                    <span>Accuracy: 98%+</span>
+                                    <span id="hl-gv-status">Checking...</span>
+                                </div>
+                                <div class="engine-details">
+                                    <span>Free: 1,000 req/mo</span>
+                                    <span>Max: 20 MB</span>
+                                </div>
+                            </div>
+                            <div class="health-engine-card">
+                                <div class="engine-header">
+                                    <span class="engine-dot" id="hl-az-dot"></span>
+                                    <span class="engine-name">Azure Document Intelligence</span>
+                                </div>
+                                <div class="engine-details">
+                                    <span>Accuracy: 99%+</span>
+                                    <span id="hl-az-status">Checking...</span>
+                                </div>
+                                <div class="engine-details">
+                                    <span>Free: 500 pages/mo</span>
+                                    <span>Max: 50 MB</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- === METRICS SUMMARY === -->
+                <div class="health-layer">
+                    <div class="health-layer-header">
+                        <div class="layer-status-row">
+                            <svg viewBox="0 0 20 20" fill="currentColor" width="16" height="16" style="color:var(--accent)"><path d="M2 11a1 1 0 011-1h2a1 1 0 011 1v5a1 1 0 01-1 1H3a1 1 0 01-1-1v-5zM8 7a1 1 0 011-1h2a1 1 0 011 1v9a1 1 0 01-1 1H9a1 1 0 01-1-1V7zM14 4a1 1 0 011-1h2a1 1 0 011 1v12a1 1 0 01-1 1h-2a1 1 0 01-1-1V4z"/></svg>
+                            <h3>Request Metrics</h3>
+                        </div>
+                    </div>
+                    <div class="health-layer-body">
+                        <div class="layer-metrics">
+                            <div class="layer-metric">
+                                <span class="lm-label">User Requests</span>
+                                <span class="lm-value lm-mono" id="hl-user-reqs">—</span>
+                            </div>
+                            <div class="layer-metric">
+                                <span class="lm-label">Health Checks</span>
+                                <span class="lm-value lm-mono lm-dim" id="hl-health-reqs">—</span>
+                            </div>
+                            <div class="layer-metric">
+                                <span class="lm-label">Errors</span>
+                                <span class="lm-value lm-mono" id="hl-errors">—</span>
+                            </div>
+                            <div class="layer-metric">
+                                <span class="lm-label">Error Rate</span>
+                                <span class="lm-value lm-mono" id="hl-error-rate">—</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- === CAPABILITIES === -->
+                <div class="health-layer">
+                    <div class="health-layer-header">
+                        <div class="layer-status-row">
+                            <svg viewBox="0 0 20 20" fill="currentColor" width="16" height="16" style="color:var(--accent)"><path fill-rule="evenodd" d="M6.267 3.455a3.066 3.066 0 001.745-.723 3.066 3.066 0 013.976 0 3.066 3.066 0 001.745.723 3.066 3.066 0 012.812 2.812c.051.643.304 1.254.723 1.745a3.066 3.066 0 010 3.976 3.066 3.066 0 00-.723 1.745 3.066 3.066 0 01-2.812 2.812 3.066 3.066 0 00-1.745.723 3.066 3.066 0 01-3.976 0 3.066 3.066 0 00-1.745-.723 3.066 3.066 0 01-2.812-2.812 3.066 3.066 0 00-.723-1.745 3.066 3.066 0 010-3.976 3.066 3.066 0 00.723-1.745 3.066 3.066 0 012.812-2.812zm7.44 5.252a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/></svg>
+                            <h3>Analysis Capabilities</h3>
+                        </div>
+                    </div>
+                    <div class="health-layer-body">
+                        <div class="health-capabilities">
+                            <div class="health-cap-item"><span class="cap-badge l1">L1</span> Credit Tally — course count, credit tracking, retake detection</div>
+                            <div class="health-cap-item"><span class="cap-badge l2">L2</span> CGPA Analysis — grade points, academic standing, waiver eligibility</div>
+                            <div class="health-cap-item"><span class="cap-badge l3">L3</span> Degree Audit — graduation requirements, mandatory/elective courses</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Footer -->
                 <div class="health-footer">
                     <span id="hm-last-updated">Last updated: —</span>
-                    <span id="hm-poll-interval">Polling every 2s</span>
+                    <span id="hm-poll-interval">Polling every 2s · Uptime ticks every 1s</span>
                 </div>
             </div>
         </div>
     </div>
 
-    <!-- Health Dashboard Script (real-time, no dummy data) -->
+    <!-- Health Dashboard Script -->
     <script>
     (function() {
-        const API_BASE = 'https://ocrapi.nsunexus.app';
-        let healthInterval = null;
-        let fullHealthData = null;
-        let isHealthOpen = false;
-        let lastLatencies = [];
+        const API = 'https://ocrapi.nsunexus.app';
+        const FE_URL = 'https://ocr.nsunexus.app';
+        let pollTimer = null;
+        let uptimeTimer = null;
+        let isOpen = false;
+        let serverStartedAt = null;
+        let uptimeBase = 0;
 
-        // Expose globally
+        const $ = id => document.getElementById(id);
+
         window.openHealthDashboard = function() {
-            document.getElementById('health-modal').classList.add('active');
-            isHealthOpen = true;
-            // Initial full fetch
-            fetchFullHealth();
-            // Start real-time polling every 2 seconds
-            if (healthInterval) clearInterval(healthInterval);
-            healthInterval = setInterval(fetchRealtimeHealth, 2000);
+            $('health-modal').classList.add('active');
+            isOpen = true;
+            fetchFull();
+            checkFrontend();
+            if (pollTimer) clearInterval(pollTimer);
+            pollTimer = setInterval(fetchRealtime, 2000);
+            // Client-side uptime tick every second
+            if (uptimeTimer) clearInterval(uptimeTimer);
+            uptimeTimer = setInterval(tickUptime, 1000);
         };
 
         window.closeHealthDashboard = function() {
-            document.getElementById('health-modal').classList.remove('active');
-            isHealthOpen = false;
-            if (healthInterval) {
-                clearInterval(healthInterval);
-                healthInterval = null;
-            }
+            $('health-modal').classList.remove('active');
+            isOpen = false;
+            if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+            if (uptimeTimer) { clearInterval(uptimeTimer); uptimeTimer = null; }
         };
 
-        // Close on overlay click
-        document.addEventListener('click', function(e) {
-            if (e.target.id === 'health-modal') closeHealthDashboard();
-        });
-        document.addEventListener('keydown', function(e) {
-            if (e.key === 'Escape' && isHealthOpen) closeHealthDashboard();
-        });
+        document.addEventListener('click', e => { if (e.target.id === 'health-modal') closeHealthDashboard(); });
+        document.addEventListener('keydown', e => { if (e.key === 'Escape' && isOpen) closeHealthDashboard(); });
 
-        async function fetchFullHealth() {
-            try {
-                const start = performance.now();
-                const res = await fetch(API_BASE + '/health', { cache: 'no-store' });
-                const latency = Math.round(performance.now() - start);
-                const data = await res.json();
-                fullHealthData = data;
-                updateFullDashboard(data, latency);
-                updateStatusIndicator('healthy');
-            } catch (err) {
-                console.error('Health fetch error:', err);
-                updateStatusIndicator('error');
+        function fmtUptime(s) {
+            const d = Math.floor(s / 86400), h = Math.floor((s % 86400) / 3600),
+                  m = Math.floor((s % 3600) / 60), sec = Math.floor(s % 60);
+            let p = [];
+            if (d > 0) p.push(d + 'd');
+            if (h > 0) p.push(h + 'h');
+            if (m > 0) p.push(m + 'm');
+            p.push(sec + 's');
+            return p.join(' ');
+        }
+
+        // Tick uptime on the client side every 1s (no network needed)
+        function tickUptime() {
+            if (!serverStartedAt) return;
+            uptimeBase += 1;
+            $('hl-be-uptime').textContent = fmtUptime(uptimeBase);
+        }
+
+        function setLayerStatus(dotId, badgeId, status) {
+            const dot = $(dotId), badge = $(badgeId);
+            if (status === 'operational' || status === 'connected' || status === 'active') {
+                dot.className = 'layer-dot operational';
+                badge.textContent = 'Operational';
+                badge.className = 'layer-badge operational';
+            } else if (status === 'degraded') {
+                dot.className = 'layer-dot degraded';
+                badge.textContent = 'Degraded';
+                badge.className = 'layer-badge degraded';
+            } else {
+                dot.className = 'layer-dot down';
+                badge.textContent = 'Down';
+                badge.className = 'layer-badge down';
             }
         }
 
-        async function fetchRealtimeHealth() {
-            if (!isHealthOpen) return;
-            try {
-                const start = performance.now();
-                const res = await fetch(API_BASE + '/health/realtime', { cache: 'no-store' });
-                const networkLatency = Math.round(performance.now() - start);
-                const data = await res.json();
-                updateRealtimeMetrics(data, networkLatency);
-                updateStatusIndicator('healthy');
-            } catch (err) {
-                updateStatusIndicator('error');
-            }
-        }
-
-        function updateStatusIndicator(status) {
-            const dot = document.getElementById('health-pulse');
-            const text = document.getElementById('hm-status-text');
-            const badge = document.getElementById('hm-refresh-badge');
-            if (status === 'healthy') {
-                dot.className = 'health-pulse healthy';
+        function setGlobalStatus(ok) {
+            const pulse = $('health-pulse');
+            const text = $('hm-status-text');
+            const badge = $('hm-refresh-badge');
+            if (ok) {
+                pulse.className = 'health-pulse healthy';
                 text.textContent = 'All Systems Operational';
                 text.style.color = '#10b981';
                 badge.className = 'health-refresh-badge live';
                 badge.textContent = 'Live';
             } else {
-                dot.className = 'health-pulse error';
+                pulse.className = 'health-pulse error';
                 text.textContent = 'Connection Issue';
                 text.style.color = '#ef4444';
                 badge.className = 'health-refresh-badge error';
-                badge.textContent = 'Offline';
+                badge.textContent = 'Error';
             }
         }
 
-        function updateRealtimeMetrics(data, networkLatency) {
-            // Uptime
-            const el = id => document.getElementById(id);
-            if (data.uptime) {
-                el('hm-uptime').textContent = data.uptime.formatted;
-                el('hm-started-at').textContent = 'Since ' + new Date(data.uptime.started_at).toLocaleString();
-            }
-
-            // Latency (use network round-trip as "real" latency since it includes everything)
-            lastLatencies.push(networkLatency);
-            if (lastLatencies.length > 10) lastLatencies.shift();
-            const avgLatency = Math.round(lastLatencies.reduce((a, b) => a + b, 0) / lastLatencies.length);
-            el('hm-api-latency').textContent = networkLatency;
-            
-            // Latency bar (scale: 0-500ms)
-            const fill = el('hm-latency-fill');
-            const pct = Math.min(networkLatency / 500 * 100, 100);
-            fill.style.width = pct + '%';
-            fill.className = 'hm-latency-fill' + (networkLatency < 200 ? ' good' : networkLatency < 400 ? ' ok' : ' slow');
-
-            // Database
-            if (data.database) {
-                el('hm-db-status').textContent = data.database.connected ? 'Connected' : 'Disconnected';
-                el('hm-db-status').className = 'hm-value ' + (data.database.connected ? 'status-good' : 'status-bad');
-                el('hm-db-latency').textContent = data.latency && data.latency.db_ms >= 0 ? data.latency.db_ms : '—';
-            }
-
-            // Requests
-            if (data.metrics) {
-                el('hm-requests').textContent = data.metrics.total_requests.toLocaleString();
-                el('hm-error-rate').textContent = data.metrics.error_rate;
-            }
-
-            // Update timestamp
-            el('hm-last-updated').textContent = 'Updated: ' + new Date().toLocaleTimeString();
-        }
-
-        function updateFullDashboard(data, networkLatency) {
-            // Call realtime updater with the full data shape
-            updateRealtimeMetrics({
-                uptime: data.uptime,
-                latency: data.latency,
-                database: data.database,
-                metrics: data.metrics,
-            }, networkLatency);
-
-            const el = id => document.getElementById(id);
-
-            // OCR Engines
-            if (data.ocr_engines) {
-                const gv = data.ocr_engines.google_vision;
-                const az = data.ocr_engines.azure_doc_intelligence;
-                el('hm-google-dot').className = 'engine-dot ' + (gv.configured ? 'active' : 'inactive');
-                el('hm-google-status').textContent = gv.configured ? 'Active' : 'Not Configured';
-                el('hm-azure-dot').className = 'engine-dot ' + (az.configured ? 'active' : 'inactive');
-                el('hm-azure-status').textContent = az.configured ? 'Active (99%+)' : 'Not Configured';
-            }
-
-            // Server info
-            if (data.server) {
-                el('hm-platform').textContent = data.server.platform + ' ' + data.server.architecture;
-                el('hm-python').textContent = data.server.python_version;
-                el('hm-arch').textContent = data.server.architecture;
-            }
-            el('hm-framework').textContent = data.framework || 'FastAPI';
-            el('hm-version').textContent = data.version || '—';
-            if (data.environment) {
-                el('hm-env').textContent = data.environment.environment || 'production';
-            }
-        }
-
-        // Background health check for the header button pulse
-        async function backgroundHealthPing() {
+        // Check frontend layer independently
+        async function checkFrontend() {
             try {
-                const res = await fetch(API_BASE + '/health/live', { cache: 'no-store' });
+                const start = performance.now();
+                const res = await fetch(FE_URL + '/health', { cache: 'no-store', mode: 'cors' });
+                const ms = Math.round(performance.now() - start);
                 if (res.ok) {
-                    document.getElementById('health-pulse').className = 'health-pulse healthy';
+                    setLayerStatus('hl-fe-dot', 'hl-fe-badge', 'operational');
+                    $('hl-fe-latency').textContent = ms + ' ms';
                 } else {
-                    document.getElementById('health-pulse').className = 'health-pulse error';
+                    setLayerStatus('hl-fe-dot', 'hl-fe-badge', 'degraded');
+                    $('hl-fe-latency').textContent = 'Error ' + res.status;
                 }
             } catch {
-                document.getElementById('health-pulse').className = 'health-pulse error';
+                setLayerStatus('hl-fe-dot', 'hl-fe-badge', 'down');
+                $('hl-fe-latency').textContent = 'Unreachable';
             }
         }
 
-        // Ping health every 30s in background for header indicator
-        backgroundHealthPing();
-        setInterval(backgroundHealthPing, 30000);
+        async function fetchRealtime() {
+            if (!isOpen) return;
+            try {
+                const start = performance.now();
+                const res = await fetch(API + '/health/realtime', { cache: 'no-store' });
+                const ms = Math.round(performance.now() - start);
+                const d = await res.json();
+                updateRealtime(d, ms);
+                setGlobalStatus(true);
+            } catch {
+                setGlobalStatus(false);
+            }
+        }
+
+        function updateRealtime(d, networkMs) {
+            // Backend uptime (sync the client-side counter)
+            if (d.uptime) {
+                uptimeBase = d.uptime.seconds;
+                serverStartedAt = d.uptime.started_at;
+                $('hl-be-uptime').textContent = fmtUptime(uptimeBase);
+            }
+
+            // Backend latency
+            $('hl-be-latency').textContent = networkMs + ' ms';
+            const bar = $('hl-be-latency-bar');
+            const pct = Math.min(networkMs / 1000 * 100, 100);
+            bar.style.width = pct + '%';
+            bar.className = 'hm-latency-fill ' + (networkMs < 300 ? 'good' : networkMs < 600 ? 'ok' : 'slow');
+
+            // Backend layer status
+            if (d.layers && d.layers.backend) {
+                setLayerStatus('hl-be-dot', 'hl-be-badge', d.layers.backend.status);
+                const mem = d.layers.backend.memory_mb;
+                $('hl-be-memory').textContent = mem > 0 ? mem + ' MB' : '—';
+            }
+
+            // Database layer
+            if (d.layers && d.layers.database) {
+                const db = d.layers.database;
+                setLayerStatus('hl-db-dot', 'hl-db-badge', db.status);
+                $('hl-db-conn').textContent = db.status === 'connected' ? 'Connected' : 'Disconnected';
+                $('hl-db-conn').style.color = db.status === 'connected' ? '#10b981' : '#ef4444';
+                $('hl-db-latency').textContent = db.latency_ms >= 0 ? db.latency_ms + ' ms' : '—';
+            }
+
+            // Metrics (accurate — user_requests excludes health polls)
+            if (d.metrics) {
+                $('hl-user-reqs').textContent = d.metrics.user_requests.toLocaleString();
+                $('hl-health-reqs').textContent = d.metrics.health_checks.toLocaleString();
+                $('hl-errors').textContent = d.metrics.errors.toLocaleString();
+                $('hl-error-rate').textContent = d.metrics.error_rate + '%';
+                $('hl-errors').style.color = d.metrics.errors > 0 ? '#ef4444' : '#10b981';
+                $('hl-error-rate').style.color = d.metrics.error_rate > 5 ? '#ef4444' : '#10b981';
+            }
+
+            $('hm-last-updated').textContent = 'Updated: ' + new Date().toLocaleTimeString();
+        }
+
+        async function fetchFull() {
+            try {
+                const start = performance.now();
+                const res = await fetch(API + '/health', { cache: 'no-store' });
+                const ms = Math.round(performance.now() - start);
+                const d = await res.json();
+
+                // Backend layer details
+                if (d.layers && d.layers.backend) {
+                    const be = d.layers.backend;
+                    $('hl-be-version').textContent = be.framework || d.version || '—';
+                    $('hl-be-python').textContent = be.python || '—';
+                    $('hl-be-platform').textContent = be.platform || '—';
+                    $('hl-be-env').textContent = be.environment || 'production';
+                }
+
+                // Database layer details
+                if (d.layers && d.layers.database) {
+                    const db = d.layers.database;
+                    $('hl-db-tables').textContent = db.tables ? db.tables.join(', ') : '—';
+                    $('hl-db-features').textContent = db.features ? db.features.join(', ') : '—';
+                }
+
+                // OCR engines
+                if (d.layers && d.layers.ocr) {
+                    const gv = d.layers.ocr.google_vision;
+                    const az = d.layers.ocr.azure_di;
+                    $(  'hl-gv-dot').className = 'engine-dot ' + (gv.configured ? 'active' : 'inactive');
+                    $('hl-gv-status').textContent = gv.configured ? 'Active' : 'Not Configured';
+                    $('hl-az-dot').className = 'engine-dot ' + (az.configured ? 'active' : 'inactive');
+                    $('hl-az-status').textContent = az.configured ? 'Active' : 'Not Configured';
+
+                    // Determine OCR layer overall status
+                    const ocrOk = gv.configured || az.configured;
+                    setLayerStatus('hl-ocr-dot', 'hl-ocr-badge', ocrOk ? 'operational' : 'degraded');
+                }
+
+                // Also run the realtime update with full data
+                updateRealtime({
+                    uptime: d.uptime,
+                    layers: d.layers,
+                    metrics: d.metrics,
+                }, ms);
+                setGlobalStatus(true);
+            } catch(err) {
+                console.error('Full health fetch error:', err);
+                setGlobalStatus(false);
+            }
+        }
+
+        // Background health ping for header button pulse
+        async function bgPing() {
+            try {
+                const res = await fetch(API + '/health/live', { cache: 'no-store' });
+                $('health-pulse').className = 'health-pulse ' + (res.ok ? 'healthy' : 'error');
+            } catch {
+                $('health-pulse').className = 'health-pulse error';
+            }
+        }
+        bgPing();
+        setInterval(bgPing, 30000);
     })();
     </script>
 
