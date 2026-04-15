@@ -339,3 +339,4 @@ async def readiness():
     if not db_connected:
         return {"status": "ready", "database": "unavailable", "note": "Running without DB"}
     return {"status": "ready"}
+# Deployment trigger
