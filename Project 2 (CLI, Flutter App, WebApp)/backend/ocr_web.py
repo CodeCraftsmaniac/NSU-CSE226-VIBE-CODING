@@ -877,6 +877,15 @@ class WebOCR:
 
         # ===== PASS 0: FULL-LINE MATCHES (highest confidence) =====
         # FULL_LINE_PATTERN captures "CSE115 3 A-" on a single line — most reliable
+        # Use a local semester lookup here because the semester ranges used by
+        # later passes are built afterward.
+        def get_semester_for_pass0(line_num: int) -> str:
+            for j in range(line_num, -1, -1):
+                sem_match = re.search(r'(Spring|Summer|Fall)\s+(\d{4})', lines[j], re.IGNORECASE)
+                if sem_match:
+                    return f"{sem_match.group(1).capitalize()} {sem_match.group(2)}"
+            return ""
+
         pass0_matched_lines = set()  # Track lines already matched in pass 0
         pass0_courses = []  # [(code, credits, grade, semester, line_num), ...]
         
@@ -894,7 +903,7 @@ class WebOCR:
                 grade = match.group(4).upper()
                 if grade not in VALID_GRADES:
                     continue
-                semester = get_semester_for_line(i)
+                semester = get_semester_for_pass0(i)
                 pass0_courses.append((code, credits, grade, semester, i))
                 pass0_matched_lines.add(i)
         
