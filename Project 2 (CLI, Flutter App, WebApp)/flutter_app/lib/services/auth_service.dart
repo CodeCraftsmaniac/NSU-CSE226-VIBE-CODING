@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:developer' as developer;
+import 'dart:io' show Platform;
 
 import 'package:flutter/foundation.dart';
 import 'package:google_sign_in/google_sign_in.dart';
@@ -61,6 +62,8 @@ class AuthService extends ChangeNotifier {
   );
 
   String _googleWebClientId = _defaultGoogleWebClientId;
+  String _androidGoogleClientId = '';
+  String _iosGoogleClientId = '';
   String _supabaseUrl = _defaultSupabaseUrl;
   String _supabaseAnonKey = _defaultSupabaseAnonKey;
 
@@ -161,11 +164,14 @@ class AuthService extends ChangeNotifier {
         return configError;
       }
 
-      final primaryClientId = _googleWebClientId.trim().isNotEmpty
-          ? _googleWebClientId.trim()
-          : _defaultGoogleWebClientId.trim();
+      final primaryClientId = _getPlatformClientId();
       final fallbackClientId = _defaultGoogleWebClientId.trim();
       final attemptedClientIds = <String>{};
+
+      developer.log(
+        'Google Sign-In attempt on platform: ${kIsWeb ? "Web" : (Platform.isAndroid ? "Android" : "iOS")}',
+        name: 'AuthService',
+      );
 
       String? lastError;
       for (final clientId in [primaryClientId, fallbackClientId]) {
@@ -174,6 +180,11 @@ class AuthService extends ChangeNotifier {
         }
 
         attemptedClientIds.add(clientId);
+        developer.log(
+          'Attempting sign-in with client ID: ${clientId.substring(0, 20)}...',
+          name: 'AuthService',
+        );
+        
         final result = await _signInWithClientId(clientId);
         if (result.error == null) {
           if (result.authenticated) {
@@ -184,6 +195,8 @@ class AuthService extends ChangeNotifier {
         }
 
         lastError = result.error;
+        developer.log('Sign-in failed: $lastError', name: 'AuthService');
+        
         if (!result.retryWithDefaultClient) {
           break;
         }
@@ -204,10 +217,26 @@ class AuthService extends ChangeNotifier {
     }
   }
 
+  String _getPlatformClientId() {
+    // For mobile platforms, return empty string to use default from google-services.json
+    if (!kIsWeb) {
+      if (Platform.isAndroid || Platform.isIOS) {
+        // Let google_sign_in plugin use the client ID from google-services.json/GoogleService-Info.plist
+        return '';
+      }
+    }
+    
+    // For web, use the web client ID
+    return _googleWebClientId.trim().isNotEmpty
+        ? _googleWebClientId.trim()
+        : _defaultGoogleWebClientId.trim();
+  }
+
   Future<_GoogleSignInResult> _signInWithClientId(String clientId) async {
     try {
+      // For mobile, don't pass serverClientId - let it use google-services.json
       final googleSignIn = GoogleSignIn(
-        serverClientId: clientId,
+        serverClientId: clientId.isEmpty ? null : clientId,
         scopes: const ['email', 'profile'],
       );
 
@@ -459,6 +488,14 @@ class AuthService extends ChangeNotifier {
         config,
         const ['google_client_id', 'googleClientId'],
       );
+      final remoteAndroidClientId = _pickString(
+        config,
+        const ['google_client_id_android', 'androidClientId'],
+      );
+      final remoteIosClientId = _pickString(
+        config,
+        const ['google_client_id_ios', 'iosClientId'],
+      );
 
       if (remoteSupabaseUrl.isNotEmpty) {
         _supabaseUrl = remoteSupabaseUrl;
@@ -469,6 +506,12 @@ class AuthService extends ChangeNotifier {
       if (_googleWebClientId.isEmpty &&
           _isLikelyGoogleClientId(remoteGoogleClientId)) {
         _googleWebClientId = remoteGoogleClientId;
+      }
+      if (remoteAndroidClientId.isNotEmpty) {
+        _androidGoogleClientId = remoteAndroidClientId;
+      }
+      if (remoteIosClientId.isNotEmpty) {
+        _iosGoogleClientId = remoteIosClientId;
       }
 
       if (_supabaseUrl.isNotEmpty && _supabaseAnonKey.isNotEmpty) {

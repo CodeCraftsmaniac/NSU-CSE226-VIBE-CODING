@@ -124,8 +124,16 @@ class _UploadScreenState extends State<UploadScreen>
     });
 
     try {
+      // Ensure filename has extension
+      final ext = fileName.contains('.') 
+        ? fileName.split('.').last.toLowerCase()
+        : 'pdf';
+      final safeFileName = fileName.contains('.') 
+        ? fileName 
+        : '$fileName.$ext';
+      
       final response = await apiService.uploadFile(
-        fileName,
+        safeFileName,
         filePath: filePath,
         bytes: bytes != null ? Uint8List.fromList(bytes) : null,
       );
@@ -141,7 +149,7 @@ class _UploadScreenState extends State<UploadScreen>
       await Navigator.of(context).push(
         PageRouteBuilder(
           pageBuilder: (_, animation, _) =>
-              ProcessingScreen(jobId: jobId, fileName: fileName),
+              ProcessingScreen(jobId: jobId, fileName: safeFileName),
           transitionsBuilder: (_, animation, _, child) => SlideTransition(
             position: Tween<Offset>(
               begin: const Offset(0, 1.0),

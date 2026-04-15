@@ -1,5 +1,7 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
+import 'package:http_parser/http_parser.dart';
+import 'dart:io';
 import 'storage_service.dart';
 
 class ApiException implements Exception {
@@ -83,19 +85,84 @@ class ApiService {
     Uint8List? bytes,
     String? filePath,
   }) async {
+    // Ensure filename has extension
+    final ext = fileName.contains('.') 
+      ? fileName.split('.').last.toLowerCase()
+      : 'pdf';
+    final safeFileName = fileName.contains('.') 
+      ? fileName 
+      : '$fileName.$ext';
+    
+    // Determine content type based on extension
+    MediaType contentType;
+    switch (ext) {
+      case 'pdf':
+        contentType = MediaType('application', 'pdf');
+        break;
+      case 'png':
+        contentType = MediaType('image', 'png');
+        break;
+      case 'jpg':
+      case 'jpeg':
+        contentType = MediaType('image', 'jpeg');
+        break;
+      default:
+        contentType = MediaType('application', 'octet-stream');
+    }
+    
     MultipartFile multipartFile;
-    if (bytes != null) {
-      multipartFile = MultipartFile.fromBytes(bytes, filename: fileName);
-    } else if (filePath != null) {
-      multipartFile = await MultipartFile.fromFile(filePath, filename: fileName);
+    
+    // Priority: bytes > filePath
+    if (bytes != null && bytes.isNotEmpty) {
+      // Use bytes directly (works on all platforms)
+      multipartFile = MultipartFile.fromBytes(
+        bytes, 
+        filename: safeFileName,
+        contentType: contentType,
+      );
+    } else if (filePath != null && filePath.isNotEmpty) {
+      // Read file as bytes first (more reliable on mobile)
+      try {
+        final file = File(filePath);
+        if (!await file.exists()) {
+          throw ApiException('File not found: $filePath');
+        }
+        final fileBytes = await file.readAsBytes();
+        if (fileBytes.isEmpty) {
+          throw ApiException('File is empty');
+        }
+        multipartFile = MultipartFile.fromBytes(
+          fileBytes,
+          filename: safeFileName,
+          contentType: contentType,
+        );
+      } catch (e) {
+        throw ApiException('Could not read file: $e');
+      }
     } else {
       throw ApiException('No file data provided');
     }
-    return _unwrap(_dio.post(
-      '/api/v1/upload/file',
-      data: FormData.fromMap({'file': multipartFile}),
-      options: Options(contentType: 'multipart/form-data'),
-    ));
+    
+    try {
+      return await _unwrap(_dio.post(
+        '/api/v1/upload/file',
+        data: FormData.fromMap({'file': multipartFile}),
+        options: Options(
+          contentType: 'multipart/form-data',
+          sendTimeout: const Duration(seconds: 120),
+          receiveTimeout: const Duration(seconds: 120),
+        ),
+      ));
+    } catch (e) {
+      if (e is DioException) {
+        if (e.type == DioExceptionType.sendTimeout) {
+          throw ApiException('Upload timeout. Please check your connection.');
+        } else if (e.type == DioExceptionType.connectionTimeout) {
+          throw ApiException('Connection timeout. Please try again.');
+        }
+      }
+      rethrow;
+    }
   }
 
   Future<Map<String, dynamic>> getAnalysis() =>

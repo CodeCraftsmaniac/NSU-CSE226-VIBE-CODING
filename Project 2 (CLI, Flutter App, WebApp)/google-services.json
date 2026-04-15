@@ -1,0 +1,39 @@
+﻿{
+  "project_info": {
+    "project_number": "656129640010",
+    "project_id": "galvanic-deck-478816-u9",
+    "storage_bucket": "galvanic-deck-478816-u9.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:656129640010:android:4309590c0c87af69af88b3",
+        "android_client_info": {
+          "package_name": "com.nsunexus.nsu_nexus_app"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "656129640010-k1f9dl8cbadngqdm8dnribi9doon67ko.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBdmcTydLJXf3zEq3ciSdfByW5_6uAJzv8"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "656129640010-k1f9dl8cbadngqdm8dnribi9doon67ko.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
