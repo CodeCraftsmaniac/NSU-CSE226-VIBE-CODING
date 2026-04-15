@@ -2,13 +2,16 @@
 Health Check Endpoints
 ======================
 Liveness and readiness probes for container orchestration.
-Premium health endpoint with detailed system info (FastAPI endpoint).
+Premium health endpoint with detailed system info.
+Real-time health monitoring for dashboard.
 """
 import os
 import sys
+import time
 import platform
 import logging
-from datetime import datetime
+import asyncio
+from datetime import datetime, timezone
 from pathlib import Path
 
 from fastapi import APIRouter
@@ -18,6 +21,24 @@ from app.config import get_settings
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Startup time tracking for accurate uptime
+# ═══════════════════════════════════════════════════════════════════════════════
+_STARTUP_TIME = time.monotonic()
+_STARTUP_TIMESTAMP = datetime.now(timezone.utc)
+_REQUEST_COUNT = 0
+_ERROR_COUNT = 0
+
+def increment_request_count():
+    """Called from middleware to track request count."""
+    global _REQUEST_COUNT
+    _REQUEST_COUNT += 1
+
+def increment_error_count():
+    """Called from middleware to track error count."""
+    global _ERROR_COUNT
+    _ERROR_COUNT += 1
 
 # Lazy settings loading
 _settings = None
@@ -37,45 +58,132 @@ def get_settings_safe():
 def check_db_connection():
     """Check database connection with lazy import."""
     try:
-        # Add backend directory for local imports
         backend_path = str(Path(__file__).parent.parent.parent.parent)
         if backend_path not in sys.path:
             sys.path.insert(0, backend_path)
-        
         from database import check_db_connection as _check_db
         return _check_db()
     except Exception:
         return False
+
+def _measure_db_latency():
+    """Measure database round-trip latency in ms."""
+    try:
+        backend_path = str(Path(__file__).parent.parent.parent.parent)
+        if backend_path not in sys.path:
+            sys.path.insert(0, backend_path)
+        from database import get_supabase
+        supabase = get_supabase()
+        if not supabase:
+            return -1
+        start = time.monotonic()
+        supabase.table('cse226_ocr_users').select('id').limit(1).execute()
+        return round((time.monotonic() - start) * 1000, 1)
+    except Exception:
+        return -1
+
+def _format_uptime(seconds):
+    """Format seconds into human-readable uptime string."""
+    days = int(seconds // 86400)
+    hours = int((seconds % 86400) // 3600)
+    minutes = int((seconds % 3600) // 60)
+    secs = int(seconds % 60)
+    parts = []
+    if days > 0:
+        parts.append(f"{days}d")
+    if hours > 0:
+        parts.append(f"{hours}h")
+    if minutes > 0:
+        parts.append(f"{minutes}m")
+    parts.append(f"{secs}s")
+    return " ".join(parts)
 
 
 # Knowledge base path
 KB_PATH = Path(__file__).parent.parent.parent.parent / 'knowledge_base.md'
 
 
+# ═══════════════════════════════════════════════════════════════════════════════
+# Real-time Health (lightweight, for frequent polling)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+@router.get("/health/realtime")
+async def health_realtime():
+    """
+    Lightweight real-time health metrics for dashboard polling.
+    
+    Designed to be called every 2-3 seconds by the frontend dashboard.
+    Includes uptime, latency, request counts — no heavy computations.
+    """
+    now = time.monotonic()
+    uptime_seconds = now - _STARTUP_TIME
+    
+    # Measure API response latency (time for this request itself)
+    request_start = time.monotonic()
+    
+    # Quick DB check (cached result to avoid hammering DB)
+    db_connected = check_db_connection()
+    db_latency = _measure_db_latency() if db_connected else -1
+    
+    api_latency = round((time.monotonic() - request_start) * 1000, 1)
+    
+    return {
+        'status': 'healthy',
+        'timestamp': datetime.now(timezone.utc).isoformat(),
+        'uptime': {
+            'seconds': round(uptime_seconds, 1),
+            'formatted': _format_uptime(uptime_seconds),
+            'started_at': _STARTUP_TIMESTAMP.isoformat(),
+        },
+        'latency': {
+            'api_ms': api_latency,
+            'db_ms': db_latency,
+        },
+        'metrics': {
+            'total_requests': _REQUEST_COUNT,
+            'total_errors': _ERROR_COUNT,
+            'error_rate': round(_ERROR_COUNT / max(_REQUEST_COUNT, 1) * 100, 2),
+        },
+        'database': {
+            'connected': db_connected,
+            'provider': 'Supabase',
+        },
+    }
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Full Health (detailed, for initial load)
+# ═══════════════════════════════════════════════════════════════════════════════
+
 @router.get("/health")
 async def health_check():
     """
-    Premium health endpoint with detailed system info.
+    Premium health endpoint with comprehensive system info.
     
-    Returns comprehensive health status including:
-    - OCR engine availability
-    - Database connection status
-    - System information
-    - Analysis capabilities
+    Returns detailed status including OCR engines, DB, system info,
+    analysis capabilities, grading scale, and waiver thresholds.
     """
     settings = get_settings_safe()
+    uptime_seconds = time.monotonic() - _STARTUP_TIME
     
     # OCR API keys status
     google_key = getattr(settings, 'GOOGLE_VISION_API_KEY', '') if settings else os.getenv('GOOGLE_VISION_API_KEY', '')
     azure_key = getattr(settings, 'AZURE_DOC_INTELLIGENCE_KEY', '') if settings else os.getenv('AZURE_DOC_INTELLIGENCE_KEY', '')
     
-    # System info
+    # Measure latencies
+    db_connected = check_db_connection()
+    db_latency = _measure_db_latency() if db_connected else -1
+    
+    # Uptime info
     uptime_info = {
-        'timestamp': datetime.utcnow().isoformat() + 'Z',
-        'timezone': 'UTC'
+        'timestamp': datetime.now(timezone.utc).isoformat(),
+        'timezone': 'UTC',
+        'started_at': _STARTUP_TIMESTAMP.isoformat(),
+        'uptime_seconds': round(uptime_seconds, 1),
+        'uptime_formatted': _format_uptime(uptime_seconds),
     }
     
-    # OCR limits info (no key preview for security)
+    # OCR limits info
     ocr_info = {
         'google_vision': {
             'configured': bool(google_key),
@@ -134,9 +242,6 @@ async def health_check():
         }
     }
     
-    # Database status
-    db_connected = check_db_connection()
-    
     # Build response
     return {
         'status': 'healthy',
@@ -144,6 +249,14 @@ async def health_check():
         'version': '2.5.0',
         'framework': 'FastAPI',
         'uptime': uptime_info,
+        'latency': {
+            'db_ms': db_latency,
+        },
+        'metrics': {
+            'total_requests': _REQUEST_COUNT,
+            'total_errors': _ERROR_COUNT,
+            'error_rate': round(_ERROR_COUNT / max(_REQUEST_COUNT, 1) * 100, 2),
+        },
         'ocr_engines': ocr_info,
         'server': server_info,
         'environment': env_info,
@@ -152,14 +265,16 @@ async def health_check():
         'endpoints': {
             'root': '/',
             'health': '/health',
+            'health_realtime': '/health/realtime',
             'upload': '/api/upload (POST)',
             'auth': '/auth/*',
             'history': '/api/history',
-            'docs': '/docs'
+            'docs': '/docs',
         },
         'database': {
             'enabled': True,
             'connected': db_connected,
+            'latency_ms': db_latency,
             'provider': 'Supabase',
             'features': ['user_auth', 'scan_history', 'api_keys'] if db_connected else []
         },
@@ -189,10 +304,8 @@ async def liveness():
 @router.get("/health/ready")
 async def readiness():
     """Kubernetes readiness probe - is the service ready to accept traffic?"""
-    # Check database connection
     db_ready = check_db_connection()
     
-    # In production, DB is optional (graceful degradation)
     if not db_ready:
         return {
             "status": "ready",

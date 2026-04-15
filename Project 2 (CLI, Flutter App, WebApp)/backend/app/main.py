@@ -54,10 +54,29 @@ app.add_middleware(
 async def global_exception_handler(request: Request, exc: Exception):
     """Catch all unhandled exceptions and return generic error."""
     logger.error(f"Unhandled exception on {request.url.path}: {exc}")
+    # Track errors for health metrics
+    try:
+        from app.api.v1.health import increment_error_count
+        increment_error_count()
+    except Exception:
+        pass
     return JSONResponse(
         status_code=500,
         content={"error": "Internal server error"}
     )
+
+
+# Request counting middleware for health metrics
+@app.middleware("http")
+async def count_requests(request: Request, call_next):
+    """Count requests for real-time health dashboard."""
+    try:
+        from app.api.v1.health import increment_request_count
+        increment_request_count()
+    except Exception:
+        pass
+    response = await call_next(request)
+    return response
 
 
 @app.get("/")
@@ -69,12 +88,6 @@ def root():
         "status": "running",
     }
 
-
-@app.get("/health")
-@app.get("/health/live")
-@app.get("/health/ready")
-def health():
-    return {"status": "healthy"}
 
 
 # Load rate limiting

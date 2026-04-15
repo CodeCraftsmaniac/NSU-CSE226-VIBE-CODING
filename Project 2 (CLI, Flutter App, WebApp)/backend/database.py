@@ -10,7 +10,7 @@ Thread-safe connection pooling for 20+ concurrent users.
 import os
 import logging
 import threading
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional, Dict, List, Any
 
 logger = logging.getLogger(__name__)
@@ -79,7 +79,7 @@ def create_user(email: str, name: str, provider: str = 'google') -> Optional[Dic
         if result.data:
             # Update last login
             supabase.table('cse226_ocr_users').update({
-                'last_login': datetime.utcnow().isoformat(),
+                'last_login': datetime.now(timezone.utc).isoformat(),
                 'name': name
             }).eq('email', email).execute()
             logger.info(f"User already exists: {email}")
