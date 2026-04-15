@@ -8,10 +8,10 @@ on:
   push:
     branches: [main]
     paths:
-      - 'Project 2 (CLI, Flutter App, WebApp)/backend/**'
-      - 'Project 2 (CLI, Flutter App, WebApp)/requirements.txt'
-      - 'Project 2 (CLI, Flutter App, WebApp)/Dockerfile'
-      - 'Project 2 (CLI, Flutter App, WebApp)/.github/workflows/deploy-backend.yml'
+      - 'backend/**'
+      - 'requirements.txt'
+      - 'Dockerfile'
+      - '.github/workflows/deploy-backend.yml'
 
 env:
   PROJECT_ID: galvanic-deck-478816-u9
@@ -21,9 +21,6 @@ env:
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: "Project 2 (CLI, Flutter App, WebApp)"
     
     steps:
       - name: Checkout code
