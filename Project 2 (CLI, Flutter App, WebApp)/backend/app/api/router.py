@@ -23,4 +23,4 @@ api_router.include_router(history.router, tags=["History"])  # /history
 api_router.include_router(history.router, prefix="/api", tags=["History"])  # /api/history (legacy)
 
 # Analysis endpoints
-api_router.include_router(analysis.router, tags=["Analysis"])  # /analysis
+api_router.include_router(analysis.router, prefix="/api/v1", tags=["Analysis"])  # /api/v1/analysis
