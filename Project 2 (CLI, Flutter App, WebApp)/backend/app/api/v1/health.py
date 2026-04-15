@@ -32,11 +32,15 @@ _USER_REQUEST_COUNT = 0
 _HEALTH_CHECK_COUNT = 0
 _ERROR_COUNT = 0
 
-# Cached DB latency (don't hammer DB on every 2s poll)
+# Cached latencies (don't hammer services on every 2s poll)
 _cached_db_latency = -1.0
 _cached_db_connected = False
 _db_cache_time = 0.0
 _DB_CACHE_TTL = 8.0  # Re-check DB every 8 seconds
+
+_cached_ocr_latency = -1.0
+_ocr_cache_time = 0.0
+_OCR_CACHE_TTL = 30.0  # Re-check OCR every 30 seconds
 
 # Health check paths to exclude from user request count
 _HEALTH_PATHS = {'/health', '/health/', '/health/realtime', '/health/live', '/health/ready'}
@@ -106,6 +110,47 @@ def _check_db():
         return False, -1
 
 
+def _check_ocr():
+    """Check OCR engines availability (cached)."""
+    global _cached_ocr_latency, _ocr_cache_time
+    now = time.monotonic()
+    if now - _ocr_cache_time < _OCR_CACHE_TTL:
+        return _cached_ocr_latency
+    
+    settings = get_settings_safe()
+    google_key = getattr(settings, 'GOOGLE_VISION_API_KEY', '') if settings else os.getenv('GOOGLE_VISION_API_KEY', '')
+    azure_key = getattr(settings, 'AZURE_DOC_INTELLIGENCE_KEY', '') if settings else os.getenv('AZURE_DOC_INTELLIGENCE_KEY', '')
+    
+    # If no OCR engines configured, return 0
+    if not google_key and not azure_key:
+        _cached_ocr_latency = 0
+        _ocr_cache_time = now
+        return 0
+    
+    # Measure time to check if OCR module can be imported
+    try:
+        start = time.monotonic()
+        backend_path = str(Path(__file__).parent.parent.parent.parent)
+        if backend_path not in sys.path:
+            sys.path.insert(0, backend_path)
+        
+        # Try importing OCR modules to verify they're available
+        if google_key:
+            from ocr_engine import extract_text_google
+        if azure_key:
+            from ocr_azure import extract_text_azure
+        
+        latency = round((time.monotonic() - start) * 1000, 1)
+        _cached_ocr_latency = max(1, latency)
+        _ocr_cache_time = now
+        return _cached_ocr_latency
+    except Exception as e:
+        logger.warning(f"OCR health check failed: {e}")
+        _cached_ocr_latency = -1
+        _ocr_cache_time = now
+        return -1
+
+
 def _format_uptime(seconds):
     days = int(seconds // 86400)
     hours = int((seconds % 86400) // 3600)
@@ -154,11 +199,18 @@ async def health_realtime():
     Lightweight real-time health metrics for dashboard polling.
     This endpoint's own requests are NOT counted in user_requests.
     """
-    now_mono = time.monotonic()
-    uptime_secs = now_mono - _STARTUP_TIME
+    request_start = time.monotonic()
+    uptime_secs = time.monotonic() - _STARTUP_TIME
     
     db_connected, db_latency = _check_db()
+    ocr_latency = _check_ocr()
     memory_mb = _get_memory_mb()
+    
+    # Calculate actual backend response time (before returning response)
+    backend_latency = round((time.monotonic() - request_start) * 1000, 1)
+    
+    # Determine OCR status
+    ocr_status = 'operational' if ocr_latency >= 0 else 'unavailable'
     
     return {
         'status': 'healthy',
@@ -171,7 +223,7 @@ async def health_realtime():
         'layers': {
             'backend': {
                 'status': 'operational',
-                'latency_ms': round(uptime_secs * 10, 1) if uptime_secs < 100 else 100,  # Synthetic latency for display
+                'latency_ms': max(1, backend_latency),  # Real API response time
                 'uptime_seconds': round(uptime_secs, 1),
                 'memory_mb': memory_mb,
             },
@@ -181,9 +233,9 @@ async def health_realtime():
                 'provider': 'Supabase',
             },
             'ocr': {
-                'status': 'operational',
-                'latency_ms': 0,
-                'note': 'OCR engines ready',
+                'status': ocr_status,
+                'latency_ms': max(0, ocr_latency) if ocr_latency >= 0 else 0,
+                'note': 'OCR engines ready' if ocr_latency >= 0 else 'OCR not configured',
             },
         },
         'metrics': {
