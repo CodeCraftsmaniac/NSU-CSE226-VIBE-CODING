@@ -60,12 +60,26 @@ def verify_supabase_token(access_token: str) -> Optional[Dict[str, Any]]:
         user_response = supabase.auth.get_user(access_token)
         if user_response and user_response.user:
             user = user_response.user
+            metadata = user.user_metadata or {}
+            app_metadata = user.app_metadata or {}
+            name = (
+                metadata.get('full_name')
+                or metadata.get('name')
+                or metadata.get('display_name')
+                or ''
+            )
+            avatar_url = (
+                metadata.get('avatar_url')
+                or metadata.get('picture')
+                or metadata.get('photo_url')
+                or ''
+            )
             return {
                 'id': user.id,
                 'email': user.email,
-                'name': user.user_metadata.get('full_name') or user.user_metadata.get('name', ''),
-                'avatar_url': user.user_metadata.get('avatar_url', ''),
-                'provider': user.app_metadata.get('provider', 'google'),
+                'name': name,
+                'avatar_url': avatar_url,
+                'provider': app_metadata.get('provider') or metadata.get('provider') or 'google',
                 'created_at': str(user.created_at) if user.created_at else None
             }
     except Exception as e:

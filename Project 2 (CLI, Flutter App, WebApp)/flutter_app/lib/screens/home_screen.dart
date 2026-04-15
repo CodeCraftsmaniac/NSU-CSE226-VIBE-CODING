@@ -6,7 +6,7 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 
-import '../services/supabase_service.dart';
+import '../services/auth_service.dart';
 import '../widgets/glass_widgets.dart';
 import 'history_screen.dart';
 
@@ -94,12 +94,21 @@ class _HomeScreenState extends State<HomeScreen> {
     setState(() => _isSigningIn = true);
 
     try {
-      final success = await authService.signInWithGoogle();
-      if (success && mounted) {
+      final error = await authService.signInWithGoogle();
+      if (!mounted) return;
+
+      if (error == null && authService.isAuthenticated) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Signed in successfully!'),
             backgroundColor: Color(0xFF0066CC),
+          ),
+        );
+      } else if (error != null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(error),
+            backgroundColor: Colors.red,
           ),
         );
       }
@@ -287,6 +296,8 @@ class _HomeScreenState extends State<HomeScreen> {
     final level1 = asMap(data?['level1']);
     final level2 = asMap(data?['level2']);
     final courses = asList(data?['courses']);
+    final user = authService.currentUser;
+    final userHasAvatar = (user?.avatarUrl?.isNotEmpty ?? false);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -326,12 +337,20 @@ class _HomeScreenState extends State<HomeScreen> {
                         children: [
                           CircleAvatar(
                             radius: 16,
-                            backgroundImage: authService.currentUser?['avatar_url'] != null
-                                ? NetworkImage(authService.currentUser!['avatar_url'])
+                            backgroundImage: userHasAvatar
+                                ? NetworkImage(user!.avatarUrl!)
                                 : null,
                             backgroundColor: const Color(0xFF0066CC),
-                            child: authService.currentUser?['avatar_url'] == null
-                                ? const Icon(Icons.person, size: 18, color: Colors.white)
+                            child: !userHasAvatar
+                                ? Text(
+                                    (user?.displayName.isNotEmpty == true
+                                        ? user!.displayName[0].toUpperCase()
+                                        : '?'),
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  )
                                 : null,
                           ),
                           const SizedBox(width: 4),

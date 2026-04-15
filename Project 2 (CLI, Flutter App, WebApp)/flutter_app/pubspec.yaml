@@ -18,6 +18,7 @@ dependencies:
 
   # Auth & Storage
   google_sign_in: ^6.2.1
+  supabase_flutter: ^2.8.4
   flutter_secure_storage: ^9.2.4
   shared_preferences: 2.2.3
 

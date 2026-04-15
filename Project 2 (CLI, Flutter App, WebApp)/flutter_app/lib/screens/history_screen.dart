@@ -1,7 +1,7 @@
 ﻿import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 
-import '../services/supabase_service.dart';
+import '../services/auth_service.dart';
 import '../widgets/glass_widgets.dart';
 import 'home_screen.dart';
 
