@@ -2,6 +2,7 @@
 import 'package:flutter_animate/flutter_animate.dart';
 
 import '../services/auth_service.dart';
+import '../services/analysis_session_service.dart';
 import '../widgets/glass_widgets.dart';
 import 'home_screen.dart';
 
@@ -145,14 +146,16 @@ class _HistoryScreenState extends State<HistoryScreen> {
       final scanDetails = await authService.getScanDetails(scanId);
       if (mounted) {
         Navigator.pop(context); // Close loading dialog
-        
-        if (scanDetails != null && scanDetails['analysis_data'] != null) {
-          // Navigate to home screen with loaded data
+
+        final analysisData = scanDetails?['analysis_data'];
+        if (analysisData is Map) {
+          analysisSessionService
+              .setLatestAnalysis(analysisData.cast<String, dynamic>());
           Navigator.pushReplacement(
             context,
             MaterialPageRoute(
               builder: (context) => HomeScreen(
-                initialData: scanDetails['analysis_data'] as Map<String, dynamic>,
+                initialData: analysisData.cast<String, dynamic>(),
               ),
             ),
           );

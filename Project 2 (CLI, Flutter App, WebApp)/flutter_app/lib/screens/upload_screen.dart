@@ -8,6 +8,7 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../services/api_service.dart';
+import '../services/analysis_session_service.dart';
 import '../widgets/glass_widgets.dart';
 import 'processing_screen.dart';
 
@@ -52,7 +53,7 @@ class _UploadScreenState extends State<UploadScreen>
     try {
       final result = await FilePicker.platform.pickFiles(
         type: FileType.custom,
-        allowedExtensions: ['pdf', 'png', 'jpg', 'jpeg'],
+        allowedExtensions: ['pdf', 'png', 'jpg', 'jpeg', 'csv'],
         withData: kIsWeb,
       );
       if (result == null || result.files.isEmpty) return;
@@ -140,17 +141,27 @@ class _UploadScreenState extends State<UploadScreen>
 
       if (!mounted) return;
 
-      final jobId = response['job_id']?.toString();
-      if (jobId == null || jobId.isEmpty) {
-        throw ApiException('No job ID returned from server.');
+      final success = response['success'] == true;
+      final rawAnalysis = response['data'];
+      if (!success || rawAnalysis is! Map) {
+        throw ApiException(
+          response['error']?.toString() ?? 'OCR processing failed.',
+        );
       }
 
-      // Navigate to the processing screen with the job ID
+      final analysisData = rawAnalysis.cast<String, dynamic>();
+      analysisSessionService.setLatestAnalysis(analysisData);
+      final jobId = response['job_id']?.toString() ?? 'completed';
+
       await Navigator.of(context).push(
         PageRouteBuilder(
-          pageBuilder: (_, animation, _) =>
-              ProcessingScreen(jobId: jobId, fileName: safeFileName),
-          transitionsBuilder: (_, animation, _, child) => SlideTransition(
+          pageBuilder: (context, animation, secondaryAnimation) =>
+              ProcessingScreen(
+                jobId: jobId,
+                fileName: safeFileName,
+                analysisData: analysisData,
+              ),
+          transitionsBuilder: (context, animation, secondaryAnimation, child) => SlideTransition(
             position: Tween<Offset>(
               begin: const Offset(0, 1.0),
               end: Offset.zero,
@@ -305,7 +316,7 @@ class _UploadScreenState extends State<UploadScreen>
                       ),
                 ),
                 Text(
-                  'PDF or image • AI-powered OCR',
+                  'PDF, image, or CSV • backend-powered OCR',
                   style: Theme.of(context)
                       .textTheme
                       .bodySmall
@@ -348,7 +359,7 @@ class _UploadScreenState extends State<UploadScreen>
               child: _SourceButton(
                 icon: Icons.folder_outlined,
                 label: 'Files',
-                subtitle: 'Pick PDF or image',
+                subtitle: 'Pick PDF, image, or CSV',
                 accent: kPrimary,
                 onTap: _isUploading ? null : _pickFile,
               ),
@@ -389,6 +400,8 @@ class _UploadScreenState extends State<UploadScreen>
                   label: 'JPG/JPEG', icon: Icons.image_rounded, color: kPrimary),
               _FormatChip(
                   label: 'PNG', icon: Icons.image_rounded, color: kSuccess),
+              _FormatChip(
+                  label: 'CSV', icon: Icons.table_chart_rounded, color: kWarning),
             ],
           ),
           const SizedBox(height: 12),
@@ -493,7 +506,7 @@ class _DropZone extends StatelessWidget {
       onTap: onTap,
       child: AnimatedBuilder(
         animation: pulseCtrl,
-        builder: (_, _) {
+        builder: (context, child) {
           return ClipRRect(
             borderRadius: BorderRadius.circular(24),
             child: BackdropFilter(
@@ -551,7 +564,7 @@ class _DropZone extends StatelessWidget {
         // Upload icon with glow
         AnimatedBuilder(
           animation: pulseCtrl,
-          builder: (_, _) => Container(
+          builder: (context, child) => Container(
             width: 72,
             height: 72,
             decoration: BoxDecoration(
@@ -600,7 +613,7 @@ class _DropZone extends StatelessWidget {
         const SizedBox(height: 6),
 
         Text(
-          'PDF, JPG, or PNG • Up to 10 MB',
+          'PDF, JPG, PNG, or CSV • Up to 16 MB',
           style: Theme.of(context)
               .textTheme
               .bodySmall

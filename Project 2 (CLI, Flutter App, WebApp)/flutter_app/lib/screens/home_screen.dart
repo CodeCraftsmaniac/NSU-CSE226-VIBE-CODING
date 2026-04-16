@@ -1,20 +1,13 @@
-import 'dart:async';
-import 'dart:convert';
-
-import 'package:file_picker/file_picker.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
+import 'package:flutter_animate/flutter_animate.dart';
 
-import '../services/auth_service.dart';
+import '../services/analysis_session_service.dart';
+import '../services/api_service.dart';
+import '../services/supabase_service.dart' hide ApiException;
 import '../widgets/glass_widgets.dart';
+import 'auth_screen.dart';
 import 'history_screen.dart';
-
-// Cloud Run backend API with custom domain
-const defaultApiBaseUrl = String.fromEnvironment(
-  'API_BASE_URL',
-  defaultValue: 'https://ocrapi.nsunexus.app',
-);
+import 'upload_screen.dart';
 
 double asDouble(dynamic value) {
   if (value is num) return value.toDouble();
@@ -28,12 +21,13 @@ int asInt(dynamic value) {
 
 String asString(dynamic value) => value?.toString() ?? '';
 
-Map<String, dynamic> asMap(dynamic value) =>
-    value is Map<String, dynamic> ? value : <String, dynamic>{};
+Map<String, dynamic> asMap(dynamic value) {
+  if (value is Map<String, dynamic>) return value;
+  if (value is Map) return value.cast<String, dynamic>();
+  return const <String, dynamic>{};
+}
 
 List<dynamic> asList(dynamic value) => value is List ? value : <dynamic>[];
-
-enum UploadStage { idle, uploading, ready, failure }
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key, this.initialData});
@@ -46,46 +40,93 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  static const progressMessages = <String>[
-    'Booting premium OCR pipeline',
-    'Securing transcript upload',
-    'Extracting course rows and grades',
-    'Resolving retakes and credit signals',
-    'Composing degree audit story',
-  ];
-
-  late final TextEditingController endpointController;
-  Timer? progressTimer;
   Map<String, dynamic>? data;
-  String apiBaseUrl = defaultApiBaseUrl;
-  String statusMessage =
-      'Pick a transcript and the app will call the same web API logic.';
+  bool _isLoading = true;
   String? errorMessage;
-  String? selectedFileName;
-  UploadStage stage = UploadStage.idle;
-  double progress = 0;
   int selectedLevel = 1;
-  int progressIndex = 0;
   bool _isSigningIn = false;
 
   @override
   void initState() {
     super.initState();
-    endpointController = TextEditingController(text: apiBaseUrl);
-
-    // Load initial data from history if provided
-    if (widget.initialData != null) {
-      data = widget.initialData;
-      stage = UploadStage.ready;
-      statusMessage = 'Loaded from history. Explore Level 1, 2, and 3 below.';
-    }
+    _loadAnalysis();
   }
 
   @override
   void dispose() {
-    progressTimer?.cancel();
-    endpointController.dispose();
     super.dispose();
+  }
+
+  Future<void> _loadAnalysis() async {
+    final initialData = widget.initialData != null
+        ? Map<String, dynamic>.from(widget.initialData!)
+        : null;
+    final cached = initialData ?? analysisSessionService.latestRawAnalysis;
+
+    setState(() {
+      data = cached;
+      _isLoading = true;
+      errorMessage = null;
+    });
+
+    if (cached != null && !authService.isAuthenticated) {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+      return;
+    }
+
+    if (!authService.isAuthenticated) {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+      return;
+    }
+
+    try {
+      final raw = await apiService.getAnalysis();
+      analysisSessionService.setLatestAnalysis(raw);
+      if (!mounted) return;
+
+      setState(() {
+        data = analysisSessionService.latestRawAnalysis;
+        _isLoading = false;
+      });
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      setState(() {
+        data = cached;
+        errorMessage = cached == null ? e.message : null;
+        _isLoading = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        data = cached;
+        errorMessage = cached == null
+            ? 'Could not load backend analysis. Pull down to retry.'
+            : null;
+        _isLoading = false;
+      });
+    }
+  }
+
+  void _openUpload() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => const UploadScreen()),
+    );
+  }
+
+  void _openHistoryOrAuth() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => authService.isAuthenticated
+            ? const HistoryScreen()
+            : const AuthScreen(),
+      ),
+    );
   }
 
   Future<void> _handleGoogleSignIn() async {
@@ -97,29 +138,12 @@ class _HomeScreenState extends State<HomeScreen> {
       final error = await authService.signInWithGoogle();
       if (!mounted) return;
 
-      if (error == null && authService.isAuthenticated) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Signed in successfully!'),
-            backgroundColor: Color(0xFF0066CC),
-          ),
-        );
-      } else if (error != null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(error),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Sign in failed: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
+      if (error != null) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(error), backgroundColor: kError));
+      } else {
+        await _loadAnalysis();
       }
     } finally {
       if (mounted) {
@@ -129,163 +153,36 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _handleSignOut() async {
-    await authService.signOut();
+    await authService.logout();
     if (mounted) {
       setState(() {});
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Signed out successfully'),
-          backgroundColor: Color(0xFF64748B),
-        ),
-      );
     }
-  }
-
-  Future<void> pickTranscript() async {
-    final selection = await FilePicker.platform.pickFiles(
-      type: FileType.custom,
-      allowedExtensions: const ['pdf', 'png', 'jpg', 'jpeg', 'csv'],
-      withData: kIsWeb, // Load bytes on web, path on native
-    );
-    if (selection == null || selection.files.isEmpty) return;
-
-    final pickedFile = selection.files.single;
-    selectedFileName = pickedFile.name;
-    startProgress();
-
-    try {
-      final request = http.MultipartRequest(
-        'POST',
-        Uri.parse(apiBaseUrl).resolve('/upload'),
-      );
-
-      // On web, use bytes; on native, use file path
-      if (kIsWeb) {
-        final bytes = pickedFile.bytes;
-        if (bytes == null) {
-          throw Exception('Could not read file data');
-        }
-        request.files.add(http.MultipartFile.fromBytes(
-          'file',
-          bytes,
-          filename: pickedFile.name,
-        ));
-      } else {
-        final filePath = pickedFile.path;
-        if (filePath == null) {
-          throw Exception('Could not get file path');
-        }
-        request.files.add(await http.MultipartFile.fromPath('file', filePath));
-      }
-
-      final response = await request.send();
-      final body = await response.stream.bytesToString();
-      final decoded = jsonDecode(body) as Map<String, dynamic>;
-      if (response.statusCode >= 400 || decoded['success'] != true) {
-        throw Exception(decoded['error'] ?? 'The server rejected the upload.');
-      }
-      if (!mounted) return;
-
-      progressTimer?.cancel();
-      setState(() {
-        data = asMap(decoded['data']);
-        stage = UploadStage.ready;
-        progress = 1;
-        selectedLevel = 1;
-        errorMessage = null;
-        statusMessage = 'Analysis is ready. Explore Level 1, 2, and 3 below.';
-      });
-    } catch (error) {
-      if (!mounted) return;
-      progressTimer?.cancel();
-      setState(() {
-        stage = UploadStage.failure;
-        progress = 0;
-        data = null;
-        errorMessage = error.toString().replaceFirst('Exception: ', '');
-        statusMessage = 'Upload failed. Review the error and try again.';
-      });
-    }
-  }
-
-  void startProgress() {
-    progressTimer?.cancel();
-    setState(() {
-      data = null;
-      stage = UploadStage.uploading;
-      progress = 0.08;
-      progressIndex = 0;
-      errorMessage = null;
-      statusMessage = progressMessages.first;
-    });
-    progressTimer = Timer.periodic(const Duration(milliseconds: 650), (_) {
-      if (!mounted) return;
-      setState(() {
-        progress = (progress + 0.07).clamp(0.08, 0.92);
-        progressIndex = (progressIndex + 1) % progressMessages.length;
-        statusMessage = progressMessages[progressIndex];
-      });
-    });
-  }
-
-  Future<void> editEndpoint() async {
-    endpointController.text = apiBaseUrl;
-    await showModalBottomSheet<void>(
-      context: context,
-      backgroundColor: Colors.transparent,
-      isScrollControlled: true,
-      builder: (context) => Padding(
-        padding: EdgeInsets.only(
-          left: 20,
-          right: 20,
-          top: 20,
-          bottom: MediaQuery.of(context).viewInsets.bottom + 24,
-        ),
-        child: GlassCard(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('API Endpoint', style: Theme.of(context).textTheme.titleLarge),
-              const SizedBox(height: 8),
-              Text(
-                'Point the app to local Flask, the emulator bridge, or the deployed Vercel backend.',
-                style: Theme.of(context).textTheme.bodyMedium,
-              ),
-              const SizedBox(height: 16),
-              TextField(controller: endpointController),
-              const SizedBox(height: 16),
-              SizedBox(
-                width: double.infinity,
-                child: FilledButton(
-                  onPressed: () {
-                    setState(() {
-                      apiBaseUrl = endpointController.text.trim().isEmpty
-                          ? defaultApiBaseUrl
-                          : endpointController.text.trim();
-                    });
-                    Navigator.of(context).pop();
-                  },
-                  child: const Text('Save Endpoint'),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      body: GradientBackground(
-        child: SafeArea(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.fromLTRB(20, 18, 20, 32),
+    return RefreshIndicator(
+      onRefresh: _loadAnalysis,
+      color: kPrimary,
+      backgroundColor: kSurface,
+      child: Stack(
+        children: [
+          const Positioned(
+            top: -80,
+            left: -60,
+            child: AuroraBlob(color: kPrimary, size: 260),
+          ),
+          const Positioned(
+            bottom: -90,
+            right: -60,
+            child: AuroraBlob(color: kSuccess, size: 240),
+          ),
+          SingleChildScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: const EdgeInsets.fromLTRB(20, 18, 20, 100),
             child: buildContent(context),
           ),
-        ),
+        ],
       ),
     );
   }
@@ -295,9 +192,75 @@ class _HomeScreenState extends State<HomeScreen> {
     final info = asMap(data?['ocr_info']);
     final level1 = asMap(data?['level1']);
     final level2 = asMap(data?['level2']);
+    final level3 = asMap(data?['level3']);
     final courses = asList(data?['courses']);
     final user = authService.currentUser;
     final userHasAvatar = (user?.avatarUrl?.isNotEmpty ?? false);
+    final studentName = asString(info['student_name']).isNotEmpty
+        ? asString(info['student_name'])
+        : 'Backend Analysis';
+    final departmentName = asString(info['department_full_name']).isNotEmpty
+        ? asString(info['department_full_name'])
+        : asString(info['department_name']);
+    final backendEngine = asString(info['engine']).isNotEmpty
+        ? asString(info['engine'])
+        : 'Backend OCR';
+    final unknownCourses = asList(
+      info['unknown_courses'],
+    ).map(asString).where((value) => value.isNotEmpty).toList();
+
+    if (_isLoading) {
+      return Column(
+        children: [
+          _buildShimmerCard(height: 220),
+          const SizedBox(height: 18),
+          _buildShimmerCard(height: 96),
+          const SizedBox(height: 18),
+          _buildShimmerCard(height: 240),
+        ],
+      );
+    }
+
+    if (data == null) {
+      return Padding(
+        padding: const EdgeInsets.only(top: 60),
+        child: EmptyState(
+          icon: errorMessage != null
+              ? Icons.cloud_off_rounded
+              : Icons.upload_file_rounded,
+          title: errorMessage != null
+              ? 'Results unavailable'
+              : 'No transcript analysis yet',
+          subtitle:
+              errorMessage ??
+              'Upload a transcript and this screen will show the same backend OCR result structure as the website.',
+          accent: errorMessage != null ? kError : kPrimary,
+          action: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              GradientButton(
+                label: 'Upload Transcript',
+                icon: Icons.upload_file_rounded,
+                onPressed: _openUpload,
+                width: 230,
+              ),
+              const SizedBox(height: 12),
+              OutlinedButton.icon(
+                onPressed: _openHistoryOrAuth,
+                icon: Icon(
+                  authService.isAuthenticated
+                      ? Icons.history_rounded
+                      : Icons.login_rounded,
+                ),
+                label: Text(
+                  authService.isAuthenticated ? 'Open History' : 'Sign In',
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -313,25 +276,41 @@ class _HomeScreenState extends State<HomeScreen> {
                     height: 50,
                     decoration: BoxDecoration(
                       borderRadius: BorderRadius.circular(14),
-                      gradient: const LinearGradient(colors: [Color(0xFF0066CC), Color(0xFF0284C7)]),
+                      gradient: const LinearGradient(
+                        colors: [Color(0xFF0066CC), Color(0xFF0284C7)],
+                      ),
                     ),
-                    child: const Icon(Icons.school_outlined, color: Colors.white),
+                    child: const Icon(
+                      Icons.cloud_done_rounded,
+                      color: Colors.white,
+                    ),
                   ),
                   const SizedBox(width: 14),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text('North South University', style: theme.textTheme.bodyMedium),
-                        Text('Degree Audit', style: theme.textTheme.titleLarge),
+                        Text(
+                          'Backend OCR Results',
+                          style: theme.textTheme.bodyMedium,
+                        ),
+                        Text(studentName, style: theme.textTheme.titleLarge),
+                        if (departmentName.isNotEmpty)
+                          Text(
+                            departmentName,
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: kTextSecondary,
+                            ),
+                          ),
                       ],
                     ),
                   ),
-                  // Auth button - Google Sign In or User Avatar
                   if (authService.isAuthenticated)
                     PopupMenuButton<String>(
                       offset: const Offset(0, 40),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
@@ -344,8 +323,9 @@ class _HomeScreenState extends State<HomeScreen> {
                             child: !userHasAvatar
                                 ? Text(
                                     (user?.displayName.isNotEmpty == true
-                                        ? user!.displayName[0].toUpperCase()
-                                        : '?'),
+                                            ? user!.displayName[0].toUpperCase()
+                                            : '?')
+                                        .toString(),
                                     style: const TextStyle(
                                       color: Colors.white,
                                       fontWeight: FontWeight.w700,
@@ -354,24 +334,27 @@ class _HomeScreenState extends State<HomeScreen> {
                                 : null,
                           ),
                           const SizedBox(width: 4),
-                          const Icon(Icons.arrow_drop_down, color: Color(0xFF64748B)),
+                          const Icon(
+                            Icons.arrow_drop_down,
+                            color: Color(0xFF64748B),
+                          ),
                         ],
                       ),
                       itemBuilder: (context) => [
-                        PopupMenuItem(
+                        const PopupMenuItem(
                           value: 'history',
                           child: Row(
-                            children: const [
+                            children: [
                               Icon(Icons.history, size: 20),
                               SizedBox(width: 12),
                               Text('Scan History'),
                             ],
                           ),
                         ),
-                        PopupMenuItem(
+                        const PopupMenuItem(
                           value: 'signout',
                           child: Row(
-                            children: const [
+                            children: [
                               Icon(Icons.logout, size: 20),
                               SizedBox(width: 12),
                               Text('Sign Out'),
@@ -381,10 +364,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       ],
                       onSelected: (value) {
                         if (value == 'history') {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(builder: (context) => const HistoryScreen()),
-                          );
+                          _openHistoryOrAuth();
                         } else if (value == 'signout') {
                           _handleSignOut();
                         }
@@ -395,7 +375,10 @@ class _HomeScreenState extends State<HomeScreen> {
                       onTap: _isSigningIn ? null : _handleGoogleSignIn,
                       borderRadius: BorderRadius.circular(20),
                       child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 8,
+                        ),
                         decoration: BoxDecoration(
                           gradient: const LinearGradient(
                             colors: [Color(0xFF4285F4), Color(0xFF1a73e8)],
@@ -411,10 +394,14 @@ class _HomeScreenState extends State<HomeScreen> {
                                   color: Colors.white,
                                 ),
                               )
-                            : Row(
+                            : const Row(
                                 mainAxisSize: MainAxisSize.min,
-                                children: const [
-                                  Icon(Icons.login, size: 16, color: Colors.white),
+                                children: [
+                                  Icon(
+                                    Icons.login,
+                                    size: 16,
+                                    color: Colors.white,
+                                  ),
                                   SizedBox(width: 6),
                                   Text(
                                     'Sign in',
@@ -428,39 +415,51 @@ class _HomeScreenState extends State<HomeScreen> {
                               ),
                       ),
                     ),
-                  IconButton(
-                    onPressed: editEndpoint,
-                    icon: const Icon(Icons.settings_outlined, color: Color(0xFF64748B)),
-                    tooltip: 'API Settings',
-                  ),
                 ],
               ),
               const SizedBox(height: 20),
               Text(
-                'Upload your transcript PDF or image for instant CGPA calculation, credit analysis, and degree audit.',
-                style: theme.textTheme.bodyLarge?.copyWith(fontSize: 15, height: 1.5),
+                'This screen renders the same backend-produced OCR and audit output shape used by the website.',
+                style: theme.textTheme.bodyLarge?.copyWith(
+                  fontSize: 15,
+                  height: 1.5,
+                ),
               ),
               const SizedBox(height: 16),
-              const Wrap(
+              Wrap(
                 spacing: 10,
                 runSpacing: 10,
                 children: [
-                  FeatureChip(icon: Icons.document_scanner_outlined, label: 'PDF/Image Upload'),
-                  FeatureChip(icon: Icons.stacked_bar_chart, label: 'CGPA Analysis'),
-                  FeatureChip(icon: Icons.workspace_premium, label: 'Degree Audit'),
+                  const FeatureChip(
+                    icon: Icons.document_scanner_outlined,
+                    label: 'Backend OCR',
+                  ),
+                  FeatureChip(icon: Icons.memory_rounded, label: backendEngine),
+                  FeatureChip(
+                    icon: Icons.insights_outlined,
+                    label:
+                        'CGPA ${asDouble(level2['cgpa']).toStringAsFixed(2)}',
+                  ),
+                  FeatureChip(
+                    icon: Icons.school_outlined,
+                    label:
+                        '${asDouble(level1['earned_credits']).toStringAsFixed(1)} credits',
+                  ),
                 ],
               ),
               const SizedBox(height: 18),
               GlassTone(
                 child: Row(
                   children: [
-                    const Icon(Icons.cloud_done_outlined, color: Color(0xFF0066CC)),
+                    const Icon(
+                      Icons.cloud_done_outlined,
+                      color: Color(0xFF0066CC),
+                    ),
                     const SizedBox(width: 12),
                     Expanded(
                       child: Text(
-                        apiBaseUrl,
+                        'Processed on backend and stored in the active analysis session.',
                         style: theme.textTheme.bodyMedium,
-                        overflow: TextOverflow.ellipsis,
                       ),
                     ),
                   ],
@@ -470,130 +469,196 @@ class _HomeScreenState extends State<HomeScreen> {
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton.icon(
-                  onPressed: stage == UploadStage.uploading ? null : pickTranscript,
+                  onPressed: _openUpload,
                   icon: const Icon(Icons.file_upload_outlined),
                   label: const Padding(
                     padding: EdgeInsets.symmetric(vertical: 14),
-                    child: Text('Upload Transcript'),
+                    child: Text('Upload Another Transcript'),
                   ),
                 ),
               ),
             ],
           ),
+        ).animate().fadeIn(duration: 400.ms).slideY(begin: 0.08, end: 0),
+        if (errorMessage != null) ...[
+          const SizedBox(height: 18),
+          AlertBox(
+            accent: kWarning,
+            icon: Icons.info_outline_rounded,
+            title: 'Using cached backend results',
+            body: errorMessage!,
+          ),
+        ],
+        if (unknownCourses.isNotEmpty) ...[
+          const SizedBox(height: 18),
+          AlertBox(
+            accent: kError,
+            icon: Icons.warning_amber_rounded,
+            title:
+                '${unknownCourses.length} unknown course${unknownCourses.length == 1 ? '' : 's'} detected',
+            body:
+                '${unknownCourses.take(8).join(', ')}${unknownCourses.length > 8 ? ' +' : ''} These may affect degree-audit accuracy.',
+          ),
+        ],
+        if (data!['cgpa_warning'] != null) ...[
+          const SizedBox(height: 18),
+          AlertBox(
+            accent: kWarning,
+            icon: Icons.warning_rounded,
+            title: 'CGPA verification warning',
+            body:
+                'PDF ${asDouble(asMap(data!['cgpa_warning'])['pdf_value']).toStringAsFixed(2)} | Calculated ${asDouble(asMap(data!['cgpa_warning'])['calculated_value']).toStringAsFixed(2)} | Diff ${asDouble(asMap(data!['cgpa_warning'])['difference']).toStringAsFixed(2)}',
+          ),
+        ],
+        const SizedBox(height: 24),
+        SectionHeader(
+          eyebrow: 'Analysis Results',
+          title: asString(level3['program_name']).isNotEmpty
+              ? asString(level3['program_name'])
+              : 'Transcript Summary',
+          subtitle:
+              'Level 1, Level 2, and Level 3 come directly from the backend analysis payload.',
         ),
-        if (selectedFileName != null) ...[
-          const SizedBox(height: 18),
-          GlassCard(
-            child: Row(
-              children: [
-                const Icon(Icons.insert_drive_file_outlined, color: Color(0xFF0066CC)),
-                const SizedBox(width: 12),
-                Expanded(child: Text(selectedFileName!, style: theme.textTheme.titleMedium)),
-              ],
+        const SizedBox(height: 14),
+        Row(
+          children: [
+            Expanded(
+              child: StatCard(
+                label: 'Courses',
+                value: '${courses.length}',
+                icon: Icons.layers_outlined,
+                accent: const Color(0xFF0066CC),
+              ),
             ),
-          ),
-        ],
-        if (stage == UploadStage.uploading) ...[
-          const SizedBox(height: 18),
-          ProcessingPanel(progress: progress, message: statusMessage),
-        ],
-        if (stage == UploadStage.failure && errorMessage != null) ...[
-          const SizedBox(height: 18),
-          AlertBox(accent: const Color(0xFFEF4444), icon: Icons.error_outline, title: 'Upload failed', body: errorMessage!),
-        ],
-        if (data != null) ...[
-          const SizedBox(height: 24),
-          SectionHeader(
-            eyebrow: 'Analysis Results',
-            title: 'Transcript Summary',
-            subtitle: statusMessage,
-          ),
-          const SizedBox(height: 14),
-          Row(
-            children: [
-              Expanded(child: StatCard(label: 'Courses', value: '${courses.length}', icon: Icons.layers_outlined, accent: const Color(0xFF0066CC))),
-              const SizedBox(width: 12),
-              Expanded(child: StatCard(label: 'Credits Earned', value: asDouble(level1['earned_credits']).toStringAsFixed(1), icon: Icons.stacked_line_chart, accent: const Color(0xFF10B981))),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(child: StatCard(label: 'CGPA', value: asDouble(level2['cgpa']).toStringAsFixed(2), icon: Icons.insights_outlined, accent: const Color(0xFF8B5CF6))),
-              const SizedBox(width: 12),
-              Expanded(child: StatCard(label: 'Confidence', value: '${asDouble(info['confidence']).toStringAsFixed(1)}%', icon: Icons.track_changes_outlined, accent: const Color(0xFFF59E0B))),
-            ],
-          ),
-          const SizedBox(height: 14),
-          GlassCard(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('OCR Details', style: theme.textTheme.titleMedium),
-                const SizedBox(height: 10),
-                Wrap(
-                  spacing: 10,
-                  runSpacing: 10,
-                  children: [
-                    DataPill(icon: Icons.memory_outlined, label: 'Engine', value: asString(info['engine']).isEmpty ? 'Unknown' : asString(info['engine'])),
-                    DataPill(icon: Icons.person_outline, label: 'Student', value: asString(info['student_name']).isEmpty ? 'Not captured' : asString(info['student_name'])),
-                    DataPill(icon: Icons.badge_outlined, label: 'Student ID', value: asString(info['student_id']).isEmpty ? 'Not captured' : asString(info['student_id'])),
-                  ],
-                ),
-                if (asDouble(info['total_credits_from_pdf']) > 0 || asDouble(info['cgpa_from_pdf']) > 0) ...[
-                  const SizedBox(height: 14),
-                  Row(
-                    children: [
-                      Expanded(child: StripMetric(label: 'PDF Credits', value: asDouble(info['total_credits_from_pdf']) > 0 ? asDouble(info['total_credits_from_pdf']).toStringAsFixed(1) : 'n/a')),
-                      const SizedBox(width: 12),
-                      Expanded(child: StripMetric(label: 'PDF CGPA', value: asDouble(info['cgpa_from_pdf']) > 0 ? asDouble(info['cgpa_from_pdf']).toStringAsFixed(2) : 'n/a')),
-                    ],
-                  ),
-                ],
-              ],
-            ),
-          ),
-          if (data!['cgpa_warning'] != null) ...[
-            const SizedBox(height: 14),
-            AlertBox(
-              accent: const Color(0xFFF59E0B),
-              icon: Icons.warning_amber_rounded,
-              title: 'CGPA Mismatch',
-              body: 'PDF ${asDouble(asMap(data!['cgpa_warning'])['pdf_value']).toStringAsFixed(2)} | Calculated ${asDouble(asMap(data!['cgpa_warning'])['calculated_value']).toStringAsFixed(2)} | Diff ${asDouble(asMap(data!['cgpa_warning'])['difference']).toStringAsFixed(2)}',
+            const SizedBox(width: 12),
+            Expanded(
+              child: StatCard(
+                label: 'Credits Earned',
+                value: asDouble(level1['earned_credits']).toStringAsFixed(1),
+                icon: Icons.stacked_line_chart,
+                accent: const Color(0xFF10B981),
+              ),
             ),
           ],
-          const SizedBox(height: 18),
-          SegmentedButton<int>(
-            showSelectedIcon: false,
-            style: ButtonStyle(
-              backgroundColor: WidgetStateProperty.resolveWith((states) {
-                if (states.contains(WidgetState.selected)) {
-                  return const Color(0xFF0066CC);
-                }
-                return Colors.white;
-              }),
-              foregroundColor: WidgetStateProperty.resolveWith((states) {
-                if (states.contains(WidgetState.selected)) {
-                  return Colors.white;
-                }
-                return const Color(0xFF64748B);
-              }),
+        ),
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            Expanded(
+              child: StatCard(
+                label: 'CGPA',
+                value: asDouble(level2['cgpa']).toStringAsFixed(2),
+                icon: Icons.insights_outlined,
+                accent: const Color(0xFF8B5CF6),
+              ),
             ),
-            segments: const [
-              ButtonSegment(value: 1, label: Text('Level 1')),
-              ButtonSegment(value: 2, label: Text('Level 2')),
-              ButtonSegment(value: 3, label: Text('Level 3')),
+            const SizedBox(width: 12),
+            Expanded(
+              child: StatCard(
+                label: 'Confidence',
+                value: '${asDouble(info['confidence']).toStringAsFixed(1)}%',
+                icon: Icons.track_changes_outlined,
+                accent: const Color(0xFFF59E0B),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 14),
+        GlassCard(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('OCR Details', style: theme.textTheme.titleMedium),
+              const SizedBox(height: 10),
+              Wrap(
+                spacing: 10,
+                runSpacing: 10,
+                children: [
+                  DataPill(
+                    icon: Icons.memory_outlined,
+                    label: 'Engine',
+                    value: asString(info['engine']).isEmpty
+                        ? 'Unknown'
+                        : asString(info['engine']),
+                  ),
+                  DataPill(
+                    icon: Icons.person_outline,
+                    label: 'Student',
+                    value: asString(info['student_name']).isEmpty
+                        ? 'Not captured'
+                        : asString(info['student_name']),
+                  ),
+                  DataPill(
+                    icon: Icons.badge_outlined,
+                    label: 'Student ID',
+                    value: asString(info['student_id']).isEmpty
+                        ? 'Not captured'
+                        : asString(info['student_id']),
+                  ),
+                ],
+              ),
+              if (asDouble(info['total_credits_from_pdf']) > 0 ||
+                  asDouble(info['cgpa_from_pdf']) > 0) ...[
+                const SizedBox(height: 14),
+                Row(
+                  children: [
+                    Expanded(
+                      child: StripMetric(
+                        label: 'PDF Credits',
+                        value: asDouble(info['total_credits_from_pdf']) > 0
+                            ? asDouble(
+                                info['total_credits_from_pdf'],
+                              ).toStringAsFixed(1)
+                            : 'n/a',
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: StripMetric(
+                        label: 'PDF CGPA',
+                        value: asDouble(info['cgpa_from_pdf']) > 0
+                            ? asDouble(info['cgpa_from_pdf']).toStringAsFixed(2)
+                            : 'n/a',
+                      ),
+                    ),
+                  ],
+                ),
+              ],
             ],
-            selected: {selectedLevel},
-            onSelectionChanged: (value) => setState(() => selectedLevel = value.first),
           ),
-          const SizedBox(height: 16),
-          buildLevelPanel(),
-          const SizedBox(height: 18),
-          buildSemesterPanel(),
-          const SizedBox(height: 18),
-          buildOcrPanel(),
-        ],
+        ),
+        const SizedBox(height: 18),
+        SegmentedButton<int>(
+          showSelectedIcon: false,
+          style: ButtonStyle(
+            backgroundColor: WidgetStateProperty.resolveWith((states) {
+              if (states.contains(WidgetState.selected)) {
+                return const Color(0xFF0066CC);
+              }
+              return Colors.white;
+            }),
+            foregroundColor: WidgetStateProperty.resolveWith((states) {
+              if (states.contains(WidgetState.selected)) {
+                return Colors.white;
+              }
+              return const Color(0xFF64748B);
+            }),
+          ),
+          segments: const [
+            ButtonSegment(value: 1, label: Text('Level 1')),
+            ButtonSegment(value: 2, label: Text('Level 2')),
+            ButtonSegment(value: 3, label: Text('Level 3')),
+          ],
+          selected: {selectedLevel},
+          onSelectionChanged: (value) =>
+              setState(() => selectedLevel = value.first),
+        ),
+        const SizedBox(height: 16),
+        buildLevelPanel(),
+        const SizedBox(height: 18),
+        buildSemesterPanel(),
+        const SizedBox(height: 18),
+        buildOcrPanel(),
       ],
     );
   }
@@ -622,23 +687,61 @@ class _HomeScreenState extends State<HomeScreen> {
             spacing: 12,
             runSpacing: 12,
             children: [
-              SmallMetric(label: 'Total entries', value: '${asInt(level1['total_entries'])}'),
-              SmallMetric(label: 'Unique courses', value: '${asInt(level1['unique_courses'])}'),
-              SmallMetric(label: 'Attempted credits', value: asDouble(level1['total_credits_attempted']).toStringAsFixed(1)),
-              SmallMetric(label: 'Earned credits', value: asDouble(level1['earned_credits']).toStringAsFixed(1)),
-              SmallMetric(label: 'Failed credits', value: asDouble(level1['failed_credits']).toStringAsFixed(1)),
-              SmallMetric(label: 'Retakes', value: '${asInt(level1['retakes_count'])}'),
+              SmallMetric(
+                label: 'Total entries',
+                value: '${asInt(level1['total_entries'])}',
+              ),
+              SmallMetric(
+                label: 'Unique courses',
+                value: '${asInt(level1['unique_courses'])}',
+              ),
+              SmallMetric(
+                label: 'Attempted credits',
+                value: asDouble(
+                  level1['total_credits_attempted'],
+                ).toStringAsFixed(1),
+              ),
+              SmallMetric(
+                label: 'Earned credits',
+                value: asDouble(level1['earned_credits']).toStringAsFixed(1),
+              ),
+              SmallMetric(
+                label: 'Failed credits',
+                value: asDouble(level1['failed_credits']).toStringAsFixed(1),
+              ),
+              SmallMetric(
+                label: 'Retakes',
+                value: '${asInt(level1['retakes_count'])}',
+              ),
             ],
           ),
           const SizedBox(height: 16),
-          Text('Graduation runway', style: Theme.of(context).textTheme.titleMedium?.copyWith(color: Colors.white)),
+          Text(
+            'Graduation runway',
+            style: Theme.of(
+              context,
+            ).textTheme.titleMedium?.copyWith(color: Colors.white),
+          ),
           const SizedBox(height: 10),
-          LinearProgressIndicator(value: (asDouble(level1['progress_130']) / 100).clamp(0, 1), minHeight: 14, borderRadius: BorderRadius.circular(999), backgroundColor: Colors.white.withValues(alpha: 0.08)),
+          LinearProgressIndicator(
+            value: (asDouble(level1['progress_130']) / 100).clamp(0, 1),
+            minHeight: 14,
+            borderRadius: BorderRadius.circular(999),
+            backgroundColor: Colors.white.withValues(alpha: 0.08),
+          ),
           const SizedBox(height: 10),
-          Text('${asDouble(level1['earned_credits']).toStringAsFixed(1)} of 130 credits completed • ${asDouble(level1['progress_130']).toStringAsFixed(1)}%', style: Theme.of(context).textTheme.bodyMedium),
+          Text(
+            '${asDouble(level1['earned_credits']).toStringAsFixed(1)} of 130 credits completed • ${asDouble(level1['progress_130']).toStringAsFixed(1)}%',
+            style: Theme.of(context).textTheme.bodyMedium,
+          ),
           if (retakes.isNotEmpty) ...[
             const SizedBox(height: 18),
-            Text('Retake intelligence', style: Theme.of(context).textTheme.titleMedium?.copyWith(color: Colors.white)),
+            Text(
+              'Retake intelligence',
+              style: Theme.of(
+                context,
+              ).textTheme.titleMedium?.copyWith(color: Colors.white),
+            ),
             const SizedBox(height: 10),
             ...retakes.map((item) {
               final retake = asMap(item);
@@ -648,9 +751,20 @@ class _HomeScreenState extends State<HomeScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(asString(retake['code']), style: Theme.of(context).textTheme.titleMedium?.copyWith(color: Colors.white)),
+                      Text(
+                        asString(retake['code']),
+                        style: Theme.of(
+                          context,
+                        ).textTheme.titleMedium?.copyWith(color: Colors.white),
+                      ),
                       const SizedBox(height: 6),
-                      Wrap(spacing: 6, children: asList(retake['grades']).map((grade) => GradeChip(grade: asString(grade))).toList().cast<Widget>()),
+                      Wrap(
+                        spacing: 6,
+                        children: asList(retake['grades'])
+                            .map((grade) => GradeChip(grade: asString(grade)))
+                            .toList()
+                            .cast<Widget>(),
+                      ),
                       const SizedBox(height: 8),
                       Text('Best attempt kept: ${asString(retake['best'])}'),
                     ],
@@ -678,9 +792,20 @@ class _HomeScreenState extends State<HomeScreen> {
             spacing: 12,
             runSpacing: 12,
             children: [
-              SmallMetric(label: 'CGPA', value: asDouble(level2['cgpa']).toStringAsFixed(2)),
-              SmallMetric(label: 'GPA credits', value: '${asInt(level2['gpa_credits'])}'),
-              SmallMetric(label: 'Quality points', value: asDouble(level2['total_quality_points']).toStringAsFixed(2)),
+              SmallMetric(
+                label: 'CGPA',
+                value: asDouble(level2['cgpa']).toStringAsFixed(2),
+              ),
+              SmallMetric(
+                label: 'GPA credits',
+                value: '${asInt(level2['gpa_credits'])}',
+              ),
+              SmallMetric(
+                label: 'Quality points',
+                value: asDouble(
+                  level2['total_quality_points'],
+                ).toStringAsFixed(2),
+              ),
             ],
           ),
           const SizedBox(height: 16),
@@ -692,28 +817,41 @@ class _HomeScreenState extends State<HomeScreen> {
                 Expanded(
                   child: Text(
                     'Academic standing: ${asString(level2['standing']).isEmpty ? 'Not available' : asString(level2['standing'])}',
-                    style: Theme.of(context).textTheme.titleMedium?.copyWith(color: Colors.white),
+                    style: Theme.of(
+                      context,
+                    ).textTheme.titleMedium?.copyWith(color: Colors.white),
                   ),
                 ),
-                Text(asString(level2['stars']), style: const TextStyle(fontSize: 20)),
+                Text(
+                  asString(level2['stars']),
+                  style: const TextStyle(fontSize: 20),
+                ),
               ],
             ),
           ),
           const SizedBox(height: 16),
           Text(
             'Grade distribution',
-            style: Theme.of(context).textTheme.titleMedium?.copyWith(color: Colors.white),
+            style: Theme.of(
+              context,
+            ).textTheme.titleMedium?.copyWith(color: Colors.white),
           ),
           const SizedBox(height: 10),
           if (gradeDistribution.isEmpty)
-            Text('No grade distribution available.', style: Theme.of(context).textTheme.bodyMedium)
+            Text(
+              'No grade distribution available.',
+              style: Theme.of(context).textTheme.bodyMedium,
+            )
           else
             Wrap(
               spacing: 10,
               runSpacing: 10,
               children: gradeDistribution.entries.map((entry) {
                 return GlassTone(
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 12,
+                  ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
@@ -731,14 +869,16 @@ class _HomeScreenState extends State<HomeScreen> {
               accent: const Color(0xFF80FFBD),
               icon: Icons.card_giftcard,
               title: 'Waiver opportunity',
-              body: '${asString(waiver['level'])} ${asString(waiver['name'])} appears available from the current calculated CGPA.',
+              body:
+                  '${asString(waiver['level'])} ${asString(waiver['name'])} appears available from the current calculated CGPA.',
             )
           else
             const AlertBox(
               accent: Color(0xFF57C5FF),
               icon: Icons.info_outline,
               title: 'Scholarship status',
-              body: 'No tuition waiver threshold is currently met from the calculated results.',
+              body:
+                  'No tuition waiver threshold is currently met from the calculated results.',
             ),
         ],
       ),
@@ -759,25 +899,42 @@ class _HomeScreenState extends State<HomeScreen> {
             spacing: 12,
             runSpacing: 12,
             children: [
-              SmallMetric(label: 'Program', value: asString(level3['program']).isEmpty ? 'Unknown' : asString(level3['program'])),
-              SmallMetric(label: 'Mandatory progress', value: '${asDouble(level3['mandatory_progress']).toStringAsFixed(1)}%'),
+              SmallMetric(
+                label: 'Program',
+                value: asString(level3['program']).isEmpty
+                    ? 'Unknown'
+                    : asString(level3['program']),
+              ),
+              SmallMetric(
+                label: 'Mandatory progress',
+                value:
+                    '${asDouble(level3['mandatory_progress']).toStringAsFixed(1)}%',
+              ),
             ],
           ),
           const SizedBox(height: 16),
           AlertBox(
-            accent: level3['graduation_ready'] == true ? const Color(0xFF80FFBD) : const Color(0xFFF6B75D),
-            icon: level3['graduation_ready'] == true ? Icons.verified : Icons.rule_folder_outlined,
-            title: asString(level3['program_name']).isEmpty ? 'Program insight' : asString(level3['program_name']),
+            accent: level3['graduation_ready'] == true
+                ? const Color(0xFF80FFBD)
+                : const Color(0xFFF6B75D),
+            icon: level3['graduation_ready'] == true
+                ? Icons.verified
+                : Icons.rule_folder_outlined,
+            title: asString(level3['program_name']).isEmpty
+                ? 'Program insight'
+                : asString(level3['program_name']),
             body: level3['graduation_ready'] == true
                 ? 'This audit looks graduation-ready based on the available rules and credits.'
                 : asString(level3['note']).isNotEmpty
-                    ? asString(level3['note'])
-                    : 'Mandatory and elective requirements still need attention.',
+                ? asString(level3['note'])
+                : 'Mandatory and elective requirements still need attention.',
           ),
           const SizedBox(height: 16),
           Text(
             'Missing mandatory courses',
-            style: Theme.of(context).textTheme.titleMedium?.copyWith(color: Colors.white),
+            style: Theme.of(
+              context,
+            ).textTheme.titleMedium?.copyWith(color: Colors.white),
           ),
           const SizedBox(height: 10),
           if (missingMandatory.isEmpty)
@@ -800,11 +957,16 @@ class _HomeScreenState extends State<HomeScreen> {
           const SizedBox(height: 18),
           Text(
             'Elective groups',
-            style: Theme.of(context).textTheme.titleMedium?.copyWith(color: Colors.white),
+            style: Theme.of(
+              context,
+            ).textTheme.titleMedium?.copyWith(color: Colors.white),
           ),
           const SizedBox(height: 10),
           if (electives.isEmpty)
-            Text('No elective groups were loaded for this program.', style: Theme.of(context).textTheme.bodyMedium)
+            Text(
+              'No elective groups were loaded for this program.',
+              style: Theme.of(context).textTheme.bodyMedium,
+            )
           else
             ...electives.entries.map((entry) {
               final details = asMap(entry.value);
@@ -819,29 +981,48 @@ class _HomeScreenState extends State<HomeScreen> {
                           Expanded(
                             child: Text(
                               entry.key,
-                              style: Theme.of(context).textTheme.titleMedium?.copyWith(color: Colors.white),
+                              style: Theme.of(context).textTheme.titleMedium
+                                  ?.copyWith(color: Colors.white),
                             ),
                           ),
                           Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 6,
+                            ),
                             decoration: BoxDecoration(
                               color: details['satisfied'] == true
-                                  ? const Color(0xFF80FFBD).withValues(alpha: 0.16)
-                                  : const Color(0xFFF6B75D).withValues(alpha: 0.16),
+                                  ? const Color(
+                                      0xFF80FFBD,
+                                    ).withValues(alpha: 0.16)
+                                  : const Color(
+                                      0xFFF6B75D,
+                                    ).withValues(alpha: 0.16),
                               borderRadius: BorderRadius.circular(999),
                             ),
-                            child: Text(details['satisfied'] == true ? 'Satisfied' : 'Pending'),
+                            child: Text(
+                              details['satisfied'] == true
+                                  ? 'Satisfied'
+                                  : 'Pending',
+                            ),
                           ),
                         ],
                       ),
                       const SizedBox(height: 8),
-                      Text('${asInt(details['completed'])} of ${asInt(details['required'])} required completed'),
+                      Text(
+                        '${asInt(details['completed'])} of ${asInt(details['required'])} required completed',
+                      ),
                       if (asList(details['courses']).isNotEmpty) ...[
                         const SizedBox(height: 8),
                         Wrap(
                           spacing: 8,
                           runSpacing: 8,
-                          children: asList(details['courses']).map((course) => GradeChip(grade: asString(course))).toList().cast<Widget>(),
+                          children: asList(details['courses'])
+                              .map(
+                                (course) => GradeChip(grade: asString(course)),
+                              )
+                              .toList()
+                              .cast<Widget>(),
                         ),
                       ],
                     ],
@@ -863,7 +1044,10 @@ class _HomeScreenState extends State<HomeScreen> {
           titleLine('Semester timeline'),
           const SizedBox(height: 12),
           if (semesters.isEmpty)
-            Text('No semester grouping is available.', style: Theme.of(context).textTheme.bodyMedium)
+            Text(
+              'No semester grouping is available.',
+              style: Theme.of(context).textTheme.bodyMedium,
+            )
           else
             ...semesters.map((item) {
               final semester = asMap(item);
@@ -878,8 +1062,11 @@ class _HomeScreenState extends State<HomeScreen> {
                         children: [
                           Expanded(
                             child: Text(
-                              asString(semester['name']).isEmpty ? 'Semester' : asString(semester['name']),
-                              style: Theme.of(context).textTheme.titleMedium?.copyWith(color: Colors.white),
+                              asString(semester['name']).isEmpty
+                                  ? 'Semester'
+                                  : asString(semester['name']),
+                              style: Theme.of(context).textTheme.titleMedium
+                                  ?.copyWith(color: Colors.white),
                             ),
                           ),
                           Text('${courses.length} courses'),
@@ -895,10 +1082,13 @@ class _HomeScreenState extends State<HomeScreen> {
                               Expanded(
                                 child: Text(
                                   asString(course['code']),
-                                  style: Theme.of(context).textTheme.bodyLarge?.copyWith(color: Colors.white),
+                                  style: Theme.of(context).textTheme.bodyLarge
+                                      ?.copyWith(color: Colors.white),
                                 ),
                               ),
-                              Text('${asDouble(course['credits']).toStringAsFixed(1)} cr'),
+                              Text(
+                                '${asDouble(course['credits']).toStringAsFixed(1)} cr',
+                              ),
                               const SizedBox(width: 10),
                               GradeChip(grade: asString(course['grade'])),
                             ],
@@ -928,19 +1118,35 @@ class _HomeScreenState extends State<HomeScreen> {
             spacing: 12,
             runSpacing: 12,
             children: [
-              SmallMetric(label: 'Raw text rows', value: '${asInt(info['raw_text_count'])}'),
-              SmallMetric(label: 'OCR engine', value: asString(info['engine']).isEmpty ? 'Unknown' : asString(info['engine'])),
-              SmallMetric(label: 'Confidence', value: '${asDouble(info['confidence']).toStringAsFixed(1)}%'),
+              SmallMetric(
+                label: 'Raw text rows',
+                value: '${asInt(info['raw_text_count'])}',
+              ),
+              SmallMetric(
+                label: 'OCR engine',
+                value: asString(info['engine']).isEmpty
+                    ? 'Unknown'
+                    : asString(info['engine']),
+              ),
+              SmallMetric(
+                label: 'Confidence',
+                value: '${asDouble(info['confidence']).toStringAsFixed(1)}%',
+              ),
             ],
           ),
           const SizedBox(height: 16),
           Text(
             'Extracted text preview',
-            style: Theme.of(context).textTheme.titleMedium?.copyWith(color: Colors.white),
+            style: Theme.of(
+              context,
+            ).textTheme.titleMedium?.copyWith(color: Colors.white),
           ),
           const SizedBox(height: 10),
           if (extractedTexts.isEmpty)
-            Text('No extracted raw text was returned.', style: Theme.of(context).textTheme.bodyMedium)
+            Text(
+              'No extracted raw text was returned.',
+              style: Theme.of(context).textTheme.bodyMedium,
+            )
           else
             ...extractedTexts.take(12).map((line) {
               final text = asString(line).trim();
@@ -952,13 +1158,27 @@ class _HomeScreenState extends State<HomeScreen> {
                 child: GlassTone(
                   child: Text(
                     text,
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: const Color(0xFFE5F3FF)),
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: const Color(0xFFE5F3FF),
+                    ),
                   ),
                 ),
               );
             }),
         ],
       ),
+    );
+  }
+
+  Widget _buildShimmerCard({required double height}) {
+    return Container(
+      height: height,
+      width: double.infinity,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(20),
+        color: kSurface,
+      ),
+      child: ShimmerBox(height: height, borderRadius: 20),
     );
   }
 
@@ -976,7 +1196,9 @@ class _HomeScreenState extends State<HomeScreen> {
         const SizedBox(width: 10),
         Text(
           title,
-          style: Theme.of(context).textTheme.titleLarge?.copyWith(color: Colors.white),
+          style: Theme.of(
+            context,
+          ).textTheme.titleLarge?.copyWith(color: Colors.white),
         ),
       ],
     );

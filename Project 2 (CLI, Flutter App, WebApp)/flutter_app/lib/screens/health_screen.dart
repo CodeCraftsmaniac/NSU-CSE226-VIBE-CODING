@@ -1,4 +1,4 @@
-﻿import 'dart:async';
+import 'dart:async';
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
@@ -151,13 +151,19 @@ class _HealthScreenState extends State<HealthScreen>
       case 'up':
       case 'healthy':
       case 'ok':
+      case 'operational':
+      case 'connected':
+      case 'active':
+      case 'ready':
         return kSuccess;
       case 'degraded':
       case 'slow':
+      case 'not_configured':
         return kWarning;
       case 'down':
       case 'unhealthy':
       case 'unreachable':
+      case 'disconnected':
         return kError;
       default:
         return kTextTertiary;
@@ -169,12 +175,18 @@ class _HealthScreenState extends State<HealthScreen>
       case 'up':
       case 'healthy':
       case 'ok':
+      case 'operational':
+      case 'connected':
+      case 'active':
+      case 'ready':
         return 'Operational';
       case 'degraded':
       case 'slow':
+      case 'not_configured':
         return 'Degraded';
       case 'down':
       case 'unhealthy':
+      case 'disconnected':
         return 'Down';
       case 'unreachable':
         return 'Unreachable';
@@ -486,7 +498,7 @@ class _OverallStatusCard extends StatelessWidget {
         filter: ImageFilter.blur(sigmaX: 24, sigmaY: 24),
         child: AnimatedBuilder(
           animation: pulseCtrl,
-          builder: (_, _) => Container(
+          builder: (context, child) => Container(
             width: double.infinity,
             padding: const EdgeInsets.all(24),
             decoration: BoxDecoration(
@@ -682,9 +694,14 @@ class _SmallDot extends StatelessWidget {
       case 'up':
       case 'healthy':
       case 'ok':
+      case 'operational':
+      case 'connected':
+      case 'active':
+      case 'ready':
         return kSuccess;
       case 'degraded':
       case 'slow':
+      case 'not_configured':
         return kWarning;
       default:
         return kError;
@@ -1353,7 +1370,7 @@ class _AnimatedStatusDotState extends State<_AnimatedStatusDot>
   Widget build(BuildContext context) {
     return AnimatedBuilder(
       animation: _anim,
-      builder: (_, _) => Stack(
+      builder: (context, child) => Stack(
         alignment: Alignment.center,
         children: [
           // Outer ring (pulsing)

@@ -6,6 +6,7 @@ import 'package:flutter_animate/flutter_animate.dart';
 import '../models/analysis_model.dart';
 import '../models/course_model.dart';
 import '../services/auth_service.dart' hide ApiException;
+import '../services/analysis_session_service.dart';
 import '../services/api_service.dart';
 import '../widgets/glass_widgets.dart';
 import 'auth_screen.dart';
@@ -63,11 +64,22 @@ class _CoursesScreenState extends State<CoursesScreen>
   }
 
   Future<void> _loadData() async {
+    final cachedAnalysis = analysisSessionService.latestAnalysis;
+
     setState(() {
+      _analysis = cachedAnalysis;
       _isLoading = true;
       _isGuest = false;
       _error = null;
     });
+
+    if (cachedAnalysis != null && !authService.isAuthenticated) {
+      setState(() {
+        _analysis = cachedAnalysis;
+        _isLoading = false;
+      });
+      return;
+    }
 
     if (authService.isGuestMode) {
       setState(() {
@@ -80,21 +92,26 @@ class _CoursesScreenState extends State<CoursesScreen>
 
     try {
       final raw = await apiService.getAnalysis();
+      analysisSessionService.setLatestAnalysis(raw);
       if (!mounted) return;
       setState(() {
-        _analysis = AnalysisModel.fromJson(raw);
+        _analysis = analysisSessionService.latestAnalysis;
         _isLoading = false;
       });
     } on ApiException catch (e) {
       if (!mounted) return;
       setState(() {
-        _error = e.message;
+        _error = cachedAnalysis == null ? e.message : null;
+        _analysis = cachedAnalysis;
         _isLoading = false;
       });
     } catch (_) {
       if (!mounted) return;
       setState(() {
-        _error = 'Failed to load courses. Pull down to refresh.';
+        _error = cachedAnalysis == null
+            ? 'Failed to load courses. Pull down to refresh.'
+            : null;
+        _analysis = cachedAnalysis;
         _isLoading = false;
       });
     }

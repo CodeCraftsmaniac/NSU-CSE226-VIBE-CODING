@@ -1,4 +1,20 @@
-﻿import 'dart:async';
+import 'package:flutter/material.dart';
+
+import 'home_screen.dart';
+
+class DashboardScreen extends StatelessWidget {
+  const DashboardScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) => const HomeScreen();
+}
+
+/*
+Legacy dashboard implementation retained only as commented reference. The
+active app now routes dashboard/result traffic through HomeScreen so the app
+shows the same backend result structure as the website.
+
+import 'dart:async';
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
@@ -8,6 +24,7 @@ import 'package:percent_indicator/percent_indicator.dart';
 import '../models/analysis_model.dart';
 import '../models/course_model.dart';
 import '../services/auth_service.dart' hide ApiException;
+import '../services/analysis_session_service.dart';
 import '../services/api_service.dart';
 import '../widgets/glass_widgets.dart';
 import 'auth_screen.dart';
@@ -38,11 +55,22 @@ class _DashboardScreenState extends State<DashboardScreen>
   }
 
   Future<void> _loadAnalysis() async {
+    final cachedAnalysis = analysisSessionService.latestAnalysis;
+
     setState(() {
+      _analysis = cachedAnalysis;
       _isLoading = true;
       _isGuest = false;
       _error = null;
     });
+
+    if (cachedAnalysis != null && !authService.isAuthenticated) {
+      setState(() {
+        _analysis = cachedAnalysis;
+        _isLoading = false;
+      });
+      return;
+    }
 
     if (authService.isGuestMode) {
       setState(() {
@@ -55,21 +83,26 @@ class _DashboardScreenState extends State<DashboardScreen>
 
     try {
       final raw = await apiService.getAnalysis();
+      analysisSessionService.setLatestAnalysis(raw);
       if (!mounted) return;
       setState(() {
-        _analysis = AnalysisModel.fromJson(raw);
+        _analysis = analysisSessionService.latestAnalysis;
         _isLoading = false;
       });
     } on ApiException catch (e) {
       if (!mounted) return;
       setState(() {
-        _error = e.message;
+        _error = cachedAnalysis == null ? e.message : null;
+        _analysis = cachedAnalysis;
         _isLoading = false;
       });
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        _error = 'Failed to load analysis. Pull down to refresh.';
+        _error = cachedAnalysis == null
+            ? 'Failed to load analysis. Pull down to refresh.'
+            : null;
+        _analysis = cachedAnalysis;
         _isLoading = false;
       });
     }
@@ -654,7 +687,7 @@ class _DegreeRingCardState extends State<_DegreeRingCard>
           const SizedBox(height: 16),
           AnimatedBuilder(
             animation: _anim,
-            builder: (_, _) => CircularPercentIndicator(
+            builder: (context, child) => CircularPercentIndicator(
               radius: 72,
               lineWidth: 10.0,
               percent: progress * _anim.value,
@@ -1273,3 +1306,4 @@ class _GraduationStatus extends StatelessWidget {
     );
   }
 }
+*/

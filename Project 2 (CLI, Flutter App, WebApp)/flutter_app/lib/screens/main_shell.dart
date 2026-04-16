@@ -1,12 +1,13 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:provider/provider.dart';
 
 import '../services/auth_service.dart';
 import '../widgets/glass_widgets.dart';
-import 'dashboard_screen.dart';
+import 'history_screen.dart';
 import 'courses_screen.dart';
+import 'dashboard_screen.dart';
 import 'upload_screen.dart';
 import 'health_screen.dart';
 import 'auth_screen.dart';
@@ -28,9 +29,9 @@ class _MainShellState extends State<MainShell>
   // Navigation items definition
   static const _navItems = [
     _NavItem(
-      label: 'Dashboard',
-      icon: Icons.dashboard_outlined,
-      activeIcon: Icons.dashboard_rounded,
+      label: 'Results',
+      icon: Icons.analytics_outlined,
+      activeIcon: Icons.analytics_rounded,
       accent: kPrimary,
     ),
     _NavItem(
@@ -131,8 +132,8 @@ class _MainShellState extends State<MainShell>
   void _navigateToAuthScreen() {
     Navigator.of(context).pushAndRemoveUntil(
       PageRouteBuilder(
-        pageBuilder: (_, animation, _) => const AuthScreen(),
-        transitionsBuilder: (_, animation, _, child) =>
+        pageBuilder: (context, animation, secondaryAnimation) => const AuthScreen(),
+        transitionsBuilder: (context, animation, secondaryAnimation, child) =>
             FadeTransition(opacity: animation, child: child),
         transitionDuration: const Duration(milliseconds: 500),
       ),
@@ -283,13 +284,13 @@ class _MainShellState extends State<MainShell>
                   ),
                   const PopupMenuDivider(),
                   const PopupMenuItem(
-                    value: 'profile',
+                    value: 'history',
                     child: Row(
                       children: [
-                        Icon(Icons.person_outline_rounded,
-                            color: kTextSecondary, size: 18),
+                        Icon(Icons.history_rounded,
+                            color: kPrimary, size: 18),
                         SizedBox(width: 12),
-                        Text('Profile',
+                        Text('Scan History',
                             style: TextStyle(color: kTextPrimary, fontSize: 14)),
                       ],
                     ),
@@ -309,6 +310,11 @@ class _MainShellState extends State<MainShell>
               },
               onSelected: (value) {
                 if (value == 'logout') _handleLogout();
+                if (value == 'history') {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(builder: (_) => const HistoryScreen()),
+                  );
+                }
                 if (value == 'signin') _navigateToAuthScreen();
                 if (value == 'exit_guest') _handleExitGuestMode();
               },

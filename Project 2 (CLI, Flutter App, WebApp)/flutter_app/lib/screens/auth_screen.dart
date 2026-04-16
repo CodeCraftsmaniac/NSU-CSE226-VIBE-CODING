@@ -1,4 +1,4 @@
-﻿import 'dart:ui';
+import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
@@ -51,8 +51,8 @@ class _AuthScreenState extends State<AuthScreen>
         if (authService.isAuthenticated) {
           Navigator.of(context).pushReplacement(
             PageRouteBuilder(
-              pageBuilder: (_, animation, _) => const MainShell(),
-              transitionsBuilder: (_, animation, _, child) =>
+              pageBuilder: (context, animation, secondaryAnimation) => const MainShell(),
+              transitionsBuilder: (context, animation, secondaryAnimation, child) =>
                   FadeTransition(opacity: animation, child: child),
               transitionDuration: const Duration(milliseconds: 500),
             ),
@@ -83,8 +83,8 @@ class _AuthScreenState extends State<AuthScreen>
 
       Navigator.of(context).pushReplacement(
         PageRouteBuilder(
-          pageBuilder: (_, animation, _) => const MainShell(),
-          transitionsBuilder: (_, animation, _, child) =>
+          pageBuilder: (context, animation, secondaryAnimation) => const MainShell(),
+          transitionsBuilder: (context, animation, secondaryAnimation, child) =>
               FadeTransition(opacity: animation, child: child),
           transitionDuration: const Duration(milliseconds: 500),
         ),
@@ -284,7 +284,7 @@ class _AuthScreenState extends State<AuthScreen>
   Widget _buildLogo() {
     return AnimatedBuilder(
       animation: _pulseCtrl,
-      builder: (_, _) {
+      builder: (context, child) {
         return Container(
           width: 120,
           height: 120,

@@ -2,8 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
-import 'services/auth_service.dart';
-import 'services/storage_service.dart';
+import 'services/supabase_service.dart';
 import 'widgets/glass_widgets.dart';
 import 'screens/splash_screen.dart';
 

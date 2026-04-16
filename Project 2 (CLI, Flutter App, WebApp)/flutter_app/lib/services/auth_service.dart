@@ -10,6 +10,8 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../models/user_model.dart';
 import 'api_service.dart' hide ApiException;
+import 'analysis_session_service.dart';
+import 'backend_config.dart';
 import 'storage_service.dart';
 
 class ApiException implements Exception {
@@ -42,10 +44,7 @@ class AuthService extends ChangeNotifier {
 
   static const String _guestModePrefKey = 'guest_mode';
 
-  static const String _apiBaseUrl = String.fromEnvironment(
-    'API_BASE_URL',
-    defaultValue: 'https://ocrapi.nsunexus.app',
-  );
+  static String get _apiBaseUrl => backendBaseUrl;
 
   static const String _defaultGoogleWebClientId = String.fromEnvironment(
     'GOOGLE_WEB_CLIENT_ID',
@@ -81,8 +80,10 @@ class AuthService extends ChangeNotifier {
         _currentUser = null;
         apiService.setToken(null);
         await storageService.clear();
-        developer.log('Guest mode restored from previous session.',
-            name: 'AuthService');
+        developer.log(
+          'Guest mode restored from previous session.',
+          name: 'AuthService',
+        );
         return;
       }
 
@@ -90,8 +91,10 @@ class AuthService extends ChangeNotifier {
 
       final providerError = await _ensureAuthProvidersReady();
       if (providerError != null) {
-        developer.log('Auth provider bootstrap skipped: $providerError',
-            name: 'AuthService');
+        developer.log(
+          'Auth provider bootstrap skipped: $providerError',
+          name: 'AuthService',
+        );
       }
 
       if (_supabaseInitialized) {
@@ -184,7 +187,7 @@ class AuthService extends ChangeNotifier {
           'Attempting sign-in with client ID: ${clientId.substring(0, 20)}...',
           name: 'AuthService',
         );
-        
+
         final result = await _signInWithClientId(clientId);
         if (result.error == null) {
           if (result.authenticated) {
@@ -196,7 +199,7 @@ class AuthService extends ChangeNotifier {
 
         lastError = result.error;
         developer.log('Sign-in failed: $lastError', name: 'AuthService');
-        
+
         if (!result.retryWithDefaultClient) {
           break;
         }
@@ -204,12 +207,17 @@ class AuthService extends ChangeNotifier {
 
       return lastError ?? 'Google sign-in failed. Please try again.';
     } on AuthException catch (e) {
-      developer.log('Google sign-in AuthException: ${e.message}',
-          name: 'AuthService');
+      developer.log(
+        'Google sign-in AuthException: ${e.message}',
+        name: 'AuthService',
+      );
       return _friendlyGoogleError(e.message);
     } catch (e, st) {
-      developer.log('signInWithGoogle unexpected error: $e',
-          name: 'AuthService', stackTrace: st);
+      developer.log(
+        'signInWithGoogle unexpected error: $e',
+        name: 'AuthService',
+        stackTrace: st,
+      );
       return _friendlyGoogleRuntimeError(e.toString());
     } finally {
       _isLoading = false;
@@ -218,14 +226,23 @@ class AuthService extends ChangeNotifier {
   }
 
   String _getPlatformClientId() {
-    // For mobile platforms, return empty string to use default from google-services.json
     if (!kIsWeb) {
-      if (Platform.isAndroid || Platform.isIOS) {
-        // Let google_sign_in plugin use the client ID from google-services.json/GoogleService-Info.plist
-        return '';
+      if (Platform.isAndroid) {
+        final androidClientId = _androidGoogleClientId.trim();
+        if (androidClientId.isNotEmpty) {
+          return androidClientId;
+        }
+      } else if (Platform.isIOS) {
+        final iosClientId = _iosGoogleClientId.trim();
+        if (iosClientId.isNotEmpty) {
+          return iosClientId;
+        }
       }
+
+      // Fallback to native platform configuration files.
+      return '';
     }
-    
+
     // For web, use the web client ID
     return _googleWebClientId.trim().isNotEmpty
         ? _googleWebClientId.trim()
@@ -245,16 +262,15 @@ class AuthService extends ChangeNotifier {
           await googleSignIn.signOut();
         }
       } catch (e) {
-        developer.log('Pre-sign-in Google session reset skipped: $e',
-            name: 'AuthService');
+        developer.log(
+          'Pre-sign-in Google session reset skipped: $e',
+          name: 'AuthService',
+        );
       }
 
       final googleUser = await googleSignIn.signIn();
       if (googleUser == null) {
-        return const _GoogleSignInResult(
-          error: null,
-          authenticated: false,
-        );
+        return const _GoogleSignInResult(error: null, authenticated: false);
       }
 
       final googleAuth = await googleUser.authentication;
@@ -279,7 +295,11 @@ class AuthService extends ChangeNotifier {
           response.user ?? Supabase.instance.client.auth.currentUser;
 
       if (session == null || supabaseUser == null) {
-        for (var i = 0; i < 3 && (session == null || supabaseUser == null); i++) {
+        for (
+          var i = 0;
+          i < 3 && (session == null || supabaseUser == null);
+          i++
+        ) {
           await Future<void>.delayed(const Duration(milliseconds: 300));
           session ??= Supabase.instance.client.auth.currentSession;
           supabaseUser ??= Supabase.instance.client.auth.currentUser;
@@ -310,14 +330,14 @@ class AuthService extends ChangeNotifier {
         'Native Google auth success for ${_currentUser?.email}',
         name: 'AuthService',
       );
-      return const _GoogleSignInResult(
-        error: null,
-        authenticated: true,
-      );
+      return const _GoogleSignInResult(error: null, authenticated: true);
     } catch (e, st) {
       final err = e.toString();
-      developer.log('Google sign-in failed for client ID $clientId: $err',
-          name: 'AuthService', stackTrace: st);
+      developer.log(
+        'Google sign-in failed for client ID $clientId: $err',
+        name: 'AuthService',
+        stackTrace: st,
+      );
       return _GoogleSignInResult(
         error: _friendlyGoogleRuntimeError(err),
         retryWithDefaultClient: _shouldRetryWithDefaultClient(err, clientId),
@@ -360,15 +380,18 @@ class AuthService extends ChangeNotifier {
     final fallbackUser = <String, dynamic>{
       'id': supabaseUser.id,
       'email': supabaseUser.email ?? googleUser?.email ?? '',
-      'name': metadata['full_name']?.toString() ??
+      'name':
+          metadata['full_name']?.toString() ??
           metadata['name']?.toString() ??
           googleUser?.displayName ??
           '',
-      'avatar_url': metadata['avatar_url']?.toString() ??
+      'avatar_url':
+          metadata['avatar_url']?.toString() ??
           metadata['picture']?.toString() ??
           googleUser?.photoUrl ??
           '',
-      'provider': supabaseUser.appMetadata['provider']?.toString() ??
+      'provider':
+          supabaseUser.appMetadata['provider']?.toString() ??
           metadata['provider']?.toString() ??
           'google',
     };
@@ -390,26 +413,25 @@ class AuthService extends ChangeNotifier {
     };
 
     try {
-      final response = await http.get(
-        Uri.parse('$_apiBaseUrl/auth/user'),
-        headers: {
-          'Authorization': 'Bearer $token',
-        },
-      ).timeout(const Duration(seconds: 20));
+      final response = await http
+          .get(
+            Uri.parse('$_apiBaseUrl/auth/user'),
+            headers: {'Authorization': 'Bearer $token'},
+          )
+          .timeout(const Duration(seconds: 20));
 
       if (response.statusCode == 200) {
         final body = json.decode(response.body);
         final user = body is Map<String, dynamic> ? body['user'] : null;
         if (user is Map) {
-          return {
-            ...safeFallback,
-            ...user.cast<String, dynamic>(),
-          };
+          return {...safeFallback, ...user.cast<String, dynamic>()};
         }
       }
     } catch (e) {
-      developer.log('Failed to enrich user profile from backend: $e',
-          name: 'AuthService');
+      developer.log(
+        'Failed to enrich user profile from backend: $e',
+        name: 'AuthService',
+      );
     }
 
     return safeFallback;
@@ -436,10 +458,7 @@ class AuthService extends ChangeNotifier {
     }
 
     try {
-      await Supabase.initialize(
-        url: _supabaseUrl,
-        anonKey: _supabaseAnonKey,
-      );
+      await Supabase.initialize(url: _supabaseUrl, anonKey: _supabaseAnonKey);
       _supabaseInitialized = true;
       return null;
     } catch (e) {
@@ -474,28 +493,30 @@ class AuthService extends ChangeNotifier {
       }
 
       final configRaw = body['config'];
-      final config = configRaw is Map ? configRaw.cast<String, dynamic>() : body;
+      final config = configRaw is Map
+          ? configRaw.cast<String, dynamic>()
+          : body;
 
-      final remoteSupabaseUrl = _pickString(
-        config,
-        const ['supabase_url', 'supabaseUrl'],
-      );
-      final remoteSupabaseKey = _pickString(
-        config,
-        const ['supabase_key', 'supabaseKey'],
-      );
-      final remoteGoogleClientId = _pickString(
-        config,
-        const ['google_client_id', 'googleClientId'],
-      );
-      final remoteAndroidClientId = _pickString(
-        config,
-        const ['google_client_id_android', 'androidClientId'],
-      );
-      final remoteIosClientId = _pickString(
-        config,
-        const ['google_client_id_ios', 'iosClientId'],
-      );
+      final remoteSupabaseUrl = _pickString(config, const [
+        'supabase_url',
+        'supabaseUrl',
+      ]);
+      final remoteSupabaseKey = _pickString(config, const [
+        'supabase_key',
+        'supabaseKey',
+      ]);
+      final remoteGoogleClientId = _pickString(config, const [
+        'google_client_id',
+        'googleClientId',
+      ]);
+      final remoteAndroidClientId = _pickString(config, const [
+        'google_client_id_android',
+        'androidClientId',
+      ]);
+      final remoteIosClientId = _pickString(config, const [
+        'google_client_id_ios',
+        'iosClientId',
+      ]);
 
       if (remoteSupabaseUrl.isNotEmpty) {
         _supabaseUrl = remoteSupabaseUrl;
@@ -586,8 +607,10 @@ class AuthService extends ChangeNotifier {
       final prefs = await SharedPreferences.getInstance();
       return prefs.getBool(_guestModePrefKey) ?? false;
     } catch (e) {
-      developer.log('Failed to read guest mode preference: $e',
-          name: 'AuthService');
+      developer.log(
+        'Failed to read guest mode preference: $e',
+        name: 'AuthService',
+      );
       return false;
     }
   }
@@ -598,8 +621,10 @@ class AuthService extends ChangeNotifier {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setBool(_guestModePrefKey, enabled);
     } catch (e) {
-      developer.log('Failed to persist guest mode preference: $e',
-          name: 'AuthService');
+      developer.log(
+        'Failed to persist guest mode preference: $e',
+        name: 'AuthService',
+      );
     }
   }
 
@@ -615,6 +640,7 @@ class AuthService extends ChangeNotifier {
       await _setGuestMode(true);
       _currentUser = null;
       apiService.setToken(null);
+      analysisSessionService.clear();
 
       await _signOutProvidersSafely();
       await storageService.clear();
@@ -647,8 +673,10 @@ class AuthService extends ChangeNotifier {
 
   Future<List<Map<String, dynamic>>> getHistory({int limit = 50}) async {
     if (!isAuthenticated) {
-      developer.log('getHistory called but user is not authenticated',
-          name: 'AuthService');
+      developer.log(
+        'getHistory called but user is not authenticated',
+        name: 'AuthService',
+      );
       return [];
     }
 
@@ -658,14 +686,18 @@ class AuthService extends ChangeNotifier {
     }
 
     try {
-      final response = await http.get(
-        Uri.parse('$_apiBaseUrl/history?limit=$limit'),
-        headers: _authHeaders(token),
-      ).timeout(const Duration(seconds: 30));
+      final response = await http
+          .get(
+            Uri.parse('$_apiBaseUrl/history?limit=$limit'),
+            headers: _authHeaders(token),
+          )
+          .timeout(const Duration(seconds: 30));
 
       if (response.statusCode == 401 || response.statusCode == 403) {
         throw ApiException(
-            'Session expired. Please sign in again.', response.statusCode);
+          'Session expired. Please sign in again.',
+          response.statusCode,
+        );
       }
 
       if (response.statusCode != 200) {
@@ -691,8 +723,10 @@ class AuthService extends ChangeNotifier {
 
   Future<Map<String, dynamic>?> getScanDetails(String scanId) async {
     if (!isAuthenticated) {
-      developer.log('getScanDetails called but user is not authenticated',
-          name: 'AuthService');
+      developer.log(
+        'getScanDetails called but user is not authenticated',
+        name: 'AuthService',
+      );
       return null;
     }
 
@@ -702,14 +736,18 @@ class AuthService extends ChangeNotifier {
     }
 
     try {
-      final response = await http.get(
-        Uri.parse('$_apiBaseUrl/history/$scanId'),
-        headers: _authHeaders(token),
-      ).timeout(const Duration(seconds: 30));
+      final response = await http
+          .get(
+            Uri.parse('$_apiBaseUrl/history/$scanId'),
+            headers: _authHeaders(token),
+          )
+          .timeout(const Duration(seconds: 30));
 
       if (response.statusCode == 401 || response.statusCode == 403) {
         throw ApiException(
-            'Session expired. Please sign in again.', response.statusCode);
+          'Session expired. Please sign in again.',
+          response.statusCode,
+        );
       }
 
       if (response.statusCode == 404) {
@@ -737,8 +775,10 @@ class AuthService extends ChangeNotifier {
 
   Future<bool> deleteScan(String scanId) async {
     if (!isAuthenticated) {
-      developer.log('deleteScan called but user is not authenticated',
-          name: 'AuthService');
+      developer.log(
+        'deleteScan called but user is not authenticated',
+        name: 'AuthService',
+      );
       return false;
     }
 
@@ -748,14 +788,18 @@ class AuthService extends ChangeNotifier {
     }
 
     try {
-      final response = await http.delete(
-        Uri.parse('$_apiBaseUrl/history/$scanId'),
-        headers: _authHeaders(token),
-      ).timeout(const Duration(seconds: 30));
+      final response = await http
+          .delete(
+            Uri.parse('$_apiBaseUrl/history/$scanId'),
+            headers: _authHeaders(token),
+          )
+          .timeout(const Duration(seconds: 30));
 
       if (response.statusCode == 401 || response.statusCode == 403) {
         throw ApiException(
-            'Session expired. Please sign in again.', response.statusCode);
+          'Session expired. Please sign in again.',
+          response.statusCode,
+        );
       }
 
       if (response.statusCode == 404) {
@@ -784,6 +828,7 @@ class AuthService extends ChangeNotifier {
 
       await storageService.clear();
       apiService.setToken(null);
+      analysisSessionService.clear();
       _currentUser = null;
       await _setGuestMode(false);
       developer.log('User signed out.', name: 'AuthService');

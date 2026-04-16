@@ -4,20 +4,24 @@ import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:percent_indicator/percent_indicator.dart';
 
+import '../models/analysis_model.dart';
 import '../models/ocr_progress_model.dart';
+import '../services/analysis_session_service.dart';
 import '../services/websocket_service.dart';
 import '../widgets/glass_widgets.dart';
-import 'dashboard_screen.dart';
+import 'main_shell.dart';
 
 class ProcessingScreen extends StatefulWidget {
   const ProcessingScreen({
     super.key,
     required this.jobId,
     required this.fileName,
+    this.analysisData,
   });
 
   final String jobId;
   final String fileName;
+  final Map<String, dynamic>? analysisData;
 
   @override
   State<ProcessingScreen> createState() => _ProcessingScreenState();
@@ -47,7 +51,9 @@ class _ProcessingScreenState extends State<ProcessingScreen>
     'uploading':     Icons.cloud_upload_outlined,
     'upload':        Icons.cloud_upload_outlined,
     'ocr':           Icons.document_scanner_rounded,
+    'parse':         Icons.integration_instructions_outlined,
     'parsing':       Icons.integration_instructions_outlined,
+    'analyze':       Icons.analytics_outlined,
     'analysis':      Icons.analytics_outlined,
     'analyzing':     Icons.analytics_outlined,
     'complete':      Icons.check_circle_rounded,
@@ -62,7 +68,9 @@ class _ProcessingScreenState extends State<ProcessingScreen>
     'uploading':     'Uploading',
     'upload':        'Uploading File',
     'ocr':           'Running OCR',
+    'parse':         'Parsing Transcript',
     'parsing':       'Parsing Transcript',
+    'analyze':       'Analysing Degree',
     'analysis':      'Analysing Degree',
     'analyzing':     'Analysing Degree',
     'complete':      'Complete!',
@@ -81,8 +89,11 @@ class _ProcessingScreenState extends State<ProcessingScreen>
     )..repeat(reverse: true);
     _pulseAnim = CurvedAnimation(parent: _pulseCtrl, curve: Curves.easeInOut);
 
-    // Kick off with a small delay so the slide-in animation looks clean
-    Future.delayed(const Duration(milliseconds: 400), _connectWebSocket);
+    if (widget.analysisData != null) {
+      Future.delayed(const Duration(milliseconds: 250), _completeFromBackend);
+    } else {
+      Future.delayed(const Duration(milliseconds: 400), _connectWebSocket);
+    }
   }
 
   @override
@@ -98,6 +109,10 @@ class _ProcessingScreenState extends State<ProcessingScreen>
   // ─────────────────────────────────────────────
 
   void _connectWebSocket() {
+    if (widget.jobId.isEmpty) {
+      _onStreamError('Missing OCR job ID.');
+      return;
+    }
     final stream = webSocketService.connect(widget.jobId);
     _wsSub = stream.listen(
       _onProgress,
@@ -105,6 +120,39 @@ class _ProcessingScreenState extends State<ProcessingScreen>
       onDone: _onStreamDone,
       cancelOnError: false,
     );
+  }
+
+  void _completeFromBackend() {
+    if (!mounted) return;
+
+    if (widget.analysisData != null) {
+      analysisSessionService.setLatestAnalysis(widget.analysisData!);
+    }
+
+    final analysis = widget.analysisData != null
+        ? AnalysisModel.fromJson(widget.analysisData!)
+        : null;
+    final courseCount = analysis?.courses.length ?? 0;
+    final completionMessage = courseCount > 0
+        ? 'Backend OCR finished successfully. $courseCount courses were processed.'
+        : 'Backend OCR finished successfully.';
+
+    setState(() {
+      _progress = 1.0;
+      _isDone = true;
+      _stage = 'Complete!';
+      _message = completionMessage;
+      _stageLog.add(_StageEntry(
+        stage: 'Complete!',
+        message: completionMessage,
+        icon: Icons.check_circle_rounded,
+        isError: false,
+        time: DateTime.now(),
+      ));
+    });
+
+    _pulseCtrl.stop();
+    Future.delayed(const Duration(seconds: 2), _navigateToDashboard);
   }
 
   void _onProgress(OcrProgressModel p) {
@@ -182,12 +230,13 @@ class _ProcessingScreenState extends State<ProcessingScreen>
     if (!mounted) return;
     Navigator.of(context).pushAndRemoveUntil(
       PageRouteBuilder(
-        pageBuilder: (_, animation, _) => const DashboardScreen(),
-        transitionsBuilder: (_, animation, _, child) =>
+        pageBuilder: (context, animation, secondaryAnimation) =>
+            const MainShell(initialIndex: 0),
+        transitionsBuilder: (context, animation, secondaryAnimation, child) =>
             FadeTransition(opacity: animation, child: child),
         transitionDuration: const Duration(milliseconds: 600),
       ),
-      (route) => route.isFirst,
+      (_) => false,
     );
   }
 
@@ -196,7 +245,9 @@ class _ProcessingScreenState extends State<ProcessingScreen>
   }
 
   void _cancelProcessing() {
-    webSocketService.disconnect();
+    if (widget.analysisData == null) {
+      webSocketService.disconnect();
+    }
     Navigator.of(context).pop();
   }
 
@@ -371,7 +422,7 @@ class _ProcessingScreenState extends State<ProcessingScreen>
 
     return AnimatedBuilder(
       animation: _pulseAnim,
-      builder: (_, _) {
+      builder: (context, child) {
         return Stack(
           alignment: Alignment.center,
           children: [
@@ -683,7 +734,7 @@ class _ProcessingScreenState extends State<ProcessingScreen>
           ),
           const SizedBox(height: 10),
           Text(
-            'Your transcript has been analysed. Redirecting to your dashboard…',
+            'Your transcript has been analysed on the backend. Redirecting to your results…',
             style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                   color: kTextSecondary,
                   height: 1.5,
@@ -1006,7 +1057,7 @@ class _PulsingDotState extends State<_PulsingDot>
   Widget build(BuildContext context) {
     return AnimatedBuilder(
       animation: _anim,
-      builder: (_, _) => Container(
+      builder: (context, child) => Container(
         width: 10,
         height: 10,
         decoration: BoxDecoration(

@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'package:web_socket_channel/web_socket_channel.dart';
+import 'backend_config.dart';
 import '../models/ocr_progress_model.dart';
 
 class WebSocketService {
@@ -16,13 +17,21 @@ class WebSocketService {
     _controller = StreamController<OcrProgressModel>.broadcast();
 
     try {
-      final uri = Uri.parse('wss://ocrapi.nsunexus.app/ws/ocr/$jobId');
+      final uri = backendWebSocketUri('/ws/ocr/$jobId');
       _channel = WebSocketChannel.connect(uri);
 
       _channel!.stream.listen(
         (message) {
           try {
-            final json = jsonDecode(message.toString()) as Map<String, dynamic>;
+            final payload = message.toString();
+            if (payload == 'pong') {
+              return;
+            }
+
+            final json = jsonDecode(payload) as Map<String, dynamic>;
+            if (json['type']?.toString().toLowerCase() == 'heartbeat') {
+              return;
+            }
             final progress = OcrProgressModel.fromJson(json);
             if (!(_controller?.isClosed ?? true)) {
               _controller!.add(progress);

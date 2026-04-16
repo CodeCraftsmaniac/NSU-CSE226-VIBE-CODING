@@ -1,16 +1,21 @@
-/// NSU Degree Audit - Supabase Service
-/// ====================================
-/// Handles authentication and database operations via backend API.
 library;
+
+export 'auth_service.dart';
+export 'storage_service.dart';
+
+/*
+Compatibility shim kept so older imports resolve to the active auth/storage
+services. The legacy duplicate implementation is intentionally commented out.
 
 import 'dart:convert';
 import 'dart:developer' as developer;
 import 'package:http/http.dart' as http;
 
 import 'package:shared_preferences/shared_preferences.dart';
+import 'backend_config.dart';
 
 // Backend API URL
-const String apiBaseUrl = 'https://ocrapi.nsunexus.app';
+final String apiBaseUrl = backendBaseUrl;
 
 /// Custom exception for API errors
 class ApiException implements Exception {
@@ -251,3 +256,4 @@ class AuthService {
 
 /// Global instance
 final authService = AuthService();
+*/

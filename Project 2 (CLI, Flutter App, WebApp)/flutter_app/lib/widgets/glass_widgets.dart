@@ -6,18 +6,18 @@ import 'package:google_fonts/google_fonts.dart';
 // Design Tokens — Dark Glassmorphism Palette
 // ═══════════════════════════════════════════════════════════════════════════════
 
-const kBackground  = Color(0xFF0F172A);
-const kSurface     = Color(0xFF1E293B);
+const kBackground = Color(0xFF0F172A);
+const kSurface = Color(0xFF1E293B);
 const kSurfaceHigh = Color(0xFF263349);
-const kPrimary     = Color(0xFF38BDF8);
+const kPrimary = Color(0xFF38BDF8);
 const kPrimaryDark = Color(0xFF0EA5E9);
-const kSuccess     = Color(0xFF10B981);
-const kWarning     = Color(0xFFF59E0B);
-const kError       = Color(0xFFEF4444);
-const kTextPrimary    = Color(0xFFF1F5F9);
-const kTextSecondary  = Color(0xFF94A3B8);
-const kTextTertiary   = Color(0xFF64748B);
-const kBorder      = Color(0xFF334155);
+const kSuccess = Color(0xFF10B981);
+const kWarning = Color(0xFFF59E0B);
+const kError = Color(0xFFEF4444);
+const kTextPrimary = Color(0xFFF1F5F9);
+const kTextSecondary = Color(0xFF94A3B8);
+const kTextTertiary = Color(0xFF64748B);
+const kBorder = Color(0xFF334155);
 const kBorderLight = Color(0xFF1E293B);
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -29,8 +29,8 @@ Color gradeColor(String grade) {
   if (grade.startsWith('B')) return const Color(0xFF38BDF8);
   if (grade.startsWith('C')) return const Color(0xFFFBBF24);
   if (grade.startsWith('D')) return const Color(0xFFF97316);
-  if (grade == 'F')          return const Color(0xFFEF4444);
-  if (grade == 'W')          return const Color(0xFFA78BFA);
+  if (grade == 'F') return const Color(0xFFEF4444);
+  if (grade == 'W') return const Color(0xFFA78BFA);
   return kTextSecondary;
 }
 
@@ -43,60 +43,78 @@ ThemeData buildAppTheme() {
 
   final textTheme = GoogleFonts.outfitTextTheme(base.textTheme).copyWith(
     displayLarge: GoogleFonts.outfit(
-      fontSize: 48, fontWeight: FontWeight.w800,
-      color: kTextPrimary, letterSpacing: -1.5,
+      fontSize: 48,
+      fontWeight: FontWeight.w800,
+      color: kTextPrimary,
+      letterSpacing: -1.5,
     ),
     displaySmall: GoogleFonts.outfit(
-      fontSize: 34, fontWeight: FontWeight.w700,
-      color: kTextPrimary, letterSpacing: -0.5,
+      fontSize: 34,
+      fontWeight: FontWeight.w700,
+      color: kTextPrimary,
+      letterSpacing: -0.5,
     ),
     headlineLarge: GoogleFonts.outfit(
-      fontSize: 30, fontWeight: FontWeight.w700,
+      fontSize: 30,
+      fontWeight: FontWeight.w700,
       color: kTextPrimary,
     ),
     headlineMedium: GoogleFonts.outfit(
-      fontSize: 24, fontWeight: FontWeight.w700,
+      fontSize: 24,
+      fontWeight: FontWeight.w700,
       color: kTextPrimary,
     ),
     headlineSmall: GoogleFonts.outfit(
-      fontSize: 20, fontWeight: FontWeight.w600,
+      fontSize: 20,
+      fontWeight: FontWeight.w600,
       color: kTextPrimary,
     ),
     titleLarge: GoogleFonts.outfit(
-      fontSize: 18, fontWeight: FontWeight.w600,
+      fontSize: 18,
+      fontWeight: FontWeight.w600,
       color: kTextPrimary,
     ),
     titleMedium: GoogleFonts.outfit(
-      fontSize: 16, fontWeight: FontWeight.w500,
+      fontSize: 16,
+      fontWeight: FontWeight.w500,
       color: kTextPrimary,
     ),
     titleSmall: GoogleFonts.outfit(
-      fontSize: 14, fontWeight: FontWeight.w500,
+      fontSize: 14,
+      fontWeight: FontWeight.w500,
       color: kTextSecondary,
     ),
     bodyLarge: GoogleFonts.outfit(
-      fontSize: 16, fontWeight: FontWeight.w400,
+      fontSize: 16,
+      fontWeight: FontWeight.w400,
       color: kTextSecondary,
     ),
     bodyMedium: GoogleFonts.outfit(
-      fontSize: 14, fontWeight: FontWeight.w400,
+      fontSize: 14,
+      fontWeight: FontWeight.w400,
       color: kTextSecondary,
     ),
     bodySmall: GoogleFonts.outfit(
-      fontSize: 12, fontWeight: FontWeight.w400,
+      fontSize: 12,
+      fontWeight: FontWeight.w400,
       color: kTextTertiary,
     ),
     labelLarge: GoogleFonts.outfit(
-      fontSize: 14, fontWeight: FontWeight.w600,
+      fontSize: 14,
+      fontWeight: FontWeight.w600,
       color: kTextPrimary,
     ),
     labelMedium: GoogleFonts.outfit(
-      fontSize: 12, fontWeight: FontWeight.w600,
-      color: kTextSecondary, letterSpacing: 0.5,
+      fontSize: 12,
+      fontWeight: FontWeight.w600,
+      color: kTextSecondary,
+      letterSpacing: 0.5,
     ),
     labelSmall: GoogleFonts.outfit(
-      fontSize: 11, fontWeight: FontWeight.w500,
-      color: kTextTertiary, letterSpacing: 0.8,
+      fontSize: 11,
+      fontWeight: FontWeight.w500,
+      color: kTextTertiary,
+      letterSpacing: 0.8,
     ),
   );
 
@@ -120,7 +138,9 @@ ThemeData buildAppTheme() {
       elevation: 0,
       scrolledUnderElevation: 0,
       titleTextStyle: GoogleFonts.outfit(
-        fontSize: 20, fontWeight: FontWeight.w700, color: kTextPrimary,
+        fontSize: 20,
+        fontWeight: FontWeight.w700,
+        color: kTextPrimary,
       ),
     ),
     cardTheme: CardThemeData(
@@ -166,7 +186,10 @@ ThemeData buildAppTheme() {
         elevation: 0,
         padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 16),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-        textStyle: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.w700),
+        textStyle: GoogleFonts.outfit(
+          fontSize: 16,
+          fontWeight: FontWeight.w700,
+        ),
       ),
     ),
     outlinedButtonTheme: OutlinedButtonThemeData(
@@ -175,7 +198,10 @@ ThemeData buildAppTheme() {
         side: const BorderSide(color: kPrimary, width: 1.5),
         padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 16),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-        textStyle: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.w600),
+        textStyle: GoogleFonts.outfit(
+          fontSize: 16,
+          fontWeight: FontWeight.w600,
+        ),
       ),
     ),
     filledButtonTheme: FilledButtonThemeData(
@@ -184,7 +210,10 @@ ThemeData buildAppTheme() {
         foregroundColor: const Color(0xFF0C1A2E),
         padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 16),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-        textStyle: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.w700),
+        textStyle: GoogleFonts.outfit(
+          fontSize: 16,
+          fontWeight: FontWeight.w700,
+        ),
       ),
     ),
     dividerColor: kBorder,
@@ -218,10 +247,16 @@ ThemeData buildAppTheme() {
       labelTextStyle: WidgetStateProperty.resolveWith((states) {
         if (states.contains(WidgetState.selected)) {
           return GoogleFonts.outfit(
-              fontSize: 12, fontWeight: FontWeight.w600, color: kPrimary);
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+            color: kPrimary,
+          );
         }
         return GoogleFonts.outfit(
-            fontSize: 12, fontWeight: FontWeight.w400, color: kTextTertiary);
+          fontSize: 12,
+          fontWeight: FontWeight.w400,
+          color: kTextTertiary,
+        );
       }),
     ),
     chipTheme: ChipThemeData(
@@ -249,11 +284,7 @@ class GradientBackground extends StatelessWidget {
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [
-            Color(0xFF0F172A),
-            Color(0xFF0D1B2A),
-            Color(0xFF0F172A),
-          ],
+          colors: [Color(0xFF0F172A), Color(0xFF0D1B2A), Color(0xFF0F172A)],
           stops: [0.0, 0.5, 1.0],
         ),
       ),
@@ -325,7 +356,8 @@ class GlassCard extends StatelessWidget {
           padding: padding ?? const EdgeInsets.all(20),
           decoration: BoxDecoration(
             borderRadius: br,
-            gradient: gradient ??
+            gradient:
+                gradient ??
                 LinearGradient(
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
@@ -334,7 +366,8 @@ class GlassCard extends StatelessWidget {
                     Colors.white.withValues(alpha: 0.03),
                   ],
                 ),
-            border: border ??
+            border:
+                border ??
                 Border.all(
                   color: Colors.white.withValues(alpha: 0.10),
                   width: 1,
@@ -422,7 +455,8 @@ class _GradientButtonState extends State<GradientButton> {
             borderRadius: BorderRadius.circular(14),
             gradient: widget.onPressed == null
                 ? const LinearGradient(
-                    colors: [Color(0xFF334155), Color(0xFF1E293B)])
+                    colors: [Color(0xFF334155), Color(0xFF1E293B)],
+                  )
                 : const LinearGradient(
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
@@ -445,16 +479,20 @@ class _GradientButtonState extends State<GradientButton> {
                     height: 22,
                     child: CircularProgressIndicator(
                       strokeWidth: 2.5,
-                      valueColor:
-                          AlwaysStoppedAnimation<Color>(Color(0xFF0C1A2E)),
+                      valueColor: AlwaysStoppedAnimation<Color>(
+                        Color(0xFF0C1A2E),
+                      ),
                     ),
                   )
                 : Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       if (widget.icon != null) ...[
-                        Icon(widget.icon,
-                            size: 20, color: const Color(0xFF0C1A2E)),
+                        Icon(
+                          widget.icon,
+                          size: 20,
+                          color: const Color(0xFF0C1A2E),
+                        ),
                         const SizedBox(width: 10),
                       ],
                       Text(
@@ -527,26 +565,28 @@ class StatCard extends StatelessWidget {
                 child: Icon(icon, color: accent, size: 22),
               ),
               const SizedBox(height: 14),
-              Text(label,
-                  style: Theme.of(context)
-                      .textTheme
-                      .bodySmall
-                      ?.copyWith(color: kTextSecondary)),
+              Text(
+                label,
+                style: Theme.of(
+                  context,
+                ).textTheme.bodySmall?.copyWith(color: kTextSecondary),
+              ),
               const SizedBox(height: 4),
               Text(
                 value,
                 style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                      color: kTextPrimary,
-                      fontWeight: FontWeight.w700,
-                    ),
+                  color: kTextPrimary,
+                  fontWeight: FontWeight.w700,
+                ),
               ),
               if (subtitle != null) ...[
                 const SizedBox(height: 4),
-                Text(subtitle!,
-                    style: Theme.of(context)
-                        .textTheme
-                        .bodySmall
-                        ?.copyWith(color: accent)),
+                Text(
+                  subtitle!,
+                  style: Theme.of(
+                    context,
+                  ).textTheme.bodySmall?.copyWith(color: accent),
+                ),
               ],
             ],
           ),
@@ -586,17 +626,16 @@ class SectionHeader extends StatelessWidget {
               Text(
                 eyebrow.toUpperCase(),
                 style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                      color: kPrimary,
-                      letterSpacing: 1.6,
-                      fontWeight: FontWeight.w700,
-                    ),
+                  color: kPrimary,
+                  letterSpacing: 1.6,
+                  fontWeight: FontWeight.w700,
+                ),
               ),
               const SizedBox(height: 4),
               Text(title, style: Theme.of(context).textTheme.headlineSmall),
               if (subtitle != null) ...[
                 const SizedBox(height: 4),
-                Text(subtitle!,
-                    style: Theme.of(context).textTheme.bodyMedium),
+                Text(subtitle!, style: Theme.of(context).textTheme.bodyMedium),
               ],
             ],
           ),
@@ -684,16 +723,17 @@ class AlertBox extends StatelessWidget {
                 Text(
                   title,
                   style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                        color: kTextPrimary,
-                        fontWeight: FontWeight.w600,
-                      ),
+                    color: kTextPrimary,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
                 const SizedBox(height: 4),
-                Text(body,
-                    style: Theme.of(context)
-                        .textTheme
-                        .bodySmall
-                        ?.copyWith(color: kTextSecondary)),
+                Text(
+                  body,
+                  style: Theme.of(
+                    context,
+                  ).textTheme.bodySmall?.copyWith(color: kTextSecondary),
+                ),
               ],
             ),
           ),
@@ -741,16 +781,15 @@ class DataPill extends StatelessWidget {
             children: [
               Text(
                 label,
-                style: Theme.of(context)
-                    .textTheme
-                    .bodySmall
-                    ?.copyWith(color: kTextTertiary),
+                style: Theme.of(
+                  context,
+                ).textTheme.bodySmall?.copyWith(color: kTextTertiary),
               ),
               Text(
                 value,
-                style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                      color: kTextPrimary,
-                    ),
+                style: Theme.of(
+                  context,
+                ).textTheme.labelLarge?.copyWith(color: kTextPrimary),
               ),
             ],
           ),
@@ -765,7 +804,12 @@ class DataPill extends StatelessWidget {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 class SmallMetric extends StatelessWidget {
-  const SmallMetric({super.key, required this.label, required this.value, this.accent});
+  const SmallMetric({
+    super.key,
+    required this.label,
+    required this.value,
+    this.accent,
+  });
   final String label;
   final String value;
   final Color? accent;
@@ -782,18 +826,19 @@ class SmallMetric extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(label,
-              style: Theme.of(context)
-                  .textTheme
-                  .bodySmall
-                  ?.copyWith(color: kTextTertiary)),
+          Text(
+            label,
+            style: Theme.of(
+              context,
+            ).textTheme.bodySmall?.copyWith(color: kTextTertiary),
+          ),
           const SizedBox(height: 4),
           Text(
             value,
             style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                  color: accent ?? kTextPrimary,
-                  fontWeight: FontWeight.w700,
-                ),
+              color: accent ?? kTextPrimary,
+              fontWeight: FontWeight.w700,
+            ),
           ),
         ],
       ),
@@ -817,17 +862,18 @@ class StripMetric extends StatelessWidget {
       child: Row(
         children: [
           Expanded(
-            child: Text(label,
-                style: Theme.of(context)
-                    .textTheme
-                    .bodyMedium
-                    ?.copyWith(color: kTextSecondary)),
+            child: Text(
+              label,
+              style: Theme.of(
+                context,
+              ).textTheme.bodyMedium?.copyWith(color: kTextSecondary),
+            ),
           ),
           Text(
             value,
-            style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                  color: kTextPrimary,
-                ),
+            style: Theme.of(
+              context,
+            ).textTheme.labelLarge?.copyWith(color: kTextPrimary),
           ),
         ],
       ),
@@ -840,7 +886,12 @@ class StripMetric extends StatelessWidget {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 class FeatureChip extends StatelessWidget {
-  const FeatureChip({super.key, required this.icon, required this.label, this.accent});
+  const FeatureChip({
+    super.key,
+    required this.icon,
+    required this.label,
+    this.accent,
+  });
   final IconData icon;
   final String label;
   final Color? accent;
@@ -905,8 +956,11 @@ class ProcessingPanel extends StatelessWidget {
                   color: kPrimary.withValues(alpha: 0.15),
                   borderRadius: BorderRadius.circular(12),
                 ),
-                child: const Icon(Icons.document_scanner_rounded,
-                    color: kPrimary, size: 22),
+                child: const Icon(
+                  Icons.document_scanner_rounded,
+                  color: kPrimary,
+                  size: 22,
+                ),
               ),
               const SizedBox(width: 14),
               Expanded(
@@ -916,16 +970,15 @@ class ProcessingPanel extends StatelessWidget {
                     Text(
                       stage ?? 'Processing Transcript',
                       style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                            color: kTextPrimary,
-                            fontWeight: FontWeight.w600,
-                          ),
+                        color: kTextPrimary,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
                     Text(
                       message,
-                      style: Theme.of(context)
-                          .textTheme
-                          .bodySmall
-                          ?.copyWith(color: kTextSecondary),
+                      style: Theme.of(
+                        context,
+                      ).textTheme.bodySmall?.copyWith(color: kTextSecondary),
                     ),
                   ],
                 ),
@@ -948,10 +1001,9 @@ class ProcessingPanel extends StatelessWidget {
             children: [
               Text(
                 '${(progress * 100).round()}% complete',
-                style: Theme.of(context)
-                    .textTheme
-                    .bodySmall
-                    ?.copyWith(color: kTextTertiary),
+                style: Theme.of(
+                  context,
+                ).textTheme.bodySmall?.copyWith(color: kTextTertiary),
               ),
               if (progress < 1.0)
                 SizedBox(
@@ -960,7 +1012,8 @@ class ProcessingPanel extends StatelessWidget {
                   child: CircularProgressIndicator(
                     strokeWidth: 2,
                     valueColor: AlwaysStoppedAnimation<Color>(
-                        kPrimary.withValues(alpha: 0.6)),
+                      kPrimary.withValues(alpha: 0.6),
+                    ),
                   ),
                 ),
             ],
@@ -1007,7 +1060,11 @@ class StatusDot extends StatelessWidget {
         shape: BoxShape.circle,
         color: _color,
         boxShadow: [
-          BoxShadow(color: _color.withValues(alpha: 0.5), blurRadius: size, spreadRadius: 1),
+          BoxShadow(
+            color: _color.withValues(alpha: 0.5),
+            blurRadius: size,
+            spreadRadius: 1,
+          ),
         ],
       ),
     );
@@ -1059,13 +1116,14 @@ class _ShimmerBoxState extends State<ShimmerBox>
   Widget build(BuildContext context) {
     return AnimatedBuilder(
       animation: _anim,
-      builder: (_, _) {
+      builder: (context, child) {
         return Container(
           width: widget.width,
           height: widget.height,
           decoration: BoxDecoration(
-            borderRadius:
-                BorderRadius.circular(widget.borderRadius ?? widget.height / 2),
+            borderRadius: BorderRadius.circular(
+              widget.borderRadius ?? widget.height / 2,
+            ),
             gradient: LinearGradient(
               begin: Alignment(-1.5 + _anim.value * 3, 0),
               end: Alignment(-0.5 + _anim.value * 3, 0),
@@ -1136,15 +1194,11 @@ class EmptyState extends StatelessWidget {
             Text(
               subtitle,
               textAlign: TextAlign.center,
-              style: Theme.of(context)
-                  .textTheme
-                  .bodyMedium
-                  ?.copyWith(color: kTextSecondary),
+              style: Theme.of(
+                context,
+              ).textTheme.bodyMedium?.copyWith(color: kTextSecondary),
             ),
-            if (action != null) ...[
-              const SizedBox(height: 28),
-              action!,
-            ],
+            if (action != null) ...[const SizedBox(height: 28), action!],
           ],
         ),
       ),
@@ -1180,7 +1234,10 @@ class GlowIcon extends StatelessWidget {
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [accent.withValues(alpha: 0.25), accent.withValues(alpha: 0.10)],
+          colors: [
+            accent.withValues(alpha: 0.25),
+            accent.withValues(alpha: 0.10),
+          ],
         ),
         border: Border.all(color: accent.withValues(alpha: 0.35), width: 1),
         boxShadow: [
@@ -1213,10 +1270,9 @@ class LabeledDivider extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 14),
           child: Text(
             label,
-            style: Theme.of(context)
-                .textTheme
-                .bodySmall
-                ?.copyWith(color: kTextTertiary),
+            style: Theme.of(
+              context,
+            ).textTheme.bodySmall?.copyWith(color: kTextTertiary),
           ),
         ),
         const Expanded(child: Divider(color: kBorder)),
