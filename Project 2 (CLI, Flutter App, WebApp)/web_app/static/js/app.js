@@ -1,13 +1,13 @@
 "use strict";
 /**
  * NSU Degree Audit - Premium Web Application
- * Real-time OCR scanning with level-wise analysis display
+ * Real-time OCR flow with staged, level-wise analysis presentation
  * 
- * Connects to Cloud Run backend API
+ * Talks directly to the Cloud Run backend API
  */
 
 // ─── API Configuration ─────────────────────────────────────────────────────────
-// Cloud Run Backend API
+// Cloud Run backend API base URL
 const API_BASE_URL = 'https://ocrapi.nsunexus.app';
 
 // ─── DOM Elements ──────────────────────────────────────────────────────────────
@@ -27,7 +27,7 @@ let analysisData = null;
 let elapsedTimerInterval = null;
 let processingStartTime = null;
 let currentUploadController = null;
-let currentUploadedFile = null; // Store file for preview
+let currentUploadedFile = null; // Cache selected file for preview/review surfaces
 
 // ─── Initialization ────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {

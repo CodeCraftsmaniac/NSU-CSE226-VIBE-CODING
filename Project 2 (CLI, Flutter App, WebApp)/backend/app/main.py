@@ -1,7 +1,7 @@
 """
 NSU Degree Audit API - FastAPI Application
 ==========================================
-High-performance async backend for OCR-based degree auditing.
+Production-ready async backend for OCR transcript analysis and degree auditing.
 """
 import os
 import logging
@@ -19,7 +19,7 @@ from fastapi.responses import JSONResponse
 logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
 logger = logging.getLogger(__name__)
 
-# CORS allowed origins - load from config or use defaults
+# CORS origin allowlist - resolve from env var when provided, otherwise use defaults
 CORS_ORIGINS = os.getenv("CORS_ORIGINS", "").split(",") if os.getenv("CORS_ORIGINS") else [
     "https://ocr.nsunexus.app",
     "https://ocrapi.nsunexus.app",
@@ -37,10 +37,10 @@ app = FastAPI(
     description="NSU Degree Audit Engine - OCR-based transcript analysis API",
 )
 
-# Middleware - GZip compression for responses
+# Middleware: apply gzip compression for sufficiently large responses
 app.add_middleware(GZipMiddleware, minimum_size=1000)
 
-# CORS - Use specific origins (not wildcard) for security
+# CORS: explicit origin policy (no wildcard) for tighter security
 app.add_middleware(
     CORSMiddleware,
     allow_origins=CORS_ORIGINS,
@@ -50,7 +50,7 @@ app.add_middleware(
 )
 
 
-# Global exception handler - prevent stack trace leaks
+# Global exception handler: avoid leaking stack traces in API responses
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
     """Catch all unhandled exceptions and return generic error."""
@@ -67,7 +67,7 @@ async def global_exception_handler(request: Request, exc: Exception):
     )
 
 
-# Request counting middleware for health metrics
+# Request counting middleware for health dashboard telemetry
 @app.middleware("http")
 async def count_requests(request: Request, call_next):
     """Count requests for real-time health dashboard.
