@@ -1,0 +1,53 @@
+﻿name: flutter_app
+description: "NSU Degree Audit Engine — Premium Flutter Client"
+publish_to: "none"
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.10.4
+
+dependencies:
+  flutter:
+    sdk: flutter
+  cupertino_icons: ^1.0.8
+
+  # Networking
+  dio: ^5.7.0
+  http: ^1.2.2
+  web_socket_channel: ^3.0.1
+
+  # Auth & Storage
+  google_sign_in: ^6.2.1
+  supabase_flutter: ^2.8.4
+  flutter_secure_storage: ^9.2.4
+  shared_preferences: 2.2.3
+
+  # State
+  provider: ^6.1.2
+
+  # UI
+  google_fonts: ^6.2.1
+  flutter_animate: ^4.5.2
+  percent_indicator: ^4.2.3
+
+  # File handling
+  file_picker: ^8.1.2
+  image_picker: ^1.1.2
+  url_launcher: ^6.3.1
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+  flutter_launcher_icons: ^0.14.1
+
+flutter:
+  uses-material-design: true
+
+flutter_launcher_icons:
+  android: true
+  ios: false
+  image_path: "assets/logo.png"
+  adaptive_icon_background: "#0A0E27"
+  adaptive_icon_foreground: "assets/logo.png"
+  min_sdk_android: 21

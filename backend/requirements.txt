@@ -1,0 +1,32 @@
+# NSU Degree Audit Engine - Backend Requirements
+# ===============================================
+
+# Core Web Framework - FastAPI
+fastapi>=0.109.0
+uvicorn[standard]>=0.27.0
+slowapi>=0.1.9
+python-multipart>=0.0.9
+httpx>=0.26.0
+
+# Environment & Configuration
+python-dotenv>=1.0.0
+pydantic[email]>=2.5.0
+pydantic-settings>=2.1.0
+
+# PDF & Image Processing
+PyMuPDF>=1.23.0
+Pillow>=10.0.0
+
+# Export Formats
+openpyxl>=3.1.0        # Excel export
+reportlab>=4.0.0       # PDF generation
+
+# Database - Supabase
+supabase>=2.0.0
+python-jose>=3.3.0
+
+# HTTP Client
+requests>=2.31.0
+
+# Production Server
+gunicorn>=21.0.0

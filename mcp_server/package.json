@@ -1,0 +1,16 @@
+{
+  "name": "nsu-degree-audit-mcp",
+  "version": "1.0.0",
+  "description": "MCP Server for NSU Degree Audit - Allows AI assistants to scan transcripts and analyze degree progress",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.26.0",
+    "axios": "^1.6.0"
+  },
+  "keywords": ["mcp", "nsu", "degree-audit", "transcript", "ocr"],
+  "author": "NSU Degree Audit Team"
+}

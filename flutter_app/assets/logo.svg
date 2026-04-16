@@ -1,0 +1,38 @@
+<svg viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="logoGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#38BDF8"/>
+      <stop offset="50%" stop-color="#2E86DE"/>
+      <stop offset="100%" stop-color="#0052CC"/>
+    </linearGradient>
+    <linearGradient id="accentGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#10B981"/>
+      <stop offset="100%" stop-color="#059669"/>
+    </linearGradient>
+    <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="1" result="blur"/>
+      <feComposite in="SourceGraphic" in2="blur" operator="over"/>
+    </filter>
+  </defs>
+  
+  <!-- Outer circle -->
+  <circle cx="24" cy="24" r="22" fill="none" stroke="url(#logoGradient)" stroke-width="2" filter="url(#glow)"/>
+  
+  <!-- University building / graduation cap stylized -->
+  <path d="M24 8l12 6-12 6-12-6z" fill="url(#logoGradient)" opacity="0.2"/>
+  <path d="M24 8l12 6-12 6-12-6z" fill="none" stroke="url(#logoGradient)" stroke-width="1.5" stroke-linejoin="round"/>
+  
+  <!-- Building columns -->
+  <path d="M14 20v12M20 18v14M24 17v15M28 18v14M34 20v12" stroke="url(#logoGradient)" stroke-width="1.5" stroke-linecap="round"/>
+  
+  <!-- Base line -->
+  <path d="M12 34h24" stroke="url(#logoGradient)" stroke-width="2" stroke-linecap="round"/>
+  
+  <!-- Document accent -->
+  <rect x="30" y="24" width="8" height="10" rx="1" fill="none" stroke="url(#accentGrad)" stroke-width="1.2"/>
+  <path d="M32 27h4M32 29h4M32 31h2" stroke="url(#accentGrad)" stroke-width="0.8" stroke-linecap="round"/>
+  
+  <!-- Checkmark accent -->
+  <circle cx="38" cy="24" r="4" fill="url(#accentGrad)"/>
+  <path d="M36 24l1.5 1.5 3-3" stroke="white" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

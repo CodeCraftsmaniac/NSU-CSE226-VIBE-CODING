@@ -1,0 +1,57 @@
+# Ignore everything not needed for Cloud Run deployment
+.git
+.gitignore
+.env
+.env.example
+.venv
+venv
+env
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache
+.mypy_cache
+.coverage
+htmlcov
+.tox
+.nox
+
+# Node/Flutter (not needed for backend)
+node_modules
+flutter_app
+.dart_tool
+build
+
+# CLI app (runs separately)
+cli_app
+
+# Test files and samples
+Transcript PDF.pdf
+test_*.py
+*.test.py
+tests/
+
+# Uploads and logs (runtime generated)
+uploads/*
+logs/*
+!uploads/.gitkeep
+!logs/.gitkeep
+
+# Documentation (not needed in container)
+*.md
+!knowledge_base.md
+
+# Vercel (using Cloud Run instead)
+.vercelignore
+vercel.json
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db

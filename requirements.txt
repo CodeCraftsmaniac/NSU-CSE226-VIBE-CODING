@@ -1,0 +1,39 @@
+# NSU Degree Audit Engine - Requirements
+# ========================================
+
+# Core
+rich>=13.0.0           # Premium terminal UI
+requests>=2.31.0       # HTTP client for cloud API
+
+# PDF & Image Processing (lightweight)
+PyMuPDF>=1.23.0        # PDF handling (fitz) - for native text extraction
+Pillow>=10.0.0         # Image processing/compression
+
+# Web Framework - FastAPI
+fastapi>=0.109.0       # Modern async web framework
+uvicorn>=0.27.0        # ASGI server
+pydantic[email]>=2.0.0 # Data validation with email support
+pydantic-settings>=2.0.0  # Settings management
+python-multipart>=0.0.6   # File upload handling
+slowapi>=0.1.9         # Rate limiting for FastAPI
+jinja2>=3.1.0          # Template engine for web frontend
+
+# Environment
+python-dotenv>=1.0.0   # Environment variable management
+
+# Database - Supabase
+supabase>=2.0.0        # Supabase Python client
+python-jose>=3.3.0     # JWT token handling
+
+# Production Server
+gunicorn>=21.0.0       # Production server (with uvicorn workers)
+
+# Load Testing (for 20 concurrent users verification)
+locust>=2.20.0         # Load testing framework
+
+# Note: Uses Google Cloud Vision (primary) and Azure Document Intelligence (fallback)
+# Optional heavy OCR (if you want local processing):
+# paddleocr>=2.7.0     # Uncomment for heavy local OCR
+# easyocr>=1.7.0       # Uncomment for fallback local OCR
+# opencv-python>=4.8.0 # Uncomment for image preprocessing
+

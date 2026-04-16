@@ -1,0 +1,1218 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NSU Degree Audit Engine — Premium OCR Analysis</title>
+    <meta name="description" content="North South University Degree Audit Engine. Upload your transcript PDF or image for instant CGPA calculation, credit analysis, and graduation audit.">
+    <!-- Favicon -->
+    <link rel="icon" type="image/svg+xml" href="/static/favicon.svg?v=2">
+    <link rel="apple-touch-icon" href="/static/logo.svg">
+    <link rel="shortcut icon" href="/static/favicon.svg?v=2">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <canvas id="particle-canvas"></canvas>
+    <!-- Grid background overlay -->
+    <div class="bg-grid"></div>
+    
+    <!-- Initial Loading (while checking auth) -->
+    <div id="initial-loading" style="position: fixed; inset: 0; background: #0a0e1a; display: flex; align-items: center; justify-content: center; z-index: 10000;">
+        <div style="text-align: center;">
+            <svg viewBox="0 0 50 50" width="50" height="50">
+                <circle cx="25" cy="25" r="20" fill="none" stroke="#00b4d8" stroke-width="4" stroke-dasharray="31.4 31.4" stroke-linecap="round">
+                    <animateTransform attributeName="transform" type="rotate" from="0 25 25" to="360 25 25" dur="1s" repeatCount="indefinite"/>
+                </circle>
+            </svg>
+        </div>
+    </div>
+
+    <!-- Header -->
+    <header class="header" id="header" style="display: none;">
+        <div class="header-container">
+            <div class="logo">
+                <div class="logo-icon">
+                    <img src="/static/logo.svg" alt="NSU Logo" width="48" height="48">
+                </div>
+                <div class="logo-text">
+                    <span class="logo-title">North South University</span>
+                    <span class="logo-subtitle">Degree Audit Engine <span class="version-badge">v2.0</span></span>
+                </div>
+            </div>
+            <div class="header-right">
+                <button class="btn-restart" id="btn-restart">
+                    <svg viewBox="0 0 20 20" fill="currentColor">
+                        <path fill-rule="evenodd" d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z" clip-rule="evenodd"/>
+                    </svg>
+                    <span>Upload New File</span>
+                </button>
+                
+                <!-- OCR Model Selector Dropdown -->
+                <div class="model-selector" id="model-selector">
+                    <button class="model-btn" id="model-btn" onclick="toggleModelMenu()">
+                        <svg class="model-icon" viewBox="0 0 20 20" fill="currentColor" width="16" height="16">
+                            <path fill-rule="evenodd" d="M11.3 1.046A1 1 0 0112 2v5h4a1 1 0 01.82 1.573l-7 10A1 1 0 018 18v-5H4a1 1 0 01-.82-1.573l7-10a1 1 0 011.12-.38z" clip-rule="evenodd"/>
+                        </svg>
+                        <span id="model-label">Auto</span>
+                        <svg class="dropdown-arrow" viewBox="0 0 20 20" fill="currentColor" width="14" height="14">
+                            <path fill-rule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clip-rule="evenodd"/>
+                        </svg>
+                    </button>
+                    <div class="model-menu" id="model-menu">
+                        <button class="model-option active" data-engine="auto" onclick="selectModel('auto')">
+                            <svg viewBox="0 0 20 20" fill="currentColor" width="16" height="16">
+                                <path fill-rule="evenodd" d="M11.3 1.046A1 1 0 0112 2v5h4a1 1 0 01.82 1.573l-7 10A1 1 0 018 18v-5H4a1 1 0 01-.82-1.573l7-10a1 1 0 011.12-.38z" clip-rule="evenodd"/>
+                            </svg>
+                            <span>Auto</span>
+                            <span class="model-badge">Recommended</span>
+                        </button>
+                        <button class="model-option" data-engine="azure" onclick="selectModel('azure')">
+                            <svg viewBox="0 0 20 20" fill="currentColor" width="16" height="16">
+                                <path d="M5.5 16a3.5 3.5 0 01-.369-6.98 4 4 0 117.753-1.977A4.5 4.5 0 1113.5 16h-8z"/>
+                            </svg>
+                            <span>Azure DI</span>
+                            <span class="model-badge azure">99%+</span>
+                        </button>
+                        <button class="model-option" data-engine="google_vision" onclick="selectModel('google_vision')">
+                            <svg viewBox="0 0 20 20" fill="currentColor" width="16" height="16">
+                                <path d="M10 12a2 2 0 100-4 2 2 0 000 4z"/>
+                                <path fill-rule="evenodd" d="M.458 10C1.732 5.943 5.522 3 10 3s8.268 2.943 9.542 7c-1.274 4.057-5.064 7-9.542 7S1.732 14.057.458 10zM14 10a4 4 0 11-8 0 4 4 0 018 0z" clip-rule="evenodd"/>
+                            </svg>
+                            <span>Google Vision</span>
+                            <span class="model-badge google">98%+</span>
+                        </button>
+                    </div>
+                    <input type="hidden" id="ocr-engine" value="auto">
+                </div>
+
+                <button class="mcp-entry-btn" id="mcp-entry-btn" onclick="scrollToMcpShowcase()" title="Open MCP Server Showcase">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="16" height="16" aria-hidden="true">
+                        <path d="M8 11a4 4 0 015.66 0l2.83 2.83a4 4 0 11-5.66 5.66l-1.42-1.42" stroke-linecap="round" stroke-linejoin="round"/>
+                        <path d="M16 13a4 4 0 00-5.66 0l-2.83 2.83a4 4 0 105.66 5.66l1.42-1.42" opacity="0"/>
+                        <path d="M10 15L14 11" stroke-linecap="round"/>
+                        <path d="M6.2 9.2l-1.4 1.4a4 4 0 105.66 5.66l.54-.54" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                    <span>MCP Server</span>
+                </button>
+                
+                <!-- Health Dashboard Button -->
+                <button class="health-status-btn" id="health-status-btn" onclick="openHealthDashboard()" title="System Health Dashboard">
+                    <span class="health-pulse" id="health-pulse"></span>
+                    <svg viewBox="0 0 20 20" fill="currentColor" width="16" height="16">
+                        <path fill-rule="evenodd" d="M3.172 5.172a4 4 0 015.656 0L10 6.343l1.172-1.171a4 4 0 115.656 5.656L10 17.657l-6.828-6.829a4 4 0 010-5.656z" clip-rule="evenodd"/>
+                    </svg>
+                    <span>Health</span>
+                </button>
+                
+                <!-- Auth Button -->
+                <button class="btn-auth" id="auth-button" onclick="currentUser ? toggleUserMenu() : signInWithGoogle()">
+                    <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
+                        <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
+                        <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
+                        <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
+                        <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
+                    </svg>
+                    <span>Sign in</span>
+                </button>
+                <!-- User Menu Dropdown -->
+                <div class="user-menu" id="user-menu">
+                    <button class="menu-item" onclick="loadHistory()">
+                        <svg viewBox="0 0 20 20" fill="currentColor" width="16" height="16">
+                            <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clip-rule="evenodd"/>
+                        </svg>
+                        Scan History
+                    </button>
+                    <button class="menu-item" onclick="signOut()">
+                        <svg viewBox="0 0 20 20" fill="currentColor" width="16" height="16">
+                            <path fill-rule="evenodd" d="M3 3a1 1 0 00-1 1v12a1 1 0 102 0V4a1 1 0 00-1-1zm10.293 9.293a1 1 0 001.414 1.414l3-3a1 1 0 000-1.414l-3-3a1 1 0 10-1.414 1.414L14.586 9H7a1 1 0 100 2h7.586l-1.293 1.293z" clip-rule="evenodd"/>
+                        </svg>
+                        Sign Out
+                    </button>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Auth Landing Section (hidden by default until auth check) -->
+    <section id="auth-landing" class="auth-landing" style="display: none;">
+        <div class="auth-container">
+            <div class="auth-card">
+                <!-- Logo and Title Section - Horizontal Layout -->
+                <div class="auth-header-section">
+                    <div class="auth-logo-wrapper">
+                        <div class="auth-logo">
+                            <img src="/static/logo.svg" alt="NSU Logo" width="80" height="80">
+                        </div>
+                    </div>
+                    
+                    <div class="auth-text-wrapper">
+                        <h1 class="auth-title">North South University</h1>
+                        <h2 class="auth-subtitle">Degree Audit Engine</h2>
+                    </div>
+                </div>
+                
+                <!-- Divider Line -->
+                <div class="auth-divider"></div>
+                
+                <!-- Benefits -->
+                <div class="auth-benefits">
+                    <div class="auth-benefit">
+                        <div class="benefit-icon">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20">
+                                <path d="M13 10V3L4 14h7v7l9-11h-7z"/>
+                            </svg>
+                        </div>
+                        <span>Instant Analysis</span>
+                    </div>
+                    <div class="auth-benefit">
+                        <div class="benefit-icon">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20">
+                                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                            </svg>
+                        </div>
+                        <span>Secure Storage</span>
+                    </div>
+                    <div class="auth-benefit">
+                        <div class="benefit-icon">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20">
+                                <rect x="2" y="3" width="20" height="14" rx="2"/>
+                                <path d="M8 21h8M12 17v4"/>
+                            </svg>
+                        </div>
+                        <span>Cross-Platform</span>
+                    </div>
+                </div>
+                
+                <!-- Divider Line -->
+                <div class="auth-divider"></div>
+                
+                <!-- Description -->
+                <p class="auth-description">
+                    Sign in to sync your transcript analysis and academic history across all platforms.
+                </p>
+                
+                <!-- Buttons -->
+                <div class="auth-actions">
+                    <button class="btn-google-nsu" onclick="signInWithGoogle()">
+                        <svg viewBox="0 0 24 24" width="20" height="20">
+                            <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
+                            <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
+                            <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
+                            <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
+                        </svg>
+                        <span>Continue with Google</span>
+                    </button>
+                    
+                    <button class="btn-guest-nsu" onclick="continueAsGuest()">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20">
+                            <path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/>
+                            <circle cx="12" cy="7" r="4"/>
+                        </svg>
+                        <span>Continue as Guest <span class="guest-note">(No history will be saved)</span></span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Auth Loading Overlay -->
+    <div id="auth-loading-overlay" class="auth-loading-overlay" style="display: none;">
+        <div class="auth-loading-card">
+            <div class="auth-loading-spinner">
+                <svg viewBox="0 0 50 50">
+                    <circle cx="25" cy="25" r="20" fill="none" stroke="url(#gradient)" stroke-width="4" stroke-dasharray="31.4 31.4" stroke-linecap="round">
+                        <animateTransform attributeName="transform" type="rotate" from="0 25 25" to="360 25 25" dur="1s" repeatCount="indefinite"/>
+                    </circle>
+                    <defs>
+                        <linearGradient id="gradient" x1="0%" y1="0%" x2="100%" y2="0%">
+                            <stop offset="0%" style="stop-color:#00b4d8;stop-opacity:1" />
+                            <stop offset="100%" style="stop-color:#1a1f4d;stop-opacity:1" />
+                        </linearGradient>
+                    </defs>
+                </svg>
+                <svg class="checkmark" viewBox="0 0 52 52" style="display: none;">
+                    <circle class="checkmark-circle" cx="26" cy="26" r="25" fill="none"/>
+                    <path class="checkmark-check" fill="none" d="M14.1 27.2l7.1 7.2 16.7-16.8"/>
+                </svg>
+            </div>
+            <h3 class="auth-loading-title" id="auth-loading-title">Creating your account...</h3>
+            <p class="auth-loading-subtitle" id="auth-loading-subtitle">Setting up your profile</p>
+        </div>
+    </div>
+
+    <!-- Main Content -->
+    <main class="main" id="main-content" style="display: none;">
+        <!-- Upload Section -->
+        <section id="upload-section" class="upload-section">
+            <div class="container">
+            <div class="hero-content">
+                    <h1 class="hero-title">Academic Transcript <span class="gradient-text">Analysis Engine</span></h1>
+                    <p class="hero-desc">Upload your NSU transcript PDF or image for instant AI-powered OCR extraction, CGPA calculation, waiver eligibility check, and full degree audit.</p>
+
+                    <div class="features-row">
+                        <div class="feature-chip">
+                            <svg viewBox="0 0 20 20" fill="currentColor" width="16" height="16"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/></svg>
+                            Credit Tally
+                        </div>
+                        <div class="feature-chip">
+                            <svg viewBox="0 0 20 20" fill="currentColor" width="16" height="16"><path d="M2 11a1 1 0 011-1h2a1 1 0 011 1v5a1 1 0 01-1 1H3a1 1 0 01-1-1v-5zM8 7a1 1 0 011-1h2a1 1 0 011 1v9a1 1 0 01-1 1H9a1 1 0 01-1-1V7zM14 4a1 1 0 011-1h2a1 1 0 011 1v12a1 1 0 01-1 1h-2a1 1 0 01-1-1V4z"/></svg>
+                            CGPA Analysis
+                        </div>
+                        <div class="feature-chip">
+                            <svg viewBox="0 0 20 20" fill="currentColor" width="16" height="16"><path fill-rule="evenodd" d="M6.267 3.455a3.066 3.066 0 001.745-.723 3.066 3.066 0 013.976 0 3.066 3.066 0 001.745.723 3.066 3.066 0 012.812 2.812c.051.643.304 1.254.723 1.745a3.066 3.066 0 010 3.976 3.066 3.066 0 00-.723 1.745 3.066 3.066 0 01-2.812 2.812 3.066 3.066 0 00-1.745.723 3.066 3.066 0 01-3.976 0 3.066 3.066 0 00-1.745-.723 3.066 3.066 0 01-2.812-2.812 3.066 3.066 0 00-.723-1.745 3.066 3.066 0 010-3.976 3.066 3.066 0 00.723-1.745 3.066 3.066 0 012.812-2.812zm7.44 5.252a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/></svg>
+                            Degree Audit
+                        </div>
+                        <div class="feature-chip feature-chip--waiver">
+                            <svg viewBox="0 0 20 20" fill="currentColor" width="16" height="16"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"/></svg>
+                            Waiver Check
+                        </div>
+                    </div>
+                </div>
+
+                <div class="upload-card" id="upload-card">
+                    <div class="upload-area" id="upload-area">
+                        <div class="upload-glow"></div>
+                        <div class="upload-icon-wrap">
+                            <div class="upload-icon-ring"></div>
+                            <svg class="upload-icon" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="1.5">
+                                <path d="M8 32l10-10 6 6 8-8 8 8"/>
+                                <rect x="4" y="6" width="40" height="36" rx="4"/>
+                                <circle cx="16" cy="18" r="4"/>
+                                <path d="M24 40V26m0 0l-5 5m5-5l5 5" stroke-linecap="round" stroke-linejoin="round"/>
+                            </svg>
+                        </div>
+                        <h3>Drop your transcript here</h3>
+                        <p>or <span class="browse-link">browse files</span> from your device</p>
+                        <div class="file-types">
+                            <span class="file-type"><svg viewBox="0 0 16 16" fill="currentColor" width="12" height="12"><path d="M4 0a2 2 0 00-2 2v12a2 2 0 002 2h8a2 2 0 002-2V4.5L9.5 0H4z"/></svg> PDF</span>
+                            <span class="file-type"><svg viewBox="0 0 16 16" fill="currentColor" width="12" height="12"><path d="M6.002 5.5a1.5 1.5 0 11-3 0 1.5 1.5 0 013 0z"/><path d="M2.002 1a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V3a2 2 0 00-2-2h-12z"/></svg> PNG</span>
+                            <span class="file-type"><svg viewBox="0 0 16 16" fill="currentColor" width="12" height="12"><path d="M6.002 5.5a1.5 1.5 0 11-3 0 1.5 1.5 0 013 0z"/><path d="M2.002 1a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V3a2 2 0 00-2-2h-12z"/></svg> JPG</span>
+                            <span class="file-type"><svg viewBox="0 0 16 16" fill="currentColor" width="12" height="12"><path d="M14 14V4.5L9.5 0H4a2 2 0 00-2 2v12a2 2 0 002 2h8a2 2 0 002-2z"/><path d="M9.5 3V0L14 4.5h-3A1.5 1.5 0 019.5 3z"/></svg> CSV</span>
+                        </div>
+                        <div class="upload-limit">Max file size: 16MB</div>
+                        <input type="file" id="file-input" accept=".pdf,.png,.jpg,.jpeg,.csv" hidden>
+                    </div>
+                </div>
+
+                <!-- OCR Scanning Animation -->
+                <div class="scanning-section" id="scanning-section" style="display: none;">
+                    <!-- Processing Status Header -->
+                    <div class="processing-header">
+                        <div class="processing-info">
+                            <div class="file-info">
+                                <!-- PDF Icon -->
+                                <svg id="file-icon-pdf" class="file-type-icon" viewBox="0 0 24 24" fill="currentColor" width="22" height="22">
+                                    <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8l-6-6z" fill="#EF4444"/>
+                                    <path d="M14 2v6h6" fill="#FCA5A5"/>
+                                    <text x="7" y="17" font-size="6" font-weight="bold" fill="white">PDF</text>
+                                </svg>
+                                <!-- Image Icon -->
+                                <svg id="file-icon-image" class="file-type-icon" viewBox="0 0 24 24" fill="currentColor" width="22" height="22" style="display:none;">
+                                    <rect x="3" y="3" width="18" height="18" rx="2" fill="#10B981"/>
+                                    <circle cx="8.5" cy="8.5" r="2" fill="white"/>
+                                    <path d="M21 15l-5-5-6 6-3-3-4 4v3a2 2 0 002 2h14a2 2 0 002-2v-5z" fill="#059669"/>
+                                </svg>
+                                <div class="file-details">
+                                    <span class="file-name" id="processing-filename">transcript.pdf</span>
+                                    <span class="file-meta" id="processing-filemeta">2.4 MB</span>
+                                </div>
+                            </div>
+                            <div class="processing-right">
+                                <div class="elapsed-time" id="elapsed-time">
+                                    <svg viewBox="0 0 20 20" fill="currentColor" width="14" height="14">
+                                        <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clip-rule="evenodd"/>
+                                    </svg>
+                                    <span id="elapsed-counter">0:00</span>
+                                </div>
+                                <div class="status-badge processing">
+                                    <span class="status-pulse"></span>
+                                    Processing
+                                </div>
+                                <button class="btn-cancel-upload" id="btn-cancel-upload" title="Cancel Processing">
+                                    <svg viewBox="0 0 20 20" fill="currentColor" width="14" height="14">
+                                        <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"/>
+                                    </svg>
+                                </button>
+                            </div>
+                        </div>
+                        <div class="processing-tip">
+                            <svg viewBox="0 0 20 20" fill="currentColor" width="14" height="14">
+                                <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"/>
+                            </svg>
+                            <span>Processing typically takes 15-45 seconds depending on document complexity</span>
+                        </div>
+                    </div>
+
+                    <div class="scanning-card">
+                        <div class="scanning-header">
+                            <div class="scanning-icon" id="scanning-icon-container">
+                                <div class="scan-beam"></div>
+                                <!-- Default document icon -->
+                                <svg id="scan-icon-default" viewBox="0 0 32 32" fill="none" stroke="rgba(56,189,248,0.9)" stroke-width="1.5">
+                                    <rect x="4" y="4" width="24" height="24" rx="2"/>
+                                    <path d="M8 12h16M8 16h12M8 20h8"/>
+                                </svg>
+                                <!-- File thumbnail preview -->
+                                <img id="file-thumbnail" class="file-thumbnail" style="display:none;" alt="File preview"/>
+                            </div>
+                            <div class="scanning-title">
+                                <h3>Extracting Transcript Data</h3>
+                                <p class="scanning-subtitle" id="scanning-stage">Initializing OCR engine...</p>
+                            </div>
+                        </div>
+
+                        <div class="scanning-progress">
+                            <div class="progress-bar">
+                                <div class="progress-fill" id="scan-progress"></div>
+                                <div class="progress-glow" id="progress-glow"></div>
+                            </div>
+                            <div class="progress-info">
+                                <span class="progress-text" id="progress-text">0%</span>
+                                <span class="progress-eta" id="progress-eta">Estimating...</span>
+                            </div>
+                        </div>
+
+                        <div class="scanning-steps">
+                            <div class="scan-step active" id="step-init">
+                                <div class="step-indicator"><div class="step-dot"></div></div>
+                                <span>Initialize Engine</span>
+                            </div>
+                            <div class="scan-step" id="step-preprocess">
+                                <div class="step-indicator"><div class="step-dot"></div></div>
+                                <span>Image Processing</span>
+                            </div>
+                            <div class="scan-step" id="step-extract">
+                                <div class="step-indicator"><div class="step-dot"></div></div>
+                                <span>Text Extraction</span>
+                            </div>
+                            <div class="scan-step" id="step-parse">
+                                <div class="step-indicator"><div class="step-dot"></div></div>
+                                <span>Data Parsing</span>
+                            </div>
+                            <div class="scan-step" id="step-analyze">
+                                <div class="step-indicator"><div class="step-dot"></div></div>
+                                <span>Analysis</span>
+                            </div>
+                        </div>
+
+                        <div class="extracted-text-container">
+                            <div class="extracted-text-header">
+                                <span class="pulse-dot"></span>
+                                <span>Live Text Extraction</span>
+                                <span class="text-count" id="text-count">0 items</span>
+                            </div>
+                            <div class="extracted-text" id="extracted-text">
+                                <div class="cursor-blink">|</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Results Section -->
+        <section id="results-section" class="results-section" style="display: none;">
+            <div class="container">
+                <!-- OCR Summary Banner (Collapsible) -->
+                <div class="ocr-banner collapsed" id="ocr-banner" onclick="toggleOcrBanner()">
+                    <div class="ocr-banner-header">
+                        <div class="ocr-banner-left">
+                            <div class="ocr-success-icon">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                                    <path d="M9 12l2 2 4-4" stroke-linecap="round" stroke-linejoin="round"/>
+                                    <circle cx="12" cy="12" r="10"/>
+                                </svg>
+                            </div>
+                            <div>
+                                <div class="ocr-banner-title">Extraction Complete</div>
+                                <div class="ocr-banner-meta" id="ocr-meta">—</div>
+                            </div>
+                        </div>
+                        <div class="ocr-banner-toggle">
+                            <svg viewBox="0 0 20 20" fill="currentColor" width="20" height="20">
+                                <path fill-rule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clip-rule="evenodd"/>
+                            </svg>
+                        </div>
+                    </div>
+                    <div class="ocr-banner-content">
+                        <div class="ocr-banner-stats">
+                            <div class="ocr-stat">
+                                <span class="ocr-stat-value" id="ocr-courses-count">0</span>
+                                <span class="ocr-stat-label">Courses</span>
+                            </div>
+                            <div class="ocr-stat">
+                                <span class="ocr-stat-value" id="ocr-confidence-value">0%</span>
+                                <span class="ocr-stat-label">Confidence</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Export Actions Bar -->
+                <div class="export-actions-bar" id="export-actions-bar">
+                    <div class="export-title">
+                        <svg viewBox="0 0 20 20" fill="currentColor" width="16" height="16">
+                            <path fill-rule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clip-rule="evenodd"/>
+                        </svg>
+                        Export Report
+                    </div>
+                    <div class="export-buttons">
+                        <button class="export-btn" onclick="exportReport('json')" title="Export as JSON">
+                            <svg viewBox="0 0 20 20" fill="currentColor" width="14" height="14">
+                                <path fill-rule="evenodd" d="M3 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1z" clip-rule="evenodd"/>
+                            </svg>
+                            JSON
+                        </button>
+                        <button class="export-btn" onclick="exportReport('csv')" title="Export as CSV">
+                            <svg viewBox="0 0 20 20" fill="currentColor" width="14" height="14">
+                                <path fill-rule="evenodd" d="M3 3a1 1 0 000 2v8a2 2 0 002 2h2.586l-1.293 1.293a1 1 0 101.414 1.414L10 15.414l2.293 2.293a1 1 0 001.414-1.414L12.414 15H15a2 2 0 002-2V5a1 1 0 100-2H3zm11.707 4.707a1 1 0 00-1.414-1.414L10 9.586 8.707 8.293a1 1 0 00-1.414 0l-2 2a1 1 0 101.414 1.414L8 10.414l1.293 1.293a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/>
+                            </svg>
+                            CSV
+                        </button>
+                        <button class="export-btn" onclick="exportReport('excel')" title="Export as Excel">
+                            <svg viewBox="0 0 20 20" fill="currentColor" width="14" height="14">
+                                <path fill-rule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4z" clip-rule="evenodd"/>
+                            </svg>
+                            Excel
+                        </button>
+                        <button class="export-btn" onclick="exportReport('pdf')" title="Export as PDF">
+                            <svg viewBox="0 0 20 20" fill="currentColor" width="14" height="14">
+                                <path fill-rule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4zm2 6a1 1 0 011-1h6a1 1 0 110 2H7a1 1 0 01-1-1zm1 3a1 1 0 100 2h6a1 1 0 100-2H7z" clip-rule="evenodd"/>
+                            </svg>
+                            PDF
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Student Info Card -->
+                <div class="student-card" id="student-card" style="display:none;">
+                    <div class="student-info-row">
+                        <div class="student-info-left">
+                            <div class="student-info">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="20" height="20">
+                                    <path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/>
+                                    <circle cx="12" cy="7" r="4"/>
+                                </svg>
+                                <span id="student-name">—</span>
+                            </div>
+                            <div class="student-info">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="20" height="20">
+                                    <rect x="3" y="4" width="18" height="16" rx="2"/>
+                                    <path d="M7 8h10M7 12h6"/>
+                                </svg>
+                                <span id="student-id">—</span>
+                            </div>
+                        </div>
+                        <div class="student-info-right">
+                            <div class="student-department" id="student-department" style="display:none;">
+                                <span class="dept-badge" id="dept-badge">
+                                    <svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14">
+                                        <path d="M12 14l9-5-9-5-9 5 9 5z"/>
+                                        <path d="M12 14l6.16-3.422a12.083 12.083 0 01.665 6.479A11.952 11.952 0 0012 20.055a11.952 11.952 0 00-6.824-2.998 12.078 12.078 0 01.665-6.479L12 14z"/>
+                                    </svg>
+                                    <span id="dept-name">—</span>
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Level Tabs -->
+                <div class="level-tabs">
+                    <button class="level-tab active" data-level="1" id="tab-1">
+                        <span class="tab-icon">
+                            <svg viewBox="0 0 20 20" fill="currentColor" width="16" height="16"><path d="M9 2a1 1 0 000 2h2a1 1 0 100-2H9z"/><path fill-rule="evenodd" d="M4 5a2 2 0 012-2 3 3 0 003 3h2a3 3 0 003-3 2 2 0 012 2v11a2 2 0 01-2 2H6a2 2 0 01-2-2V5zm3 4a1 1 0 000 2h.01a1 1 0 100-2H7zm3 0a1 1 0 000 2h3a1 1 0 100-2h-3zm-3 4a1 1 0 100 2h.01a1 1 0 100-2H7zm3 0a1 1 0 100 2h3a1 1 0 100-2h-3z" clip-rule="evenodd"/></svg>
+                        </span>
+                        <span class="tab-text">
+                            <span class="tab-number">L1</span>
+                            <span class="tab-name">Credit Tally</span>
+                        </span>
+                    </button>
+                    <button class="level-tab" data-level="2" id="tab-2">
+                        <span class="tab-icon">
+                            <svg viewBox="0 0 20 20" fill="currentColor" width="16" height="16"><path d="M2 11a1 1 0 011-1h2a1 1 0 011 1v5a1 1 0 01-1 1H3a1 1 0 01-1-1v-5zM8 7a1 1 0 011-1h2a1 1 0 011 1v9a1 1 0 01-1 1H9a1 1 0 01-1-1V7zM14 4a1 1 0 011-1h2a1 1 0 011 1v12a1 1 0 01-1 1h-2a1 1 0 01-1-1V4z"/></svg>
+                        </span>
+                        <span class="tab-text">
+                            <span class="tab-number">L2</span>
+                            <span class="tab-name">CGPA Analysis</span>
+                        </span>
+                    </button>
+                    <button class="level-tab" data-level="3" id="tab-3">
+                        <span class="tab-icon">
+                            <svg viewBox="0 0 20 20" fill="currentColor" width="16" height="16"><path fill-rule="evenodd" d="M6.267 3.455a3.066 3.066 0 001.745-.723 3.066 3.066 0 013.976 0 3.066 3.066 0 001.745.723 3.066 3.066 0 012.812 2.812c.051.643.304 1.254.723 1.745a3.066 3.066 0 010 3.976 3.066 3.066 0 00-.723 1.745 3.066 3.066 0 01-2.812 2.812 3.066 3.066 0 00-1.745.723 3.066 3.066 0 01-3.976 0 3.066 3.066 0 00-1.745-.723 3.066 3.066 0 01-2.812-2.812 3.066 3.066 0 00-.723-1.745 3.066 3.066 0 010-3.976 3.066 3.066 0 00.723-1.745 3.066 3.066 0 012.812-2.812zm7.44 5.252a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/></svg>
+                        </span>
+                        <span class="tab-text">
+                            <span class="tab-number">L3</span>
+                            <span class="tab-name">Degree Audit</span>
+                        </span>
+                    </button>
+                </div>
+
+                <!-- Level 1: Credit Tally -->
+                <div class="level-content" id="level-1" style="display: block;">
+                    <div class="level-header">
+                        <h2><span class="level-badge">Level 1</span> Credit Tally</h2>
+                        <p>Course count, credit tracking, and retake analysis</p>
+                    </div>
+                    <div class="stats-grid" id="level1-stats"></div>
+                    <div class="credit-progress-card" id="credit-progress-card">
+                        <h3>Graduation Progress</h3>
+                        <div class="big-progress">
+                            <div class="big-progress-bar">
+                                <div class="big-progress-fill" id="credit-progress-fill"></div>
+                            </div>
+                            <div class="big-progress-labels">
+                                <span id="credits-earned-label">0</span>
+                                <span>of 130 credits</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="retakes-card" id="retakes-card" style="display: none;">
+                        <h3>
+                            <svg viewBox="0 0 20 20" fill="currentColor" width="18" height="18"><path fill-rule="evenodd" d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z" clip-rule="evenodd"/></svg>
+                            Retaken Courses
+                        </h3>
+                        <div class="retakes-list" id="retakes-list"></div>
+                    </div>
+                </div>
+
+                <!-- Level 2: CGPA Analysis -->
+                <div class="level-content" id="level-2" style="display: none;">
+                    <div class="level-header">
+                        <h2><span class="level-badge">Level 2</span> CGPA Analysis</h2>
+                        <p>Grade point calculation and academic standing</p>
+                    </div>
+                    <div class="cgpa-hero" id="cgpa-display"></div>
+                    <!-- CGPA Warning Banner (shows if mismatch detected) -->
+                    <div class="cgpa-warning" id="cgpa-warning" style="display: none;"></div>
+                    <div class="stats-grid" id="level2-stats"></div>
+                    <div class="waiver-card" id="waiver-card" style="display: none;"></div>
+                    <div class="grade-distribution-card" id="grade-distribution">
+                        <h3>Grade Distribution</h3>
+                        <div class="grade-chart" id="grade-bars"></div>
+                    </div>
+                </div>
+
+                <!-- Level 3: Degree Audit -->
+                <div class="level-content" id="level-3" style="display: none;">
+                    <div class="level-header">
+                        <h2><span class="level-badge">Level 3</span> Degree Audit</h2>
+                        <p>Graduation requirements and course completion check</p>
+                    </div>
+                    <div id="level3-content"></div>
+                </div>
+
+                <!-- Semester-wise Course Table -->
+                <div class="course-table-section">
+                    <div class="section-title-row">
+                        <h3>
+                            <svg viewBox="0 0 20 20" fill="currentColor" width="20" height="20"><path fill-rule="evenodd" d="M3 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1z" clip-rule="evenodd"/></svg>
+                            All Courses
+                        </h3>
+                        <span class="course-count" id="course-count">0 courses</span>
+                    </div>
+                    <div id="semester-tables"></div>
+                </div>
+
+                <!-- Reset Button -->
+                <button class="reset-btn" onclick="resetAnalysis()">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20">
+                        <path d="M3 12a9 9 0 019-9 9.75 9.75 0 016.74 2.74L21 8"/>
+                        <path d="M21 3v5h-5"/>
+                        <path d="M21 12a9 9 0 01-9 9 9.75 9.75 0 01-6.74-2.74L3 16"/>
+                        <path d="M3 21v-5h5"/>
+                    </svg>
+                    Analyze Another Transcript
+                </button>
+            </div>
+        </section>
+    </main>
+
+    <!-- MCP Showcase Section -->
+    <section id="mcp-showcase" class="mcp-showcase">
+        <div class="container">
+            <div class="mcp-panel">
+                <div class="mcp-panel-head">
+                    <div class="mcp-badge">MCP</div>
+                    <div>
+                        <h2>Model Context Protocol Server</h2>
+                        <p>Live bridge between AI assistants and your NSU Degree Audit system.</p>
+                    </div>
+                </div>
+
+                <div class="mcp-grid">
+                    <div class="mcp-card-block">
+                        <h3>What This MCP Server Does</h3>
+                        <ul class="mcp-tool-list">
+                            <li><strong>scan_transcript:</strong> Scan PDF/image and return full degree audit analysis</li>
+                            <li><strong>get_health_status:</strong> Check API and OCR capability status</li>
+                            <li><strong>login / get_scan_history:</strong> Sign in and sync historical scans</li>
+                            <li><strong>calculate_cgpa:</strong> Compute CGPA from course list and grades</li>
+                            <li><strong>check_graduation:</strong> Validate requirement completion by program</li>
+                            <li><strong>export_scan / predict_gpa:</strong> Export reports and predict outcomes</li>
+                        </ul>
+                    </div>
+
+                    <div class="mcp-card-block">
+                        <h3>Demo Prompts You Can Show</h3>
+                        <div class="mcp-command-list">
+                            <div class="mcp-command">Scan my transcript at D:/Transcripts/my_transcript.pdf</div>
+                            <div class="mcp-command">Calculate my CGPA with CSE115 A, CSE173 B+, MAT120 A-</div>
+                            <div class="mcp-command">Check my graduation requirements for CSE</div>
+                            <div class="mcp-command">Show my scan history</div>
+                        </div>
+                    </div>
+
+                    <div class="mcp-card-block mcp-card-wide">
+                        <h3>How To Run MCP Server</h3>
+                        <ol class="mcp-steps">
+                            <li>Open terminal and go to mcp_server folder</li>
+                            <li>Install dependencies with npm install</li>
+                            <li>Run server with node server.js</li>
+                            <li>For VS Code Copilot, configure mcp.servers with this server path</li>
+                            <li>Reload VS Code and use prompts from Copilot Chat</li>
+                        </ol>
+                        <div class="mcp-note">Tip: Use the key icon button to jump back to this section during your presentation.</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Error Toast -->
+    <div class="toast" id="toast"></div>
+
+    <!-- Floating MCP Key -->
+    <button class="mcp-key-fab" id="mcp-key-fab" onclick="scrollToMcpShowcase()" title="MCP Server Showcase">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18" aria-hidden="true">
+            <circle cx="8" cy="12" r="3"></circle>
+            <path d="M11 12h10"></path>
+            <path d="M17 12v3"></path>
+            <path d="M20 12v2"></path>
+        </svg>
+        <span>MCP</span>
+    </button>
+
+    <!-- History Modal -->
+    <div class="modal-overlay" id="history-modal">
+        <div class="modal">
+            <div class="modal-header">
+                <h2>Scan History</h2>
+                <button class="modal-close" onclick="closeHistoryModal()">&times;</button>
+            </div>
+            <div class="modal-body" id="history-content">
+                <p class="loading-text">Loading history...</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Health Dashboard Modal -->
+    <div class="modal-overlay health-modal-overlay" id="health-modal">
+        <div class="modal health-modal">
+            <div class="modal-header health-modal-header">
+                <div class="health-modal-title-row">
+                    <div class="health-modal-status" id="hm-status-indicator">
+                        <span class="health-live-dot"></span>
+                        <span id="hm-status-text">Connecting...</span>
+                    </div>
+                    <h2>System Health Dashboard</h2>
+                </div>
+                <div class="health-modal-actions">
+                    <span class="health-refresh-badge" id="hm-refresh-badge">Live</span>
+                    <button class="modal-close" onclick="closeHealthDashboard()">&times;</button>
+                </div>
+            </div>
+            <div class="modal-body health-modal-body" id="health-content">
+
+                <!-- === LAYER 1: FRONTEND (Vercel) === -->
+                <div class="health-layer">
+                    <div class="health-layer-header">
+                        <div class="layer-status-row">
+                            <span class="layer-dot" id="hl-fe-dot"></span>
+                            <h3>Frontend Layer</h3>
+                            <span class="layer-provider">Vercel</span>
+                        </div>
+                        <span class="layer-badge" id="hl-fe-badge">Checking...</span>
+                    </div>
+                    <div class="health-layer-body">
+                        <div class="layer-metrics">
+                            <div class="layer-metric">
+                                <span class="lm-label">URL</span>
+                                <span class="lm-value" id="hl-fe-url">ocr.nsunexus.app</span>
+                            </div>
+                            <div class="layer-metric">
+                                <span class="lm-label">Latency</span>
+                                <span class="lm-value" id="hl-fe-latency">—</span>
+                            </div>
+                            <div class="layer-metric">
+                                <span class="lm-label">Framework</span>
+                                <span class="lm-value">FastAPI + Jinja2</span>
+                            </div>
+                            <div class="layer-metric">
+                                <span class="lm-label">Deployment</span>
+                                <span class="lm-value">Serverless Edge</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- === LAYER 2: BACKEND (Cloud Run) === -->
+                <div class="health-layer">
+                    <div class="health-layer-header">
+                        <div class="layer-status-row">
+                            <span class="layer-dot" id="hl-be-dot"></span>
+                            <h3>Backend Layer</h3>
+                            <span class="layer-provider">Google Cloud Run</span>
+                        </div>
+                        <span class="layer-badge" id="hl-be-badge">Checking...</span>
+                    </div>
+                    <div class="health-layer-body">
+                        <div class="layer-metrics">
+                            <div class="layer-metric">
+                                <span class="lm-label">URL</span>
+                                <span class="lm-value" id="hl-be-url">ocrapi.nsunexus.app</span>
+                            </div>
+                            <div class="layer-metric">
+                                <span class="lm-label">Uptime</span>
+                                <span class="lm-value lm-mono" id="hl-be-uptime">—</span>
+                            </div>
+                            <div class="layer-metric">
+                                <span class="lm-label">API Latency</span>
+                                <span class="lm-value lm-mono" id="hl-be-latency">—</span>
+                            </div>
+                            <div class="layer-metric">
+                                <span class="lm-label">Memory</span>
+                                <span class="lm-value lm-mono" id="hl-be-memory">—</span>
+                            </div>
+                            <div class="layer-metric">
+                                <span class="lm-label">Version</span>
+                                <span class="lm-value" id="hl-be-version">—</span>
+                            </div>
+                            <div class="layer-metric">
+                                <span class="lm-label">Python</span>
+                                <span class="lm-value" id="hl-be-python">—</span>
+                            </div>
+                            <div class="layer-metric">
+                                <span class="lm-label">Platform</span>
+                                <span class="lm-value" id="hl-be-platform">—</span>
+                            </div>
+                            <div class="layer-metric">
+                                <span class="lm-label">Environment</span>
+                                <span class="lm-value" id="hl-be-env">—</span>
+                            </div>
+                        </div>
+                        <!-- Latency bar -->
+                        <div class="hm-latency-bar"><div class="hm-latency-fill" id="hl-be-latency-bar"></div></div>
+                    </div>
+                </div>
+
+                <!-- === LAYER 3: DATABASE (Supabase) === -->
+                <div class="health-layer">
+                    <div class="health-layer-header">
+                        <div class="layer-status-row">
+                            <span class="layer-dot" id="hl-db-dot"></span>
+                            <h3>Database Layer</h3>
+                            <span class="layer-provider">Supabase (PostgreSQL)</span>
+                        </div>
+                        <span class="layer-badge" id="hl-db-badge">Checking...</span>
+                    </div>
+                    <div class="health-layer-body">
+                        <div class="layer-metrics">
+                            <div class="layer-metric">
+                                <span class="lm-label">Connection</span>
+                                <span class="lm-value" id="hl-db-conn">—</span>
+                            </div>
+                            <div class="layer-metric">
+                                <span class="lm-label">Query Latency</span>
+                                <span class="lm-value lm-mono" id="hl-db-latency">—</span>
+                            </div>
+                            <div class="layer-metric">
+                                <span class="lm-label">Tables</span>
+                                <span class="lm-value" id="hl-db-tables">—</span>
+                            </div>
+                            <div class="layer-metric">
+                                <span class="lm-label">Features</span>
+                                <span class="lm-value" id="hl-db-features">—</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- === LAYER 4: OCR ENGINES === -->
+                <div class="health-layer">
+                    <div class="health-layer-header">
+                        <div class="layer-status-row">
+                            <span class="layer-dot" id="hl-ocr-dot"></span>
+                            <h3>OCR Engines</h3>
+                            <span class="layer-provider">Multi-Engine</span>
+                        </div>
+                        <span class="layer-badge" id="hl-ocr-badge">Checking...</span>
+                    </div>
+                    <div class="health-layer-body">
+                        <div class="health-engines-grid">
+                            <div class="health-engine-card">
+                                <div class="engine-header">
+                                    <span class="engine-dot" id="hl-gv-dot"></span>
+                                    <span class="engine-name">Google Cloud Vision</span>
+                                </div>
+                                <div class="engine-details">
+                                    <span>Accuracy: 98%+</span>
+                                    <span id="hl-gv-status">Checking...</span>
+                                </div>
+                                <div class="engine-details">
+                                    <span>Free: 1,000 req/mo</span>
+                                    <span>Max: 20 MB</span>
+                                </div>
+                            </div>
+                            <div class="health-engine-card">
+                                <div class="engine-header">
+                                    <span class="engine-dot" id="hl-az-dot"></span>
+                                    <span class="engine-name">Azure Document Intelligence</span>
+                                </div>
+                                <div class="engine-details">
+                                    <span>Accuracy: 99%+</span>
+                                    <span id="hl-az-status">Checking...</span>
+                                </div>
+                                <div class="engine-details">
+                                    <span>Free: 500 pages/mo</span>
+                                    <span>Max: 50 MB</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- === METRICS SUMMARY === -->
+                <div class="health-layer">
+                    <div class="health-layer-header">
+                        <div class="layer-status-row">
+                            <svg viewBox="0 0 20 20" fill="currentColor" width="16" height="16" style="color:var(--accent)"><path d="M2 11a1 1 0 011-1h2a1 1 0 011 1v5a1 1 0 01-1 1H3a1 1 0 01-1-1v-5zM8 7a1 1 0 011-1h2a1 1 0 011 1v9a1 1 0 01-1 1H9a1 1 0 01-1-1V7zM14 4a1 1 0 011-1h2a1 1 0 011 1v12a1 1 0 01-1 1h-2a1 1 0 01-1-1V4z"/></svg>
+                            <h3>Request Metrics</h3>
+                        </div>
+                    </div>
+                    <div class="health-layer-body">
+                        <div class="layer-metrics">
+                            <div class="layer-metric">
+                                <span class="lm-label">User Requests</span>
+                                <span class="lm-value lm-mono" id="hl-user-reqs">—</span>
+                            </div>
+                            <div class="layer-metric">
+                                <span class="lm-label">Health Checks</span>
+                                <span class="lm-value lm-mono lm-dim" id="hl-health-reqs">—</span>
+                            </div>
+                            <div class="layer-metric">
+                                <span class="lm-label">Errors</span>
+                                <span class="lm-value lm-mono" id="hl-errors">—</span>
+                            </div>
+                            <div class="layer-metric">
+                                <span class="lm-label">Error Rate</span>
+                                <span class="lm-value lm-mono" id="hl-error-rate">—</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- === CAPABILITIES === -->
+                <div class="health-layer">
+                    <div class="health-layer-header">
+                        <div class="layer-status-row">
+                            <svg viewBox="0 0 20 20" fill="currentColor" width="16" height="16" style="color:var(--accent)"><path fill-rule="evenodd" d="M6.267 3.455a3.066 3.066 0 001.745-.723 3.066 3.066 0 013.976 0 3.066 3.066 0 001.745.723 3.066 3.066 0 012.812 2.812c.051.643.304 1.254.723 1.745a3.066 3.066 0 010 3.976 3.066 3.066 0 00-.723 1.745 3.066 3.066 0 01-2.812 2.812 3.066 3.066 0 00-1.745.723 3.066 3.066 0 01-3.976 0 3.066 3.066 0 00-1.745-.723 3.066 3.066 0 01-2.812-2.812 3.066 3.066 0 00-.723-1.745 3.066 3.066 0 010-3.976 3.066 3.066 0 00.723-1.745 3.066 3.066 0 012.812-2.812zm7.44 5.252a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/></svg>
+                            <h3>Analysis Capabilities</h3>
+                        </div>
+                    </div>
+                    <div class="health-layer-body">
+                        <div class="health-capabilities">
+                            <div class="health-cap-item"><span class="cap-badge l1">L1</span> Credit Tally — course count, credit tracking, retake detection</div>
+                            <div class="health-cap-item"><span class="cap-badge l2">L2</span> CGPA Analysis — grade points, academic standing, waiver eligibility</div>
+                            <div class="health-cap-item"><span class="cap-badge l3">L3</span> Degree Audit — graduation requirements, mandatory/elective courses</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Footer -->
+                <div class="health-footer">
+                    <span id="hm-last-updated">Last updated: —</span>
+                    <span id="hm-poll-interval">Polling every 2s · Uptime ticks every 1s</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Health Dashboard Script -->
+    <script>
+    (function() {
+        const API = 'https://ocrapi.nsunexus.app';
+        const FE_URL = 'https://ocr.nsunexus.app';
+        let pollTimer = null;
+        let uptimeTimer = null;
+        let isOpen = false;
+        let serverStartedAt = null;
+        let uptimeBase = 0;
+
+        const $ = id => document.getElementById(id);
+
+        window.openHealthDashboard = function() {
+            $('health-modal').classList.add('active');
+            isOpen = true;
+            fetchFull();
+            checkFrontend();
+            if (pollTimer) clearInterval(pollTimer);
+            pollTimer = setInterval(fetchRealtime, 2000);
+            // Client-side uptime tick every second
+            if (uptimeTimer) clearInterval(uptimeTimer);
+            uptimeTimer = setInterval(tickUptime, 1000);
+        };
+
+        window.closeHealthDashboard = function() {
+            $('health-modal').classList.remove('active');
+            isOpen = false;
+            if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+            if (uptimeTimer) { clearInterval(uptimeTimer); uptimeTimer = null; }
+        };
+
+        document.addEventListener('click', e => { if (e.target.id === 'health-modal') closeHealthDashboard(); });
+        document.addEventListener('keydown', e => { if (e.key === 'Escape' && isOpen) closeHealthDashboard(); });
+
+        function fmtUptime(s) {
+            const d = Math.floor(s / 86400), h = Math.floor((s % 86400) / 3600),
+                  m = Math.floor((s % 3600) / 60), sec = Math.floor(s % 60);
+            let p = [];
+            if (d > 0) p.push(d + 'd');
+            if (h > 0) p.push(h + 'h');
+            if (m > 0) p.push(m + 'm');
+            p.push(sec + 's');
+            return p.join(' ');
+        }
+
+        // Tick uptime on the client side every 1s (no network needed)
+        function tickUptime() {
+            if (!serverStartedAt) return;
+            uptimeBase += 1;
+            $('hl-be-uptime').textContent = fmtUptime(uptimeBase);
+        }
+
+        function setLayerStatus(dotId, badgeId, status) {
+            const dot = $(dotId), badge = $(badgeId);
+            if (status === 'operational' || status === 'connected' || status === 'active') {
+                dot.className = 'layer-dot operational';
+                badge.textContent = 'Operational';
+                badge.className = 'layer-badge operational';
+            } else if (status === 'degraded') {
+                dot.className = 'layer-dot degraded';
+                badge.textContent = 'Degraded';
+                badge.className = 'layer-badge degraded';
+            } else {
+                dot.className = 'layer-dot down';
+                badge.textContent = 'Down';
+                badge.className = 'layer-badge down';
+            }
+        }
+
+        function setGlobalStatus(ok) {
+            const pulse = $('health-pulse');
+            const text = $('hm-status-text');
+            const badge = $('hm-refresh-badge');
+            if (ok) {
+                pulse.className = 'health-pulse healthy';
+                text.textContent = 'All Systems Operational';
+                text.style.color = '#10b981';
+                badge.className = 'health-refresh-badge live';
+                badge.textContent = 'Live';
+            } else {
+                pulse.className = 'health-pulse error';
+                text.textContent = 'Connection Issue';
+                text.style.color = '#ef4444';
+                badge.className = 'health-refresh-badge error';
+                badge.textContent = 'Error';
+            }
+        }
+
+        // Check frontend layer independently
+        async function checkFrontend() {
+            try {
+                const start = performance.now();
+                const res = await fetch(FE_URL + '/health', { cache: 'no-store', mode: 'cors' });
+                const ms = Math.round(performance.now() - start);
+                if (res.ok) {
+                    setLayerStatus('hl-fe-dot', 'hl-fe-badge', 'operational');
+                    $('hl-fe-latency').textContent = ms + ' ms';
+                } else {
+                    setLayerStatus('hl-fe-dot', 'hl-fe-badge', 'degraded');
+                    $('hl-fe-latency').textContent = 'Error ' + res.status;
+                }
+            } catch {
+                setLayerStatus('hl-fe-dot', 'hl-fe-badge', 'down');
+                $('hl-fe-latency').textContent = 'Unreachable';
+            }
+        }
+
+        async function fetchRealtime() {
+            if (!isOpen) return;
+            try {
+                const start = performance.now();
+                const res = await fetch(API + '/health/realtime', { cache: 'no-store' });
+                const ms = Math.round(performance.now() - start);
+                const d = await res.json();
+                updateRealtime(d, ms);
+                setGlobalStatus(true);
+            } catch {
+                setGlobalStatus(false);
+            }
+        }
+
+        function updateRealtime(d, networkMs) {
+            // Backend uptime (sync the client-side counter)
+            if (d.uptime) {
+                uptimeBase = d.uptime.seconds;
+                serverStartedAt = d.uptime.started_at;
+                $('hl-be-uptime').textContent = fmtUptime(uptimeBase);
+            }
+
+            // Backend latency
+            $('hl-be-latency').textContent = networkMs + ' ms';
+            const bar = $('hl-be-latency-bar');
+            const pct = Math.min(networkMs / 1000 * 100, 100);
+            bar.style.width = pct + '%';
+            bar.className = 'hm-latency-fill ' + (networkMs < 300 ? 'good' : networkMs < 600 ? 'ok' : 'slow');
+
+            // Backend layer status
+            if (d.layers && d.layers.backend) {
+                setLayerStatus('hl-be-dot', 'hl-be-badge', d.layers.backend.status);
+                const mem = d.layers.backend.memory_mb;
+                $('hl-be-memory').textContent = mem > 0 ? mem + ' MB' : '—';
+            }
+
+            // Database layer
+            if (d.layers && d.layers.database) {
+                const db = d.layers.database;
+                setLayerStatus('hl-db-dot', 'hl-db-badge', db.status);
+                $('hl-db-conn').textContent = db.status === 'connected' ? 'Connected' : 'Disconnected';
+                $('hl-db-conn').style.color = db.status === 'connected' ? '#10b981' : '#ef4444';
+                $('hl-db-latency').textContent = db.latency_ms >= 0 ? db.latency_ms + ' ms' : '—';
+            }
+
+            // Metrics (accurate — user_requests excludes health polls)
+            if (d.metrics) {
+                $('hl-user-reqs').textContent = d.metrics.user_requests.toLocaleString();
+                $('hl-health-reqs').textContent = d.metrics.health_checks.toLocaleString();
+                $('hl-errors').textContent = d.metrics.errors.toLocaleString();
+                $('hl-error-rate').textContent = d.metrics.error_rate + '%';
+                $('hl-errors').style.color = d.metrics.errors > 0 ? '#ef4444' : '#10b981';
+                $('hl-error-rate').style.color = d.metrics.error_rate > 5 ? '#ef4444' : '#10b981';
+            }
+
+            $('hm-last-updated').textContent = 'Updated: ' + new Date().toLocaleTimeString();
+        }
+
+        async function fetchFull() {
+            try {
+                const start = performance.now();
+                const res = await fetch(API + '/health', { cache: 'no-store' });
+                const ms = Math.round(performance.now() - start);
+                const d = await res.json();
+
+                // Backend layer details
+                if (d.layers && d.layers.backend) {
+                    const be = d.layers.backend;
+                    $('hl-be-version').textContent = be.framework || d.version || '—';
+                    $('hl-be-python').textContent = be.python || '—';
+                    $('hl-be-platform').textContent = be.platform || '—';
+                    $('hl-be-env').textContent = be.environment || 'production';
+                }
+
+                // Database layer details
+                if (d.layers && d.layers.database) {
+                    const db = d.layers.database;
+                    $('hl-db-tables').textContent = db.tables ? db.tables.join(', ') : '—';
+                    $('hl-db-features').textContent = db.features ? db.features.join(', ') : '—';
+                }
+
+                // OCR engines
+                if (d.layers && d.layers.ocr) {
+                    const gv = d.layers.ocr.google_vision;
+                    const az = d.layers.ocr.azure_di;
+                    $(  'hl-gv-dot').className = 'engine-dot ' + (gv.configured ? 'active' : 'inactive');
+                    $('hl-gv-status').textContent = gv.configured ? 'Active' : 'Not Configured';
+                    $('hl-az-dot').className = 'engine-dot ' + (az.configured ? 'active' : 'inactive');
+                    $('hl-az-status').textContent = az.configured ? 'Active' : 'Not Configured';
+
+                    // Determine OCR layer overall status
+                    const ocrOk = gv.configured || az.configured;
+                    setLayerStatus('hl-ocr-dot', 'hl-ocr-badge', ocrOk ? 'operational' : 'degraded');
+                }
+
+                // Also run the realtime update with full data
+                updateRealtime({
+                    uptime: d.uptime,
+                    layers: d.layers,
+                    metrics: d.metrics,
+                }, ms);
+                setGlobalStatus(true);
+            } catch(err) {
+                console.error('Full health fetch error:', err);
+                setGlobalStatus(false);
+            }
+        }
+
+        // Background health ping for header button pulse
+        async function bgPing() {
+            try {
+                const res = await fetch(API + '/health/live', { cache: 'no-store' });
+                $('health-pulse').className = 'health-pulse ' + (res.ok ? 'healthy' : 'error');
+            } catch {
+                $('health-pulse').className = 'health-pulse error';
+            }
+        }
+        bgPing();
+        setInterval(bgPing, 30000);
+    })();
+    </script>
+
+    <!-- Supabase JS SDK -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="/static/js/app.js"></script>
+    <script src="/static/js/auth.js"></script>
+    
+    <!-- Service Worker Registration -->
+    <script>
+        // Register Service Worker for offline support
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', async () => {
+                try {
+                    const registration = await navigator.serviceWorker.register('/static/js/sw.js', {
+                        scope: '/'
+                    });
+                    console.log('Service Worker registered:', registration.scope);
+                    
+                    // Check for updates
+                    registration.addEventListener('updatefound', () => {
+                        const newWorker = registration.installing;
+                        newWorker.addEventListener('statechange', () => {
+                            if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                                // New version available
+                                console.log('New version available! Refresh to update.');
+                            }
+                        });
+                    });
+                } catch (error) {
+                    console.log('Service Worker registration failed:', error);
+                }
+            });
+        }
+        
+        // Listen for offline/online events
+        window.addEventListener('online', () => {
+            console.log('Back online');
+            document.body.classList.remove('offline-mode');
+        });
+        
+        window.addEventListener('offline', () => {
+            console.log('Offline mode');
+            document.body.classList.add('offline-mode');
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,40 @@
+# Update Cloud Run Environment Variables Only
+# =============================================
+# Updates env vars without rebuilding the container
+
+name: Update Cloud Run Env Vars
+
+on:
+  workflow_dispatch:  # Manual trigger only
+
+env:
+  PROJECT_ID: galvanic-deck-478816-u9
+  SERVICE_NAME: cse226-ocr-p2-nsunexus-backend-cli-web-app
+  REGION: us-central1
+
+jobs:
+  update-env:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+      
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+      
+      - name: Update environment variables
+        run: |
+          gcloud run services update $SERVICE_NAME \
+            --region $REGION \
+            --update-env-vars ENVIRONMENT=production,DEBUG=false,LOG_LEVEL=INFO,MAX_CONTENT_LENGTH_MB=16,SUPABASE_URL=${{ secrets.SUPABASE_URL }},SUPABASE_KEY=${{ secrets.SUPABASE_KEY }},SUPABASE_SERVICE_ROLE_KEY=${{ secrets.SUPABASE_SERVICE_ROLE_KEY }},SUPABASE_JWT_SECRET=${{ secrets.SUPABASE_JWT_SECRET }},GOOGLE_CLIENT_ID=${{ secrets.GOOGLE_CLIENT_ID }},GOOGLE_CLIENT_SECRET=${{ secrets.GOOGLE_CLIENT_SECRET }},AZURE_DOC_INTELLIGENCE_KEY=${{ secrets.AZURE_DOC_INTELLIGENCE_KEY }},AZURE_DOC_INTELLIGENCE_ENDPOINT=${{ secrets.AZURE_DOC_INTELLIGENCE_ENDPOINT }},GOOGLE_CLOUD_VISION_KEY=${{ secrets.GOOGLE_CLOUD_VISION_KEY }}
+      
+      - name: Verify update
+        run: |
+          SERVICE_URL=$(gcloud run services describe $SERVICE_NAME --region $REGION --format 'value(status.url)')
+          echo "Service URL: $SERVICE_URL"
+          sleep 5
+          curl -f $SERVICE_URL/health || exit 1
+          echo "✅ Environment variables updated successfully"
