@@ -33,6 +33,11 @@ except Exception as e:
 _supabase_client = None
 _client_lock = threading.Lock()
 
+
+def _normalize_email(email: str) -> str:
+    """Normalize email addresses so auth and history lookups are consistent."""
+    return email.strip().lower()
+
 def get_supabase():
     """
     Get or create Supabase client (thread-safe).
@@ -71,32 +76,43 @@ def create_user(email: str, name: str, provider: str = 'google') -> Optional[Dic
     if not supabase:
         logger.error("create_user: Supabase client not available")
         return None
+
+    normalized_email = _normalize_email(email)
     
     try:
         # Check if user exists
-        result = supabase.table('cse226_ocr_users').select('*').eq('email', email).execute()
+        result = supabase.table('cse226_ocr_users').select('*').eq('email', normalized_email).execute()
         
         if result.data:
             # Update last login
-            supabase.table('cse226_ocr_users').update({
+            update_payload = {
                 'last_login': datetime.now(timezone.utc).isoformat(),
-                'name': name
-            }).eq('email', email).execute()
-            logger.info(f"User already exists: {email}")
+            }
+            if name:
+                update_payload['name'] = name
+            if provider:
+                update_payload['provider'] = provider
+
+            updated = supabase.table('cse226_ocr_users').update(update_payload).eq(
+                'email', normalized_email
+            ).execute()
+            logger.info(f"User already exists: {normalized_email}")
+            if updated.data:
+                return updated.data[0]
             return result.data[0]
         
         # Create new user
         new_user = {
-            'email': email,
+            'email': normalized_email,
             'name': name,
             'provider': provider
         }
         
         result = supabase.table('cse226_ocr_users').insert(new_user).execute()
-        logger.info(f"Created new user: {email}")
+        logger.info(f"Created new user: {normalized_email}")
         return result.data[0] if result.data else None
     except Exception as e:
-        logger.error(f"Create user error for {email}: {e}")
+        logger.error(f"Create user error for {normalized_email}: {e}")
         return None
 
 
@@ -106,7 +122,9 @@ def get_user_by_email(email: str) -> Optional[Dict]:
     if not supabase:
         return None
     try:
-        result = supabase.table('cse226_ocr_users').select('*').eq('email', email).execute()
+        result = supabase.table('cse226_ocr_users').select('*').eq(
+            'email', _normalize_email(email)
+        ).execute()
         return result.data[0] if result.data else None
     except Exception:
         return None

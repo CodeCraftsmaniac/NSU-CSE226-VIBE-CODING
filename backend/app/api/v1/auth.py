@@ -9,15 +9,12 @@ import os
 import time
 import secrets
 import string
-import hashlib
-import hmac
-import base64
-import json
 import logging
+import threading
 from pathlib import Path
 from typing import Optional, Dict, Any
 
-from fastapi import APIRouter, HTTPException, Request, Depends, Body, Header
+from fastapi import APIRouter, HTTPException, Request, Header
 from pydantic import BaseModel, EmailStr, Field
 
 from app.middleware.rate_limit import limiter
@@ -96,7 +93,61 @@ def get_db_functions():
 # In-memory store for device codes (use Redis in production)
 # ═══════════════════════════════════════════════════════════════════════════════
 
+_DEVICE_CODE_TTL_SECONDS = 600
+_MAX_PENDING_DEVICE_CODES = 1000
+_DEVICE_CODE_BASE_URL = os.getenv("CLI_AUTH_WEB_URL", "https://ocr.nsunexus.app").rstrip("/")
 _device_codes: Dict[str, Dict[str, Any]] = {}
+_device_code_lock = threading.Lock()
+
+
+def _cleanup_expired_device_codes(now: Optional[float] = None) -> None:
+    """Remove expired device codes to keep the in-memory store bounded."""
+    cutoff = now or time.time()
+    expired_codes = [
+        code
+        for code, data in _device_codes.items()
+        if cutoff > float(data.get("expires_at", 0))
+    ]
+    for code in expired_codes:
+        _device_codes.pop(code, None)
+
+
+def _upsert_device_code(device_code: str, payload: Dict[str, Any]) -> None:
+    """Store or update a device code record after cleaning up expired entries."""
+    with _device_code_lock:
+        _cleanup_expired_device_codes()
+        _device_codes[device_code] = payload
+
+
+def _get_device_code(device_code: str) -> Optional[Dict[str, Any]]:
+    """Fetch a non-expired device code record."""
+    with _device_code_lock:
+        _cleanup_expired_device_codes()
+        record = _device_codes.get(device_code)
+        return dict(record) if record else None
+
+
+def _pop_device_code(device_code: str) -> Optional[Dict[str, Any]]:
+    """Atomically consume a device code record."""
+    with _device_code_lock:
+        _cleanup_expired_device_codes()
+        record = _device_codes.pop(device_code, None)
+        return dict(record) if record else None
+
+
+def verify_supabase_access_token(access_token: str) -> Optional[Dict[str, Any]]:
+    """Verify an incoming Supabase access token without leaking backend internals."""
+    try:
+        from auth import verify_supabase_token
+    except Exception as exc:
+        logger.warning("Supabase token verifier unavailable: %s", exc)
+        return None
+
+    try:
+        return verify_supabase_token(access_token)
+    except Exception as exc:
+        logger.warning("Supabase token verification failed: %s", exc)
+        return None
 
 
 def generate_device_code() -> str:
@@ -106,18 +157,6 @@ def generate_device_code() -> str:
     # Remove confusing characters
     chars = chars.replace('O', '').replace('0', '').replace('I', '').replace('1', '').replace('L', '')
     return ''.join(secrets.choice(chars) for _ in range(8))
-
-
-def get_secret_key() -> bytes:
-    """Get secret key for token signing (SHA256 hash of service key)."""
-    _, SUPABASE_SERVICE_ROLE_KEY = get_auth_functions()
-    settings = get_settings_safe()
-    if SUPABASE_SERVICE_ROLE_KEY:
-        return hashlib.sha256(SUPABASE_SERVICE_ROLE_KEY.encode()).digest()
-    jwt_key = getattr(settings, 'JWT_SECRET_KEY', None)
-    if not jwt_key:
-        raise HTTPException(status_code=503, detail="JWT secret not configured")
-    return hashlib.sha256(jwt_key.encode()).digest()
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -130,6 +169,10 @@ class GoogleAuthRequest(BaseModel):
     name: str = Field(default="", description="User display name")
     avatar_url: str = Field(default="", description="User avatar URL")
     provider: str = Field(default="google", description="Auth provider (google, cli)")
+    access_token: Optional[str] = Field(
+        default=None,
+        description="Verified Supabase access token from a completed OAuth flow",
+    )
 
 
 class DeviceCodeResponse(BaseModel):
@@ -230,18 +273,50 @@ async def auth_google(request: Request, auth_data: GoogleAuthRequest):
             detail="Database module not available"
         )
     
-    logger.info(f"auth_google: Processing login for {auth_data.email} (provider: {auth_data.provider})")
+    if not auth_data.access_token:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "Direct email login has been disabled. "
+                "Use a verified Supabase/Google access token or the CLI device code flow."
+            ),
+        )
+
+    verified_user = verify_supabase_access_token(auth_data.access_token)
+    if not verified_user:
+        raise HTTPException(status_code=401, detail="Invalid access token")
+
+    verified_email = (verified_user.get("email") or "").strip().lower()
+    requested_email = auth_data.email.strip().lower()
+    if requested_email and verified_email and requested_email != verified_email:
+        raise HTTPException(
+            status_code=403,
+            detail="Authenticated email does not match the requested account",
+        )
+
+    user_name = verified_user.get("name") or auth_data.name
+    avatar_url = verified_user.get("avatar_url") or auth_data.avatar_url
+    provider = verified_user.get("provider") or auth_data.provider or "google"
+
+    logger.info(
+        "auth_google: Processing verified login for %s (provider: %s)",
+        verified_email or requested_email,
+        provider,
+    )
     
     try:
         # Create or get user
         db_user = create_user(
-            email=auth_data.email, 
-            name=auth_data.name, 
-            provider=auth_data.provider
+            email=verified_email or requested_email,
+            name=user_name,
+            provider=provider,
         )
         
         if not db_user:
-            logger.error(f"auth_google: create_user returned None for {auth_data.email}")
+            logger.error(
+                "auth_google: create_user returned None for %s",
+                verified_email or requested_email,
+            )
             raise HTTPException(
                 status_code=500,
                 detail="Failed to create user - database connection issue"
@@ -255,42 +330,28 @@ async def auth_google(request: Request, auth_data: GoogleAuthRequest):
                 supabase = get_supabase()
                 if supabase:
                     supabase.table('cse226_ocr_users').update({
-                        'avatar_url': auth_data.avatar_url
+                        'avatar_url': avatar_url
                     }).eq('id', db_user['id']).execute()
             except Exception:
                 pass  # Avatar update is not critical
-        
-        # Generate a verifiable session token
-        SECRET_KEY = get_secret_key()
-        
-        payload = {
-            'user_id': db_user['id'],
-            'email': db_user['email'],
-            'exp': int(time.time()) + (30 * 24 * 60 * 60)  # 30 days expiry
-        }
-        payload_b64 = base64.urlsafe_b64encode(json.dumps(payload).encode()).decode()
-        
-        # Sign the payload with SHA256 hash of secret
-        signature = hmac.new(SECRET_KEY, payload_b64.encode(), hashlib.sha256).hexdigest()
-        token = f"{payload_b64}.{signature}"
         
         return TokenResponse(
             user={
                 'id': db_user['id'],
                 'email': db_user['email'],
-                'name': db_user.get('name', auth_data.name),
-                'avatar_url': auth_data.avatar_url or db_user.get('avatar_url', ''),
-                'provider': auth_data.provider
+                'name': db_user.get('name', user_name),
+                'avatar_url': avatar_url or db_user.get('avatar_url', ''),
+                'provider': provider,
             },
-            token=token
+            token=auth_data.access_token,
         )
     except HTTPException:
         raise
     except Exception as e:
-        logger.exception(f"Google auth error for {auth_data.email}: {e}")
+        logger.exception("Verified Google auth error for %s", verified_email or requested_email)
         raise HTTPException(
             status_code=500,
-            detail=str(e)
+            detail="Authentication failed"
         )
 
 
@@ -377,21 +438,28 @@ async def create_device_code_endpoint(request: Request):
     Returns a code that user will enter on web to authenticate.
     Similar to: gh auth login, supabase login
     """
+    with _device_code_lock:
+        _cleanup_expired_device_codes()
+        if len(_device_codes) >= _MAX_PENDING_DEVICE_CODES:
+            raise HTTPException(
+                status_code=503,
+                detail="Device sign-in is temporarily busy. Please try again in a minute.",
+            )
+
     device_code = generate_device_code()
     user_code = f"{device_code[:4]}-{device_code[4:]}"  # Format: XXXX-XXXX
     
     # Store code with expiration (10 minutes)
-    _device_codes[device_code] = {
+    _upsert_device_code(device_code, {
         'status': 'pending',
         'created_at': time.time(),
-        'expires_at': time.time() + 600,  # 10 minutes
+        'expires_at': time.time() + _DEVICE_CODE_TTL_SECONDS,
         'token': None,
         'user': None
-    }
+    })
     
     # Build verification URL
-    base_url = "https://ocr.nsunexus.app"
-    verification_url = f"{base_url}/cli-auth?code={device_code}"
+    verification_url = f"{_DEVICE_CODE_BASE_URL}/cli-auth?code={device_code}"
     
     return DeviceCodeResponse(
         device_code=device_code,
@@ -410,21 +478,18 @@ async def poll_device_code(request: Request, poll_data: DevicePollRequest):
     """
     device_code = poll_data.device_code.replace('-', '').upper()
     
-    if not device_code or device_code not in _device_codes:
+    code_data = _get_device_code(device_code) if device_code else None
+    if not code_data:
         raise HTTPException(status_code=400, detail="Invalid device code")
-    
-    code_data = _device_codes[device_code]
-    
-    # Check expiration
-    if time.time() > code_data['expires_at']:
-        del _device_codes[device_code]
-        raise HTTPException(status_code=410, detail="Device code expired")
     
     # Check if authenticated
     if code_data['status'] == 'complete':
-        token = code_data['token']
-        user = code_data['user']
-        del _device_codes[device_code]  # One-time use
+        completed_record = _pop_device_code(device_code)
+        if not completed_record:
+            raise HTTPException(status_code=410, detail="Device code expired")
+
+        token = completed_record['token']
+        user = completed_record['user']
         return {
             'status': 'complete',
             'success': True,
@@ -452,25 +517,15 @@ async def verify_device_code(request: Request, verify_data: DeviceVerifyRequest)
     
     device_code = verify_data.device_code.replace('-', '').upper()
     
-    if not device_code or device_code not in _device_codes:
+    code_data = _get_device_code(device_code) if device_code else None
+    if not code_data:
         raise HTTPException(status_code=400, detail="Invalid or expired device code")
-    
-    code_data = _device_codes[device_code]
-    
-    if time.time() > code_data['expires_at']:
-        del _device_codes[device_code]
-        raise HTTPException(status_code=410, detail="Device code expired")
     
     if not verify_data.access_token or not verify_data.user:
         raise HTTPException(status_code=400, detail="Missing token or user data")
     
     # Verify Supabase access token before accepting device verification.
-    try:
-        from auth import verify_supabase_token
-        verified_user = verify_supabase_token(verify_data.access_token)
-    except Exception as e:
-        logger.warning(f"Device verify: token verification import failed: {e}")
-        verified_user = None
+    verified_user = verify_supabase_access_token(verify_data.access_token)
 
     if not verified_user:
         raise HTTPException(status_code=401, detail="Invalid access token")
@@ -501,7 +556,7 @@ async def verify_device_code(request: Request, verify_data: DeviceVerifyRequest)
 
     # Mark code as complete. We return the verified Supabase access token so
     # mobile/CLI use the same auth token type as the web app.
-    _device_codes[device_code] = {
+    _upsert_device_code(device_code, {
         'status': 'complete',
         'token': verify_data.access_token,
         'user': {
@@ -512,8 +567,9 @@ async def verify_device_code(request: Request, verify_data: DeviceVerifyRequest)
             'avatar_url': avatar_url,
             'provider': verified_user.get('provider', 'google')
         },
+        'created_at': code_data.get('created_at', time.time()),
         'expires_at': code_data['expires_at']
-    }
+    })
     
     return {
         'success': True,

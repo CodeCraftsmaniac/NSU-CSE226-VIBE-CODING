@@ -1190,14 +1190,13 @@ def main():
             auth_menu.add_column("Option", style="bold", width=5)
             auth_menu.add_column("Description")
             auth_menu.add_row("[bold cyan]1[/bold cyan]", "[green]🔐 Sign in with Google[/green] — Opens browser for secure sign-in")
-            auth_menu.add_row("[bold cyan]2[/bold cyan]", "[blue]📧 Quick Email Login[/blue] — Sign in with email directly")
-            auth_menu.add_row("[bold cyan]3[/bold cyan]", "[yellow]👤 Continue as Guest[/yellow] — Scan without saving history")
+            auth_menu.add_row("[bold cyan]2[/bold cyan]", "[yellow]👤 Continue as Guest[/yellow] — Scan without saving history")
             auth_menu.add_row("[bold cyan]0[/bold cyan]", "[red]Exit[/red] — Quit application")
             console.print(auth_menu)
             console.print()
             
             try:
-                auth_choice = Prompt.ask("[cyan]Select option[/cyan]", choices=["1", "2", "3", "0"], default="1")
+                auth_choice = Prompt.ask("[cyan]Select option[/cyan]", choices=["1", "2", "0"], default="1")
             except (EOFError, KeyboardInterrupt):
                 console.print("\n[cyan]Goodbye![/cyan]")
                 break
@@ -1216,14 +1215,6 @@ def main():
                     console.print("\n[yellow]Authentication cancelled. Continuing as guest...[/yellow]")
                     time.sleep(1)
             elif auth_choice == "2":
-                # Quick email login
-                if cli_auth._login_with_email_interactive():
-                    console.print("[dim]Your scans will be saved to your account.[/dim]")
-                    time.sleep(1.5)
-                else:
-                    console.print("\n[yellow]Login failed. Continuing as guest...[/yellow]")
-                    time.sleep(1)
-            elif auth_choice == "3":
                 # Guest mode
                 console.print("\n[yellow]Continuing as guest. Your scans won't be saved.[/yellow]")
                 time.sleep(1)

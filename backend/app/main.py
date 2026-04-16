@@ -7,10 +7,11 @@ import os
 import logging
 import asyncio
 import time as _time
-from typing import Dict, Set
+from typing import Any, Dict, Set
 import json
 
-from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect, HTTPException
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import JSONResponse
@@ -18,6 +19,18 @@ from fastapi.responses import JSONResponse
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
 logger = logging.getLogger(__name__)
+
+
+def _error_payload(error: str, detail: Any = None, errors: Any = None) -> Dict[str, Any]:
+    """Build a consistent error response payload for all API failures."""
+    payload: Dict[str, Any] = {
+        "success": False,
+        "error": error,
+        "detail": detail if isinstance(detail, str) and detail else error,
+    }
+    if errors is not None:
+        payload["errors"] = errors
+    return payload
 
 # CORS origin allowlist - resolve from env var when provided, otherwise use defaults
 CORS_ORIGINS = os.getenv("CORS_ORIGINS", "").split(",") if os.getenv("CORS_ORIGINS") else [
@@ -54,7 +67,7 @@ app.add_middleware(
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
     """Catch all unhandled exceptions and return generic error."""
-    logger.error(f"Unhandled exception on {request.url.path}: {exc}")
+    logger.exception("Unhandled exception on %s", request.url.path)
     # Track errors for health metrics
     try:
         from app.api.v1.health import increment_error_count
@@ -63,7 +76,39 @@ async def global_exception_handler(request: Request, exc: Exception):
         pass
     return JSONResponse(
         status_code=500,
-        content={"error": "Internal server error"}
+        content=_error_payload("Internal server error")
+    )
+
+
+@app.exception_handler(HTTPException)
+async def http_exception_handler(request: Request, exc: HTTPException):
+    """Normalize handled HTTP errors into the shared API error shape."""
+    detail = exc.detail
+    error = detail if isinstance(detail, str) and detail else "Request failed"
+    if exc.status_code >= 500:
+        try:
+            from app.api.v1.health import increment_error_count
+            increment_error_count()
+        except Exception:
+            pass
+
+    return JSONResponse(
+        status_code=exc.status_code,
+        headers=exc.headers,
+        content=_error_payload(error, detail=detail),
+    )
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    """Return FastAPI validation failures in the shared API error format."""
+    return JSONResponse(
+        status_code=422,
+        content=_error_payload(
+            "Validation failed",
+            detail="Request validation failed",
+            errors=exc.errors(),
+        ),
     )
 
 
@@ -103,7 +148,13 @@ try:
     
     @app.exception_handler(RateLimitExceeded)
     async def rate_limit_handler(request, exc):
-        return JSONResponse(status_code=429, content={"error": "Too many requests"})
+        return JSONResponse(
+            status_code=429,
+            content=_error_payload(
+                "Too many requests",
+                detail="Rate limit exceeded. Please try again later.",
+            ),
+        )
 except ImportError:
     pass
 

@@ -11,7 +11,6 @@ import time
 import tempfile
 import logging
 import uuid
-import asyncio
 from pathlib import Path
 from typing import Optional, Dict, Any, List, Tuple
 
@@ -129,6 +128,12 @@ ALLOWED_MIME_TYPES = {
     'application/csv': '.csv',
     'text/plain': '.csv',  # Some systems report CSV as text/plain
 }
+MAGIC_SIGNATURES = {
+    '.pdf': (b'%PDF-',),
+    '.png': (b'\x89PNG\r\n\x1a\n',),
+    '.jpg': (b'\xff\xd8\xff',),
+    '.jpeg': (b'\xff\xd8\xff',),
+}
 
 def validate_upload_file(file: UploadFile) -> str:
     """
@@ -175,6 +180,63 @@ def validate_upload_file(file: UploadFile) -> str:
             )
     
     return filename
+
+
+def validate_upload_contents(filename: str, content: bytes) -> None:
+    """Validate that uploaded bytes actually match the declared file type."""
+    ext = Path(filename).suffix.lower()
+
+    if ext in MAGIC_SIGNATURES:
+        signatures = MAGIC_SIGNATURES[ext]
+        if not any(content.startswith(signature) for signature in signatures):
+            raise HTTPException(
+                status_code=400,
+                detail=f"File contents do not match the declared {ext} type",
+            )
+        return
+
+    if ext == '.csv':
+        if not content:
+            raise HTTPException(status_code=400, detail="CSV file is empty")
+        if b'\x00' in content:
+            raise HTTPException(status_code=400, detail="CSV file contains invalid binary data")
+        try:
+            content.decode('utf-8-sig')
+        except UnicodeDecodeError:
+            try:
+                content.decode('latin-1')
+            except UnicodeDecodeError as exc:
+                raise HTTPException(
+                    status_code=400,
+                    detail="CSV file must be valid text data",
+                ) from exc
+
+
+def get_analysis_courses(analysis: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """Extract the canonical course list from an analysis payload."""
+    courses = analysis.get('courses')
+    if isinstance(courses, list):
+        return courses
+    level1 = analysis.get('level1', {})
+    valid_entries = level1.get('valid_entries') if isinstance(level1, dict) else None
+    return valid_entries if isinstance(valid_entries, list) else []
+
+
+def get_scan_metrics(analysis: Dict[str, Any]) -> Tuple[int, float, float]:
+    """Build consistent scan summary fields for history persistence."""
+    courses = get_analysis_courses(analysis)
+    level1 = analysis.get('level1', {}) if isinstance(analysis.get('level1', {}), dict) else {}
+    level2 = analysis.get('level2', {}) if isinstance(analysis.get('level2', {}), dict) else {}
+
+    total_courses = len(courses)
+    total_credits = float(
+        level1.get('earned_credits')
+        or level1.get('total_credits_attempted')
+        or level2.get('gpa_credits')
+        or 0
+    )
+    cgpa = float(level2.get('cgpa') or 0)
+    return total_courses, total_credits, cgpa
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -383,6 +445,7 @@ async def upload_transcript(
             status_code=400,
             detail=f"File too large. Maximum size is {settings.MAX_UPLOAD_SIZE_MB}MB."
         )
+    validate_upload_contents(safe_filename, content)
     
     # Generate job ID for WebSocket progress tracking
     job_id = str(uuid.uuid4())[:8]
@@ -554,14 +617,16 @@ async def upload_transcript(
                 db_user_id = await get_db_user_id(user)
                 
                 if db_user_id:
-                    level2 = result.get('level2', {})
-                    logger.info(f"Saving scan: {file.filename}, courses: {len(courses)}, cgpa: {level2.get('cgpa', 0)}")
+                    total_courses, total_credits, cgpa = get_scan_metrics(result)
+                    logger.info(
+                        f"Saving scan: {file.filename}, courses: {total_courses}, cgpa: {cgpa}"
+                    )
                     scan_record = save_scan(
                         user_id=db_user_id,
                         filename=file.filename or 'uploaded_file',
-                        total_courses=len(courses),
-                        total_credits=level2.get('gpa_credits', 0),
-                        cgpa=level2.get('cgpa', 0),
+                        total_courses=total_courses,
+                        total_credits=total_credits,
+                        cgpa=cgpa,
                         analysis_data=result,
                         source=source
                     )
@@ -627,6 +692,7 @@ async def validate_file(
             valid=False,
             error=f"File too large. Maximum size is {settings.MAX_UPLOAD_SIZE_MB}MB."
         )
+    validate_upload_contents(file.filename or "upload.csv", content)
     
     return ValidateResponse(
         valid=True,
@@ -712,10 +778,15 @@ async def export_scan(
                 logger.error(f"Failed to parse analysis_data for scan {scan_id}")
                 analysis_data = {}
         
-        level1 = analysis_data.get('level1', {})
-        level2 = analysis_data.get('level2', {})
-        level3 = analysis_data.get('level3', {})
-        courses = level1.get('valid_entries', [])
+        format = format.lower().strip()
+        if format not in {"json", "csv", "excel", "pdf"}:
+            raise HTTPException(status_code=400, detail="Unsupported export format")
+
+        level1 = analysis_data.get('level1', {}) if isinstance(analysis_data.get('level1', {}), dict) else {}
+        level2 = analysis_data.get('level2', {}) if isinstance(analysis_data.get('level2', {}), dict) else {}
+        level3 = analysis_data.get('level3', {}) if isinstance(analysis_data.get('level3', {}), dict) else {}
+        courses = get_analysis_courses(analysis_data)
+        waiver = level2.get('waiver', {}) if isinstance(level2.get('waiver', {}), dict) else {}
         
         from fastapi.responses import Response
         import io
@@ -788,11 +859,11 @@ async def export_scan(
                 ("", ""),
                 ("Academic Summary", ""),
                 ("Total Credits", level2.get('gpa_credits', 0)),
-                ("Quality Points", level2.get('quality_points', 0)),
+                ("Quality Points", level2.get('total_quality_points', 0)),
                 ("CGPA", level2.get('cgpa', 0)),
                 ("", ""),
-                ("Waiver Status", level3.get('waiver_status', 'N/A')),
-                ("Waiver Percentage", f"{level3.get('waiver_percentage', 0)}%"),
+                ("Waiver Status", waiver.get('name', 'N/A')),
+                ("Waiver Percentage", waiver.get('level', '0%')),
             ]
             
             for idx, (label, value) in enumerate(summary_data, start=2):
@@ -876,9 +947,9 @@ async def export_scan(
                 ["Metric", "Value"],
                 ["Filename", scan.get('filename', 'N/A')],
                 ["Total Credits", str(level2.get('gpa_credits', 0))],
-                ["Quality Points", str(level2.get('quality_points', 0))],
+                ["Quality Points", str(level2.get('total_quality_points', 0))],
                 ["CGPA", str(level2.get('cgpa', 0))],
-                ["Waiver Status", level3.get('waiver_status', 'N/A')],
+                ["Waiver Status", waiver.get('name', 'N/A')],
             ]
             
             summary_table = Table(summary_data, colWidths=[2.5*inch, 3*inch])
@@ -1103,16 +1174,18 @@ async def batch_upload_transcripts(
                 failed += 1
                 continue
             
-            # Check extension
-            ext = Path(file.filename).suffix.lower()
-            if ext not in ALLOWED_EXTENSIONS:
+            try:
+                safe_filename = validate_upload_file(file)
+            except HTTPException as exc:
                 results.append(BatchUploadResultItem(
                     filename=file.filename,
                     success=False,
-                    error=f"Invalid file type: {ext}. Allowed: {', '.join(ALLOWED_EXTENSIONS)}"
+                    error=str(exc.detail),
                 ))
                 failed += 1
                 continue
+
+            ext = Path(safe_filename).suffix.lower()
             
             # Read content
             content = await file.read()
@@ -1124,21 +1197,54 @@ async def batch_upload_transcripts(
                 ))
                 failed += 1
                 continue
+            try:
+                validate_upload_contents(safe_filename, content)
+            except HTTPException as exc:
+                results.append(BatchUploadResultItem(
+                    filename=file.filename,
+                    success=False,
+                    error=str(exc.detail),
+                ))
+                failed += 1
+                continue
             
             # Process CSV directly
             if ext == '.csv':
-                csv_text = content.decode('utf-8', errors='replace')
                 ANALYSIS_AVAILABLE, run_analysis = get_analysis_engine()
                 
                 if ANALYSIS_AVAILABLE and run_analysis:
-                    analysis = run_analysis(csv_text)
+                    course_rows, csv_error = parse_csv_transcript(content)
+                    if csv_error or not course_rows:
+                        results.append(BatchUploadResultItem(
+                            filename=file.filename,
+                            success=False,
+                            error=csv_error or "No valid courses found in CSV",
+                        ))
+                        failed += 1
+                        continue
+
+                    analysis = run_analysis(course_rows, kb_path=str(KB_PATH))
+                    analysis['ocr_info'] = {
+                        'engine': 'CSV Parser (Direct Import)',
+                        'confidence': 100.0,
+                        'source': 'batch_upload',
+                    }
                     
                     # Save to history if authenticated
                     if db_user_id and DB_MODULE_AVAILABLE:
                         save_scan, _, _ = get_db_functions()
                         if save_scan:
                             try:
-                                save_scan(db_user_id, file.filename, analysis)
+                                total_courses, total_credits, cgpa = get_scan_metrics(analysis)
+                                save_scan(
+                                    user_id=db_user_id,
+                                    filename=file.filename,
+                                    total_courses=total_courses,
+                                    total_credits=total_credits,
+                                    cgpa=cgpa,
+                                    analysis_data=analysis,
+                                    source='batch_upload',
+                                )
                             except Exception as e:
                                 logger.warning(f"Batch save_scan failed: {e}")
                     
@@ -1190,13 +1296,33 @@ async def batch_upload_transcripts(
                 # Get analysis
                 ANALYSIS_AVAILABLE, run_analysis = get_analysis_engine()
                 if ANALYSIS_AVAILABLE and run_analysis:
-                    analysis = run_analysis(ocr_result.text)
+                    course_rows = [
+                        {
+                            'course_code': course.course_code,
+                            'credits': course.credits,
+                            'grade': course.grade,
+                            'semester': course.semester,
+                        }
+                        for course in ocr_result.courses
+                    ]
+                    analysis = run_analysis(
+                        course_rows,
+                        kb_path=str(KB_PATH),
+                        student_id=getattr(ocr_result, 'student_id', None),
+                    )
                     
                     # Add OCR info
                     analysis['ocr_info'] = {
                         'engine': ocr_result.engine_used,
-                        'confidence': ocr_result.confidence_score,
-                        'source': 'batch_upload'
+                        'confidence': round(ocr_result.confidence_score * 100, 1),
+                        'source': 'batch_upload',
+                        'student_name': getattr(ocr_result, 'student_name', ''),
+                        'student_id': getattr(ocr_result, 'student_id', ''),
+                        'department_code': getattr(ocr_result, 'department_code', None),
+                        'department_name': getattr(ocr_result, 'department_name', None),
+                        'department_full_name': getattr(ocr_result, 'department_full_name', None),
+                        'department_valid': getattr(ocr_result, 'department_valid', True),
+                        'unknown_courses': getattr(ocr_result, 'unknown_courses', []),
                     }
                     
                     # Save to history if authenticated
@@ -1204,7 +1330,16 @@ async def batch_upload_transcripts(
                         save_scan, _, _ = get_db_functions()
                         if save_scan:
                             try:
-                                save_scan(db_user_id, file.filename, analysis)
+                                total_courses, total_credits, cgpa = get_scan_metrics(analysis)
+                                save_scan(
+                                    user_id=db_user_id,
+                                    filename=file.filename,
+                                    total_courses=total_courses,
+                                    total_credits=total_credits,
+                                    cgpa=cgpa,
+                                    analysis_data=analysis,
+                                    source='batch_upload',
+                                )
                             except Exception as e:
                                 logger.warning(f"Batch save_scan failed: {e}")
                     

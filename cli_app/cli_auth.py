@@ -38,13 +38,6 @@ TOKEN_FILE = Path.home() / '.nsu_audit_cli_token.json'
 # API Configuration
 API_BASE_URL = os.environ.get("CLOUD_API_URL", "https://ocrapi.nsunexus.app")
 
-# Web App URL (for OAuth redirect)
-WEB_APP_URL = "https://ocr.nsunexus.app"
-
-# Supabase Configuration (same as website)
-SUPABASE_URL = "https://kmbltplmjdkjlbungbbh.supabase.co"
-SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImttYmx0cGxtamRramxidW5nYmJoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njc2Mjc1MDksImV4cCI6MjA4MzIwMzUwOX0.IRoQ306ElYZh8WoTN1dXMVr9mSd20-RPxwKYZ6M6Lcg"
-
 # Connection timeout
 API_TIMEOUT = 15
 
@@ -53,6 +46,7 @@ CALLBACK_PORT = 54321
 
 # Global flag for interrupt handling
 _interrupt_requested = False
+_AUTH_CONFIG_CACHE: Optional[Dict[str, str]] = None
 
 
 class OAuthCallbackHandler(BaseHTTPRequestHandler):
@@ -189,12 +183,52 @@ class CLIAuth:
         self._supabase = None
         self._load_token()
     
+    def _get_auth_config(self) -> Dict[str, str]:
+        """Resolve Supabase public config from env or the backend auth config endpoint."""
+        global _AUTH_CONFIG_CACHE
+        if _AUTH_CONFIG_CACHE is not None:
+            return _AUTH_CONFIG_CACHE
+
+        env_url = os.getenv("SUPABASE_URL", "").strip()
+        env_key = os.getenv("SUPABASE_ANON_KEY", os.getenv("SUPABASE_KEY", "")).strip()
+        if env_url and env_key:
+            _AUTH_CONFIG_CACHE = {
+                "supabase_url": env_url,
+                "supabase_key": env_key,
+            }
+            return _AUTH_CONFIG_CACHE
+
+        try:
+            response = requests.get(f"{API_BASE_URL}/auth/config", timeout=API_TIMEOUT)
+            if response.status_code == 200:
+                data = response.json()
+                config = data.get("config", data)
+                if isinstance(config, dict):
+                    supabase_url = str(config.get("supabase_url", "")).strip()
+                    supabase_key = str(config.get("supabase_key", "")).strip()
+                    if supabase_url and supabase_key:
+                        _AUTH_CONFIG_CACHE = {
+                            "supabase_url": supabase_url,
+                            "supabase_key": supabase_key,
+                        }
+                        return _AUTH_CONFIG_CACHE
+        except Exception:
+            pass
+
+        _AUTH_CONFIG_CACHE = {"supabase_url": "", "supabase_key": ""}
+        return _AUTH_CONFIG_CACHE
+
     def _get_supabase(self):
         """Get Supabase client."""
         if self._supabase is None:
             try:
                 from supabase import create_client
-                self._supabase = create_client(SUPABASE_URL, SUPABASE_ANON_KEY)
+                auth_config = self._get_auth_config()
+                supabase_url = auth_config.get("supabase_url", "")
+                supabase_key = auth_config.get("supabase_key", "")
+                if not supabase_url or not supabase_key:
+                    return None
+                self._supabase = create_client(supabase_url, supabase_key)
             except ImportError:
                 return None
         return self._supabase
@@ -227,6 +261,10 @@ class CLIAuth:
                 'user': self.user,
                 'saved_at': time.time()
             }, indent=2))
+            try:
+                os.chmod(TOKEN_FILE, 0o600)
+            except Exception:
+                pass
     
     def _clear_token(self):
         """Clear saved token."""
@@ -477,7 +515,7 @@ class CLIAuth:
     
     def login_interactive(self) -> bool:
         """
-        Interactive login with multiple options.
+        Interactive login with secure browser-based authentication.
         """
         print("\n╔══════════════════════════════════════════════════════════════╗")
         print("║              NSU DEGREE AUDIT - CLI LOGIN                    ║")
@@ -487,59 +525,25 @@ class CLIAuth:
         print("╚══════════════════════════════════════════════════════════════╝\n")
         
         print("  [1] 🔐 Sign in with Google (opens browser)")
-        print("  [2] 📧 Sign in with Email (quick login)")
-        print("  [3] ❌ Cancel")
+        print("  [2] ❌ Cancel")
         print()
         
-        choice = input("Select option [1-3]: ").strip()
+        choice = input("Select option [1-2]: ").strip()
         
         if choice == "1":
             return self.login_with_google()
         elif choice == "2":
-            return self._login_with_email_interactive()
+            print("Login cancelled.")
+            return False
         else:
             print("Login cancelled.")
             return False
     
     def _login_with_email_interactive(self) -> bool:
-        """Quick email-based login."""
-        print("\n📧 Quick Email Login")
-        print("   (Your scans will be linked to this email)\n")
-        
-        email = input("Enter your email: ").strip()
-        if not email or '@' not in email:
-            print("Invalid email format.")
-            return False
-        
-        name = input("Enter your name (optional): ").strip() or "CLI User"
-        
-        print("\n⏳ Authenticating...")
-        
-        try:
-            response = requests.post(
-                f"{API_BASE_URL}/auth/google",
-                json={'email': email, 'name': name, 'provider': 'cli'},
-                timeout=API_TIMEOUT
-            )
-            
-            if response.status_code == 200:
-                data = response.json()
-                if data.get('success'):
-                    self.token = data.get('token')
-                    self.user = data.get('user')
-                    self._save_token()
-                    print(f"✅ Logged in as {self.user.get('name', email)}")
-                    return True
-                else:
-                    print(f"❌ {data.get('error', 'Login failed')}")
-            else:
-                print(f"❌ Server error (status {response.status_code})")
-        except requests.exceptions.ConnectionError:
-            print("❌ Cannot connect to server. Check your internet connection.")
-        except Exception as e:
-            print(f"❌ Error: {e}")
-        
-        return False
+        """Legacy shim kept for older callers after insecure email login removal."""
+        print("\nDirect email-only login has been removed for security reasons.")
+        print("Use the browser-based Google device flow instead.\n")
+        return self.login_with_google()
     
     def logout(self):
         """Clear authentication."""
