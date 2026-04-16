@@ -162,49 +162,74 @@
 
     <script>
         const API_BASE_URL = 'https://ocrapi.nsunexus.app';
-        const SUPABASE_URL = 'https://kmbltplmjdkjlbungbbh.supabase.co';
-        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImttYmx0cGxtamRramxidW5nYmJoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njc2Mjc1MDksImV4cCI6MjA4MzIwMzUwOX0.IRoQ306ElYZh8WoTN1dXMVr9mSd20-RPxwKYZ6M6Lcg';
         
         let deviceCode = null;
         let supabaseClient = null;
+
+        async function fetchAuthConfig() {
+            const response = await fetch(`${API_BASE_URL}/auth/config`);
+            const data = await response.json();
+            const config = data?.config || {};
+
+            if (!response.ok || !data?.success) {
+                throw new Error(data?.detail || data?.error || 'Could not load authentication config');
+            }
+
+            if (!config.supabase_url || !config.supabase_key) {
+                throw new Error('Supabase auth is not configured for CLI sign-in');
+            }
+
+            return config;
+        }
         
         // Initialize
         document.addEventListener('DOMContentLoaded', async () => {
-            // Get device code from URL
-            const urlParams = new URLSearchParams(window.location.search);
-            deviceCode = urlParams.get('code');
-            
-            if (deviceCode) {
-                // Format and display code
-                const formattedCode = deviceCode.length === 8 
-                    ? `${deviceCode.slice(0, 4)}-${deviceCode.slice(4)}`
-                    : deviceCode;
-                document.getElementById('device-code').textContent = formattedCode;
-            } else {
-                document.getElementById('device-code').textContent = 'NO CODE';
-                document.getElementById('btn-signin').disabled = true;
-            }
-            
-            // Initialize Supabase
-            supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-            
-            // Check if already authenticated (returning from OAuth)
-            const { data: { session } } = await supabaseClient.auth.getSession();
-            if (session && deviceCode) {
-                await completeAuthentication(session);
-            }
-            
-            // Listen for auth state changes
-            supabaseClient.auth.onAuthStateChange(async (event, session) => {
-                if (event === 'SIGNED_IN' && session && deviceCode) {
+            try {
+                // Get device code from URL
+                const urlParams = new URLSearchParams(window.location.search);
+                deviceCode = urlParams.get('code');
+                
+                if (deviceCode) {
+                    // Format and display code
+                    const formattedCode = deviceCode.length === 8 
+                        ? `${deviceCode.slice(0, 4)}-${deviceCode.slice(4)}`
+                        : deviceCode;
+                    document.getElementById('device-code').textContent = formattedCode;
+                } else {
+                    document.getElementById('device-code').textContent = 'NO CODE';
+                    document.getElementById('btn-signin').disabled = true;
+                }
+
+                const authConfig = await fetchAuthConfig();
+                supabaseClient = window.supabase.createClient(
+                    authConfig.supabase_url,
+                    authConfig.supabase_key,
+                );
+                
+                // Check if already authenticated (returning from OAuth)
+                const { data: { session } } = await supabaseClient.auth.getSession();
+                if (session && deviceCode) {
                     await completeAuthentication(session);
                 }
-            });
+                
+                // Listen for auth state changes
+                supabaseClient.auth.onAuthStateChange(async (event, session) => {
+                    if (event === 'SIGNED_IN' && session && deviceCode) {
+                        await completeAuthentication(session);
+                    }
+                });
+            } catch (error) {
+                showError(error.message || 'Failed to initialize authentication');
+            }
         });
         
         async function signInWithGoogle() {
             if (!deviceCode) {
                 showError('No device code provided. Please start authentication from the CLI.');
+                return;
+            }
+            if (!supabaseClient) {
+                showError('Authentication is still initializing. Please try again in a moment.');
                 return;
             }
             
@@ -255,7 +280,7 @@
                     // Auto-close after 5 seconds
                     setTimeout(() => window.close(), 5000);
                 } else {
-                    showError(data.error || 'Failed to verify device');
+                    showError(data.error || data.detail || 'Failed to verify device');
                 }
             } catch (error) {
                 showError('Network error: ' + error.message);
