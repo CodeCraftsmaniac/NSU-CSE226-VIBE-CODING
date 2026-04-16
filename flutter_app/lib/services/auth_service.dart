@@ -14,6 +14,8 @@ import 'analysis_session_service.dart';
 import 'backend_config.dart';
 import 'storage_service.dart';
 
+// Auth and session orchestration for Google Sign-In, Supabase, and local restore.
+
 class ApiException implements Exception {
   ApiException(this.message, [this.statusCode]);
 
@@ -31,6 +33,7 @@ class ApiException implements Exception {
 }
 
 class AuthService extends ChangeNotifier {
+  // Singleton service instance shared across UI layers.
   static final AuthService _instance = AuthService._internal();
   factory AuthService() => _instance;
   AuthService._internal();
@@ -42,6 +45,7 @@ class AuthService extends ChangeNotifier {
   bool _supabaseInitialized = false;
   bool _guestMode = false;
 
+  // Persisted key used to restore guest-mode sessions.
   static const String _guestModePrefKey = 'guest_mode';
 
   static String get _apiBaseUrl => backendBaseUrl;
