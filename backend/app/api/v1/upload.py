@@ -322,13 +322,18 @@ def parse_csv_transcript(content: bytes) -> Tuple[Optional[List[Dict]], Optional
             if i == 0 and has_header:
                 header_lower = [h.lower().strip() for h in row]
                 for j, h in enumerate(header_lower):
-                    if 'code' in h or 'course' in h:
+                    normalized_header = h.replace('_', ' ').replace('-', ' ')
+                    if (
+                        'code' in normalized_header
+                        or normalized_header in {'course', 'course id'}
+                        or normalized_header.startswith('course code')
+                    ):
                         col_map['code'] = j
-                    elif 'credit' in h:
+                    elif 'credit' in normalized_header:
                         col_map['credits'] = j
-                    elif 'grade' in h:
+                    elif 'grade' in normalized_header:
                         col_map['grade'] = j
-                    elif 'sem' in h or 'term' in h:
+                    elif 'sem' in normalized_header or 'term' in normalized_header:
                         col_map['semester'] = j
                 continue
             

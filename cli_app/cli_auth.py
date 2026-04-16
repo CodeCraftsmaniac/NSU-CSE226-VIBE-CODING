@@ -411,7 +411,7 @@ class CLIAuth:
             
             if response.status_code != 200:
                 print("❌ Failed to start authentication")
-                print("\n💡 TIP: Try Quick Email Login (option 2) instead.")
+                print("\n💡 TIP: Retry in a moment or verify the backend auth configuration.")
                 return False
             
             data = response.json()

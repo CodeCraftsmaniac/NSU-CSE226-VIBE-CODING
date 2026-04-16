@@ -14,6 +14,7 @@ from datetime import datetime, timezone
 from typing import Optional, Dict, List, Any
 
 logger = logging.getLogger(__name__)
+DEVICE_CODES_TABLE = 'cse226_ocr_device_codes'
 
 # Load configuration from centralized settings
 try:
@@ -37,6 +38,24 @@ _client_lock = threading.Lock()
 def _normalize_email(email: str) -> str:
     """Normalize email addresses so auth and history lookups are consistent."""
     return email.strip().lower()
+
+
+def _to_iso8601(value: Any) -> Optional[str]:
+    """Convert timestamps and datetimes into timezone-aware ISO-8601 strings."""
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        dt = value
+    elif isinstance(value, (int, float)):
+        dt = datetime.fromtimestamp(float(value), tz=timezone.utc)
+    elif isinstance(value, str):
+        return value
+    else:
+        return None
+
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(timezone.utc).isoformat()
 
 def get_supabase():
     """
@@ -171,6 +190,129 @@ def save_user_token(user_id: str, token: str) -> bool:
         # Column may not exist - log and continue
         logger.warning(f"save_user_token: cli_token column may not exist: {e}")
         return False
+
+
+# ─── Device Code Operations ────────────────────────────────────────────────────
+
+def save_device_code(
+    device_code: str,
+    status: str,
+    expires_at: Any,
+    token: Optional[str] = None,
+    user_data: Optional[Dict[str, Any]] = None,
+    created_at: Optional[Any] = None,
+) -> bool:
+    """Insert or update a device-code auth record for multi-instance CLI login."""
+    supabase = get_supabase()
+    if not supabase:
+        return False
+
+    payload = {
+        'device_code': device_code,
+        'status': status,
+        'token': token,
+        'user_data': user_data or {},
+        'expires_at': _to_iso8601(expires_at),
+    }
+    if created_at is not None:
+        payload['created_at'] = _to_iso8601(created_at)
+
+    try:
+        existing = supabase.table(DEVICE_CODES_TABLE).select('device_code').eq(
+            'device_code', device_code
+        ).limit(1).execute()
+
+        if existing.data:
+            update_payload = dict(payload)
+            update_payload.pop('created_at', None)
+            supabase.table(DEVICE_CODES_TABLE).update(update_payload).eq(
+                'device_code', device_code
+            ).execute()
+        else:
+            supabase.table(DEVICE_CODES_TABLE).insert(payload).execute()
+        return True
+    except Exception as e:
+        logger.warning(f"save_device_code failed for {device_code}: {e}")
+        return False
+
+
+def get_device_code(device_code: str) -> Optional[Dict[str, Any]]:
+    """Get a device-code auth record by code."""
+    supabase = get_supabase()
+    if not supabase:
+        return None
+    try:
+        result = supabase.table(DEVICE_CODES_TABLE).select('*').eq(
+            'device_code', device_code
+        ).limit(1).execute()
+        return result.data[0] if result.data else None
+    except Exception as e:
+        logger.warning(f"get_device_code failed for {device_code}: {e}")
+        return None
+
+
+def consume_device_code(device_code: str) -> Optional[Dict[str, Any]]:
+    """Atomically delete and return a device-code record when CLI sign-in completes."""
+    supabase = get_supabase()
+    if not supabase:
+        return None
+    try:
+        result = supabase.table(DEVICE_CODES_TABLE).delete().eq(
+            'device_code', device_code
+        ).execute()
+        return result.data[0] if result.data else None
+    except Exception as e:
+        logger.warning(f"consume_device_code failed for {device_code}: {e}")
+        return None
+
+
+def delete_device_code(device_code: str) -> bool:
+    """Delete a device-code auth record."""
+    supabase = get_supabase()
+    if not supabase:
+        return False
+    try:
+        result = supabase.table(DEVICE_CODES_TABLE).delete().eq(
+            'device_code', device_code
+        ).execute()
+        return bool(result.data)
+    except Exception as e:
+        logger.warning(f"delete_device_code failed for {device_code}: {e}")
+        return False
+
+
+def cleanup_expired_device_codes(now: Optional[Any] = None) -> int:
+    """Delete expired device codes and return how many records were removed."""
+    supabase = get_supabase()
+    if not supabase:
+        return 0
+    try:
+        cutoff = _to_iso8601(now or datetime.now(timezone.utc))
+        result = supabase.table(DEVICE_CODES_TABLE).delete().lt(
+            'expires_at', cutoff
+        ).execute()
+        return len(result.data) if result.data else 0
+    except Exception as e:
+        logger.warning(f"cleanup_expired_device_codes failed: {e}")
+        return 0
+
+
+def count_pending_device_codes(now: Optional[Any] = None) -> int:
+    """Count unexpired pending device-code records."""
+    supabase = get_supabase()
+    if not supabase:
+        return 0
+    try:
+        cutoff = _to_iso8601(now or datetime.now(timezone.utc))
+        result = supabase.table(DEVICE_CODES_TABLE).select(
+            'device_code', count='exact'
+        ).eq('status', 'pending').gt('expires_at', cutoff).execute()
+        if getattr(result, 'count', None) is not None:
+            return int(result.count)
+        return len(result.data or [])
+    except Exception as e:
+        logger.warning(f"count_pending_device_codes failed: {e}")
+        return 0
 
 
 # ─── Scan History Operations ────────────────────────────────────────────────────

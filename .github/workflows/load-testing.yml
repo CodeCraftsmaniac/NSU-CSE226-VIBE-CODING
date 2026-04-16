@@ -1,12 +1,3 @@
-# NSU Degree Audit - Load Testing CI
-# ===================================
-# Automated load testing workflow for verifying 20 concurrent user support.
-#
-# Triggers:
-#   - Manual (workflow_dispatch)
-#   - Weekly schedule (Sunday at 2 AM UTC)
-#   - On push to main affecting backend code
-
 name: Load Testing
 
 on:
@@ -35,117 +26,137 @@ on:
   push:
     branches: [main]
     paths:
-      - 'Project 2 (CLI, Flutter App, WebApp)/backend/**'
-      - 'Project 2 (CLI, Flutter App, WebApp)/tests/**'
-      - 'Project 2 (CLI, Flutter App, WebApp)/Dockerfile'
+      - 'backend/**'
+      - 'backend/tests/**'
+      - '.github/workflows/load-testing.yml'
+      - 'Dockerfile'
 
 jobs:
   load-test:
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    defaults:
-      run:
-        working-directory: "Project 2 (CLI, Flutter App, WebApp)"
-    
+
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-      
+      - uses: actions/checkout@v4
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      
+
+      - name: Check load test harness
+        id: harness
+        shell: bash
+        run: |
+          if [ -f backend/tests/run_load_test.py ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Install dependencies
-        run: |
-          pip install locust requests
-      
+        if: steps.harness.outputs.present == 'true'
+        run: pip install locust requests
+
       - name: Determine test configuration
+        if: steps.harness.outputs.present == 'true'
         id: config
+        shell: bash
         run: |
-          # Set defaults
           PRESET="${{ github.event.inputs.test_preset || 'default' }}"
           HOST="${{ github.event.inputs.target_host || 'https://ocrapi.nsunexus.app' }}"
-          
-          echo "preset=$PRESET" >> $GITHUB_OUTPUT
-          echo "host=$HOST" >> $GITHUB_OUTPUT
-          echo "Running $PRESET test against $HOST"
-      
+
+          echo "preset=$PRESET" >> "$GITHUB_OUTPUT"
+          echo "host=$HOST" >> "$GITHUB_OUTPUT"
+
       - name: Run Load Test
+        if: steps.harness.outputs.present == 'true'
         id: loadtest
+        shell: bash
         run: |
-          python tests/run_load_test.py \
+          python backend/tests/run_load_test.py \
             --${{ steps.config.outputs.preset }} \
             --host=${{ steps.config.outputs.host }}
         continue-on-error: true
-      
+
       - name: Upload Test Reports
         uses: actions/upload-artifact@v4
-        if: always()
+        if: always() && steps.harness.outputs.present == 'true'
         with:
           name: load-test-reports-${{ github.run_id }}
-          path: |
-            Project 2 (CLI, Flutter App, WebApp)/tests/reports/*.html
-            Project 2 (CLI, Flutter App, WebApp)/tests/reports/*.csv
+          path: backend/tests/reports/*.*
           retention-days: 30
-      
+
       - name: Parse Results and Create Summary
         if: always()
+        shell: bash
         run: |
-          echo "## 🔥 Load Test Results" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Preset:** ${{ steps.config.outputs.preset }}" >> $GITHUB_STEP_SUMMARY
-          echo "**Target:** ${{ steps.config.outputs.host }}" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          
-          # Find the latest stats CSV
-          STATS_FILE=$(ls -t tests/reports/*_stats.csv 2>/dev/null | head -1)
-          
-          if [ -f "$STATS_FILE" ]; then
-            echo "### Endpoint Statistics" >> $GITHUB_STEP_SUMMARY
-            echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
-            cat "$STATS_FILE" >> $GITHUB_STEP_SUMMARY
-            echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
-          fi
-          
-          # Check if test passed
-          if [ "${{ steps.loadtest.outcome }}" == "success" ]; then
-            echo "" >> $GITHUB_STEP_SUMMARY
-            echo "### ✅ Test PASSED" >> $GITHUB_STEP_SUMMARY
-            echo "System handled the load successfully!" >> $GITHUB_STEP_SUMMARY
-          else
-            echo "" >> $GITHUB_STEP_SUMMARY
-            echo "### ❌ Test FAILED" >> $GITHUB_STEP_SUMMARY
-            echo "Check the detailed reports in artifacts." >> $GITHUB_STEP_SUMMARY
-          fi
-      
-      - name: Check Test Outcome
-        if: steps.loadtest.outcome == 'failure'
-        run: |
-          echo "Load test failed - check reports for details"
-          exit 1
+          echo "## Load Test Results" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
 
-  # Quick smoke test on every push
+          if [ "${{ steps.harness.outputs.present }}" != "true" ]; then
+            echo "Skipped: \`backend/tests/run_load_test.py\` is not present in this repository." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          echo "**Preset:** ${{ steps.config.outputs.preset }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "**Target:** ${{ steps.config.outputs.host }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+
+          STATS_FILE=$(ls -t backend/tests/reports/*_stats.csv 2>/dev/null | head -1)
+          if [ -f "$STATS_FILE" ]; then
+            echo "### Endpoint Statistics" >> "$GITHUB_STEP_SUMMARY"
+            echo "\`\`\`" >> "$GITHUB_STEP_SUMMARY"
+            cat "$STATS_FILE" >> "$GITHUB_STEP_SUMMARY"
+            echo "\`\`\`" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+          if [ "${{ steps.loadtest.outcome }}" = "success" ]; then
+            echo "### Passed" >> "$GITHUB_STEP_SUMMARY"
+            echo "The load test completed successfully." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "### Failed" >> "$GITHUB_STEP_SUMMARY"
+            echo "Check the uploaded artifacts for the detailed report." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Check Test Outcome
+        if: steps.harness.outputs.present == 'true' && steps.loadtest.outcome == 'failure'
+        run: exit 1
+
   quick-test:
     if: github.event_name == 'push'
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    defaults:
-      run:
-        working-directory: "Project 2 (CLI, Flutter App, WebApp)"
-    
+
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-      
+      - uses: actions/checkout@v4
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      
-      - name: Install dependencies
-        run: pip install locust requests
-      
-      - name: Run Quick Smoke Test
+
+      - name: Check load test harness
+        id: quickharness
+        shell: bash
         run: |
-          python tests/run_load_test.py --quick --no-report
+          if [ -f backend/tests/run_load_test.py ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Install dependencies
+        if: steps.quickharness.outputs.present == 'true'
+        run: pip install locust requests
+
+      - name: Run Quick Smoke Test
+        if: steps.quickharness.outputs.present == 'true'
+        shell: bash
+        run: |
+          python backend/tests/run_load_test.py --quick --no-report
+
+      - name: Summarize skip
+        if: steps.quickharness.outputs.present != 'true'
+        run: |
+          echo "Quick load-test smoke check skipped because backend/tests/run_load_test.py is not present."

@@ -11,6 +11,7 @@ import secrets
 import string
 import logging
 import threading
+from datetime import datetime
 from pathlib import Path
 from typing import Optional, Dict, Any
 
@@ -89,6 +90,27 @@ def get_db_functions():
         return None, None, None, None, None
 
 
+def get_device_code_store_functions():
+    """Lazy load persistent device-code helpers when the database is available."""
+    try:
+        from database import (
+            save_device_code,
+            get_device_code,
+            consume_device_code,
+            count_pending_device_codes,
+            cleanup_expired_device_codes,
+        )
+        return (
+            save_device_code,
+            get_device_code,
+            consume_device_code,
+            count_pending_device_codes,
+            cleanup_expired_device_codes,
+        )
+    except Exception:
+        return None, None, None, None, None
+
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # In-memory store for device codes (use Redis in production)
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -133,6 +155,99 @@ def _pop_device_code(device_code: str) -> Optional[Dict[str, Any]]:
         _cleanup_expired_device_codes()
         record = _device_codes.pop(device_code, None)
         return dict(record) if record else None
+
+
+def _coerce_timestamp(value: Any) -> float:
+    """Normalize database or in-memory timestamps to unix seconds."""
+    if isinstance(value, (int, float)):
+        return float(value)
+    if isinstance(value, str):
+        try:
+            return datetime.fromisoformat(value.replace("Z", "+00:00")).timestamp()
+        except ValueError:
+            return 0.0
+    return 0.0
+
+
+def _normalize_device_code_record(record: Dict[str, Any]) -> Dict[str, Any]:
+    """Convert a persistent device-code record into the in-memory payload shape."""
+    user_data = record.get("user_data")
+    if not isinstance(user_data, dict):
+        user_data = {}
+
+    return {
+        "status": record.get("status", "pending"),
+        "created_at": _coerce_timestamp(record.get("created_at")) or time.time(),
+        "expires_at": _coerce_timestamp(record.get("expires_at")),
+        "token": record.get("token"),
+        "user": user_data or None,
+    }
+
+
+def _count_pending_device_code_records() -> int:
+    """Count pending device codes across persistent and fallback in-memory stores."""
+    _, _, _, count_pending_device_codes, cleanup_device_codes = get_device_code_store_functions()
+    db_count = 0
+    if cleanup_device_codes:
+        cleanup_device_codes()
+    if count_pending_device_codes:
+        db_count = count_pending_device_codes()
+
+    with _device_code_lock:
+        _cleanup_expired_device_codes()
+        memory_count = len(_device_codes)
+
+    return max(db_count, memory_count)
+
+
+def _store_device_code_record(device_code: str, payload: Dict[str, Any]) -> None:
+    """Persist a device code in the database when possible, else keep it in memory."""
+    save_device_code, _, _, _, cleanup_device_codes = get_device_code_store_functions()
+    if cleanup_device_codes:
+        cleanup_device_codes()
+    if save_device_code and save_device_code(
+        device_code=device_code,
+        status=payload.get("status", "pending"),
+        token=payload.get("token"),
+        user_data=payload.get("user"),
+        created_at=payload.get("created_at"),
+        expires_at=payload.get("expires_at"),
+    ):
+        return
+
+    _upsert_device_code(device_code, payload)
+
+
+def _load_device_code_record(device_code: str) -> Optional[Dict[str, Any]]:
+    """Read a device code from persistent storage or the in-memory fallback."""
+    _, get_device_code, _, _, cleanup_device_codes = get_device_code_store_functions()
+    if cleanup_device_codes:
+        cleanup_device_codes()
+    if get_device_code:
+        record = get_device_code(device_code)
+        if record:
+            payload = _normalize_device_code_record(record)
+            if time.time() > payload.get("expires_at", 0):
+                return None
+            return payload
+
+    return _get_device_code(device_code)
+
+
+def _consume_device_code_record(device_code: str) -> Optional[Dict[str, Any]]:
+    """Consume a completed device code from persistent storage or in-memory fallback."""
+    _, _, consume_device_code, _, cleanup_device_codes = get_device_code_store_functions()
+    if cleanup_device_codes:
+        cleanup_device_codes()
+    if consume_device_code:
+        record = consume_device_code(device_code)
+        if record:
+            payload = _normalize_device_code_record(record)
+            if time.time() > payload.get("expires_at", 0):
+                return None
+            return payload
+
+    return _pop_device_code(device_code)
 
 
 def verify_supabase_access_token(access_token: str) -> Optional[Dict[str, Any]]:
@@ -438,19 +553,17 @@ async def create_device_code_endpoint(request: Request):
     Returns a code that user will enter on web to authenticate.
     Similar to: gh auth login, supabase login
     """
-    with _device_code_lock:
-        _cleanup_expired_device_codes()
-        if len(_device_codes) >= _MAX_PENDING_DEVICE_CODES:
-            raise HTTPException(
-                status_code=503,
-                detail="Device sign-in is temporarily busy. Please try again in a minute.",
-            )
+    if _count_pending_device_code_records() >= _MAX_PENDING_DEVICE_CODES:
+        raise HTTPException(
+            status_code=503,
+            detail="Device sign-in is temporarily busy. Please try again in a minute.",
+        )
 
     device_code = generate_device_code()
     user_code = f"{device_code[:4]}-{device_code[4:]}"  # Format: XXXX-XXXX
     
     # Store code with expiration (10 minutes)
-    _upsert_device_code(device_code, {
+    _store_device_code_record(device_code, {
         'status': 'pending',
         'created_at': time.time(),
         'expires_at': time.time() + _DEVICE_CODE_TTL_SECONDS,
@@ -478,13 +591,13 @@ async def poll_device_code(request: Request, poll_data: DevicePollRequest):
     """
     device_code = poll_data.device_code.replace('-', '').upper()
     
-    code_data = _get_device_code(device_code) if device_code else None
+    code_data = _load_device_code_record(device_code) if device_code else None
     if not code_data:
         raise HTTPException(status_code=400, detail="Invalid device code")
     
     # Check if authenticated
     if code_data['status'] == 'complete':
-        completed_record = _pop_device_code(device_code)
+        completed_record = _consume_device_code_record(device_code)
         if not completed_record:
             raise HTTPException(status_code=410, detail="Device code expired")
 
@@ -517,7 +630,7 @@ async def verify_device_code(request: Request, verify_data: DeviceVerifyRequest)
     
     device_code = verify_data.device_code.replace('-', '').upper()
     
-    code_data = _get_device_code(device_code) if device_code else None
+    code_data = _load_device_code_record(device_code) if device_code else None
     if not code_data:
         raise HTTPException(status_code=400, detail="Invalid or expired device code")
     
@@ -556,7 +669,7 @@ async def verify_device_code(request: Request, verify_data: DeviceVerifyRequest)
 
     # Mark code as complete. We return the verified Supabase access token so
     # mobile/CLI use the same auth token type as the web app.
-    _upsert_device_code(device_code, {
+    _store_device_code_record(device_code, {
         'status': 'complete',
         'token': verify_data.access_token,
         'user': {

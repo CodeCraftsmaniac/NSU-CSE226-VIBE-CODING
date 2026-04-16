@@ -103,15 +103,15 @@ The current Flask backend is a **243 KB, well-structured API** for OCR-based deg
 
 **auth.py lines 17-19:**
 ```python
-_DEFAULT_SUPABASE_URL = 'https://kmbltplmjdkjlbungbbh.supabase.co'
-_DEFAULT_SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...'
-_DEFAULT_SERVICE_ROLE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...'
+_DEFAULT_SUPABASE_URL = 'https://your-project.supabase.co'
+_DEFAULT_SUPABASE_KEY = 'your-anon-key'
+_DEFAULT_SERVICE_ROLE_KEY = 'your-service-role-key'
 ```
 
 **ocr_web.py lines 66-70:**
 ```python
-_DEFAULT_GOOGLE_VISION_KEY = 'AIzaSyA5YsERnW7V9UzpsqkgdFhldqY8LtpJPes'
-_DEFAULT_OCR_SPACE_KEY = 'K86084037488957'
+_DEFAULT_GOOGLE_VISION_KEY = 'your-google-vision-key'
+_DEFAULT_OCR_SPACE_KEY = 'your-ocr-space-key'
 ```
 
 **RISKS:**

@@ -82,23 +82,21 @@ class ApiService {
     }
   }
 
-  Future<Map<String, dynamic>> login(String email, String password) => _unwrap(
-    _dio.post(
-      '/api/v1/user/login',
-      data: {'email': email, 'password': password},
-    ),
-  );
+  Future<Map<String, dynamic>> login(String email, String password) async {
+    throw ApiException(
+      'Password login is not supported. Use Google sign-in instead.',
+    );
+  }
 
   Future<Map<String, dynamic>> register(
     String email,
     String password,
     String name,
-  ) => _unwrap(
-    _dio.post(
-      '/api/v1/user/register',
-      data: {'email': email, 'password': password, 'name': name},
-    ),
-  );
+  ) async {
+    throw ApiException(
+      'Password registration is not supported. Use Google sign-in instead.',
+    );
+  }
 
   Future<Map<String, dynamic>> uploadFile(
     String fileName, {

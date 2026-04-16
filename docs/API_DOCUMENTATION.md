@@ -173,14 +173,16 @@ POST /auth/google
 Content-Type: application/json
 ```
 
-Simple email-based authentication (for CLI/mobile).
+Exchange a verified Supabase access token for a synced backend user record.
+Direct email-only login is intentionally rejected.
 
 **Body:**
 ```json
 {
   "email": "user@example.com",
   "name": "User Name",
-  "provider": "cli"
+  "provider": "cli",
+  "access_token": "supabase-access-token"
 }
 ```
 
@@ -196,6 +198,16 @@ Simple email-based authentication (for CLI/mobile).
   }
 }
 ```
+
+For CLI sign-in, use the device-code flow instead of collecting an email directly:
+
+```http
+POST /auth/device/code
+POST /auth/device/poll
+POST /auth/device/verify
+```
+
+The CLI and web helper page already use these endpoints.
 
 ---
 
@@ -319,18 +331,8 @@ class NSUDegreeAuditClient {
     this.token = null;
   }
 
-  async login(email, name) {
-    const response = await fetch(`${this.baseUrl}/auth/google`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, name, provider: 'api' })
-    });
-    const data = await response.json();
-    if (data.success) {
-      this.token = data.token;
-      return data.user;
-    }
-    throw new Error(data.error);
+  setAccessToken(accessToken) {
+    this.token = accessToken;
   }
 
   async scanTranscript(file) {
@@ -356,7 +358,7 @@ class NSUDegreeAuditClient {
 
 // Usage
 const client = new NSUDegreeAuditClient();
-await client.login('user@nsu.edu', 'Student Name');
+client.setAccessToken('SUPABASE_ACCESS_TOKEN');
 const result = await client.scanTranscript(pdfFile);
 console.log('CGPA:', result.data.level2.cgpa);
 ```
@@ -371,16 +373,8 @@ class NSUDegreeAuditClient:
         self.base_url = 'https://ocrapi.nsunexus.app'
         self.token = None
     
-    def login(self, email, name='API User'):
-        response = requests.post(
-            f'{self.base_url}/auth/google',
-            json={'email': email, 'name': name, 'provider': 'api'}
-        )
-        data = response.json()
-        if data.get('success'):
-            self.token = data['token']
-            return data['user']
-        raise Exception(data.get('error', 'Login failed'))
+    def set_access_token(self, access_token):
+        self.token = access_token
     
     def scan_transcript(self, file_path):
         headers = {}
@@ -406,7 +400,7 @@ class NSUDegreeAuditClient:
 
 # Usage
 client = NSUDegreeAuditClient()
-client.login('user@nsu.edu', 'Student Name')
+client.set_access_token('SUPABASE_ACCESS_TOKEN')
 result = client.scan_transcript('transcript.pdf')
 print(f"CGPA: {result['data']['level2']['cgpa']}")
 print(f"Graduation Ready: {result['data']['level3']['graduation_ready']}")
@@ -429,4 +423,4 @@ print(f"Graduation Ready: {result['data']['level3']['graduation_ready']}")
 
 - Azure Document Intelligence: 500 pages/month (free tier, 99%+ accuracy)
 - Google Vision: 1000 requests/month (free tier, 98%+ accuracy)
-- No limit on API requests (fair use policy)
+- API requests are rate-limited by endpoint and deployment configuration
