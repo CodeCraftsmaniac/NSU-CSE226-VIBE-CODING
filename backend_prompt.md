@@ -125,6 +125,7 @@ Return results in this order:
 4. Test/check results with pass/fail counts.
 5. Remaining risks or deferred items with clear reason.
 6. Final production readiness verdict (Go / No-Go) with justification.
+7. Also update the #deep_audit_report.md file.
 
 ## Completion Criteria
 Do not declare done until all are true:
