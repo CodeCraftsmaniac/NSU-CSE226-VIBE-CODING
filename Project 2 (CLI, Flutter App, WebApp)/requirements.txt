@@ -26,7 +26,7 @@ supabase>=2.0.0        # Supabase Python client
 python-jose>=3.3.0     # JWT token handling
 
 # Production Server
-gunicorn>=21.0.0       # Production server (with uvicorn workers)
+gunicorn>=25.3.0       # Production server (with uvicorn workers)
 
 # Load Testing (for 20 concurrent users verification)
 locust>=2.20.0         # Load testing framework

@@ -29,4 +29,4 @@ python-jose>=3.3.0
 requests>=2.31.0
 
 # Production Server
-gunicorn>=21.0.0
+gunicorn>=25.3.0
