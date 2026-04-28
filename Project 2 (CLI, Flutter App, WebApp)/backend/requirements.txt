@@ -19,7 +19,7 @@ Pillow>=10.0.0
 
 # Export Formats
 openpyxl>=3.1.0        # Excel export
-reportlab>=4.0.0       # PDF generation
+reportlab>=4.4.10       # PDF generation
 
 # Database - Supabase
 supabase>=2.0.0
