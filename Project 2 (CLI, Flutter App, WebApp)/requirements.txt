@@ -6,7 +6,7 @@ rich>=13.0.0           # Premium terminal UI
 requests>=2.31.0       # HTTP client for cloud API
 
 # PDF & Image Processing (lightweight)
-PyMuPDF>=1.23.0        # PDF handling (fitz) - for native text extraction
+PyMuPDF>=1.27.2.3        # PDF handling (fitz) - for native text extraction
 Pillow>=10.0.0         # Image processing/compression
 
 # Web Framework - FastAPI

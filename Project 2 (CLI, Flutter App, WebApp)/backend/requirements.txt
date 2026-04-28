@@ -14,7 +14,7 @@ pydantic[email]>=2.5.0
 pydantic-settings>=2.1.0
 
 # PDF & Image Processing
-PyMuPDF>=1.23.0
+PyMuPDF>=1.27.2.3
 Pillow>=10.0.0
 
 # Export Formats
