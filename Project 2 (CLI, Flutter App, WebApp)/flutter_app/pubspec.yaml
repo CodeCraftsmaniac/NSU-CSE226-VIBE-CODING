@@ -1,4 +1,4 @@
-﻿name: flutter_app
+name: flutter_app
 description: "NSU Degree Audit Engine — Premium Flutter Client"
 publish_to: "none"
 version: 1.0.0+1
@@ -19,7 +19,7 @@ dependencies:
   # Auth & Storage
   google_sign_in: ^6.2.1
   supabase_flutter: ^2.8.4
-  flutter_secure_storage: ^9.2.4
+  flutter_secure_storage: ^10.3.1
   shared_preferences: 2.2.3
 
   # State
