@@ -9,7 +9,7 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.26.0",
-    "axios": "^1.6.0"
+    "axios": "^1.18.0"
   },
   "keywords": ["mcp", "nsu", "degree-audit", "transcript", "ocr"],
   "author": "NSU Degree Audit Team"
